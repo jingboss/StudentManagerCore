@@ -1,0 +1,146 @@
+@model List<StudentManagerCore.Models.RepairRequest>
+@{
+    ViewBag.Title = "维修清单";
+    var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value?.Trim() ?? "";
+    var canProcess = role == "后勤主任";
+    var canView = role == "管理员" || role == "后勤主任";
+    var status = ViewBag.Status as string ?? "";
+    var keyword = ViewBag.Keyword as string ?? "";
+    var page = (int)ViewBag.Page;
+    var totalPages = (int)ViewBag.TotalPages;
+    var total = (int)ViewBag.Total;
+}
+
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="fw-bold mb-0"><i class="bi bi-card-checklist me-2"></i>维修清单</h4>
+        <span class="text-muted small">共 @total 条</span>
+    </div>
+
+    <!-- 搜索/筛选 -->
+    <form method="get" class="row g-2 mb-3">
+        <div class="col-auto">
+            <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">全部状态</option>
+                <option value="待处理" selected="@(status == "待处理")">待处理</option>
+                <option value="处理中" selected="@(status == "处理中")">处理中</option>
+                <option value="已完成" selected="@(status == "已完成")">已完成</option>
+                <option value="已关闭" selected="@(status == "已关闭")">已关闭</option>
+            </select>
+        </div>
+        <div class="col-auto">
+            <input type="text" name="keyword" class="form-control form-control-sm" placeholder="搜索标题/申报人..." value="@keyword" />
+        </div>
+        <div class="col-auto">
+            <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-search"></i></button>
+        </div>
+    </form>
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show py-2 small">
+            <i class="bi bi-check-circle me-1"></i>@TempData["Success"]
+            <button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <!-- 列表 -->
+    <div class="table-responsive">
+        <table class="table table-hover table-bordered align-middle small">
+            <thead class="table-light">
+                <tr>
+                    <th style="width:50px;">#</th>
+                    <th>标题</th>
+                    <th>位置</th>
+                    <th>故障出现时间</th>
+                    <th>申报人</th>
+                    <th>联系电话</th>
+                    <th>状态</th>
+                    <th>申报时间</th>
+                    <th>处理人</th>
+                    <th style="width:100px;">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model != null && Model.Any())
+                {
+                    int i = (page - 1) * 20 + 1;
+                    foreach (var item in Model)
+                    {
+                        var statusBadge = item.Status switch
+                        {
+                            "待处理" => "bg-danger",
+                            "处理中" => "bg-warning text-dark",
+                            "已完成" => "bg-success",
+                            "已关闭" => "bg-secondary",
+                            _ => "bg-secondary"
+                        };
+                        <tr>
+                            <td>@(i++)</td>
+                            <td>
+                                <span class="fw-semibold">@item.Title</span>
+                                @if (!string.IsNullOrEmpty(item.Description))
+                                {
+                                    <br /><span class="text-muted" style="font-size:0.85em;">@item.Description</span>
+                                }
+                            </td>
+                            <td>@item.Location</td>
+                            <td>
+                                @if (item.PreferredTime != null)
+                                {
+                                    <span>@item.PreferredTime?.ToString("yyyy-MM-dd HH:mm")</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">-</span>
+                                }
+                            </td>
+                            <td>@item.CreatorName</td>
+                            <td>@item.ContactPhone</td>
+                            <td><span class="badge @statusBadge">@item.Status</span></td>
+                            <td>@item.CreateTime.ToString("yyyy-MM-dd HH:mm")</td>
+                            <td>@item.ProcessorName</td>
+                            <td>
+                                @if (canProcess && item.Status != "已完成" && item.Status != "已关闭")
+                                {
+                                    <a asp-action="Process" asp-route-id="@item.Id" class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-check2"></i> 处理
+                                    </a>
+                                }
+                                @if (item.Status == "已完成" || item.Status == "已关闭")
+                                {
+                                    <a asp-action="Process" asp-route-id="@item.Id" class="btn btn-sm btn-outline-secondary">
+                                        <i class="bi bi-eye"></i> 详情
+                                    </a>
+                                }
+                            </td>
+                        </tr>
+                    }
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="9" class="text-center py-4 text-muted">
+                            <i class="bi bi-inbox me-1"></i>暂无维修申请
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <!-- 分页 -->
+    @if (totalPages > 1)
+    {
+        <nav>
+            <ul class="pagination pagination-sm justify-content-center">
+                @for (int p = 1; p <= totalPages; p++)
+                {
+                    <li class="page-item @(p == page ? "active" : "")">
+                        <a class="page-link" asp-action="Index" asp-route-status="@status" asp-route-keyword="@keyword" asp-route-page="@p">@p</a>
+                    </li>
+                }
+            </ul>
+        </nav>
+    }
+</div>

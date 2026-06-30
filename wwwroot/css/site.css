@@ -1,0 +1,107 @@
+/* Site-wide styles for 学生管理系统 */
+
+body {
+    font-family: "Microsoft YaHei", "Segoe UI", Tahoma, sans-serif;
+    background-color: #f5f7fa;
+}
+
+/* Card hover effects */
+.card {
+    transition: transform 0.2s, box-shadow 0.2s;
+    border-radius: 8px;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Table styles */
+.table th {
+    white-space: nowrap;
+}
+
+.table-striped > tbody > tr:nth-of-type(odd) {
+    background-color: rgba(0, 0, 0, 0.02);
+}
+
+/* Badge styles */
+.badge {
+    font-weight: 500;
+    padding: 4px 8px;
+}
+
+/* Navbar styles */
+.navbar {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Footer */
+footer {
+    background-color: #fff;
+}
+
+/* Alert animations */
+.alert {
+    border-radius: 8px;
+}
+
+/* Form styles */
+.form-label {
+    font-weight: 500;
+    color: #495057;
+}
+
+.card-header {
+    font-weight: 500;
+    background-color: #f8f9fa;
+}
+
+/* Button icon spacing */
+.btn i {
+    margin-right: 4px;
+}
+
+/* Page title */
+h4 {
+    color: #212529;
+    font-weight: 600;
+}
+
+/* Pagination */
+.pagination {
+    margin-bottom: 0;
+}
+
+/* Modal */
+.modal-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+}
+
+/* Login page */
+.login-card {
+    border: none;
+}
+
+/* ===== 课表管理样式 ===== */
+.schedule-table { font-size: 0.8rem; table-layout: fixed; }
+.schedule-table th { text-align: center; background-color: #343a40; color: #fff; padding: 8px 4px; white-space: nowrap; }
+.schedule-table td { text-align: center; vertical-align: middle; height: 72px; cursor: pointer; padding: 4px; border: 1px solid #dee2e6; transition: background-color 0.15s; }
+.schedule-table td:hover { background-color: #e9f5ff; }
+.schedule-table td .subject-name { font-weight: 600; font-size: 0.85rem; display: block; }
+.schedule-table td .teacher-name { font-size: 0.75rem; color: #6c757d; display: block; }
+.schedule-table td.empty-cell { color: #adb5bd; }
+.schedule-table td.conflict { background-color: #fff3cd; border-color: #ffc107; }
+.schedule-table .period-label { font-size: 0.75rem; color: #495057; white-space: nowrap; }
+.step-selector { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; }
+.step-selector .form-group { min-width: 160px; }
+.cell-editor { position: absolute; z-index: 1050; background: #fff; border: 1px solid #dee2e6; border-radius: 8px; padding: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); width: 280px; }
+.cell-editor .btn-sm { font-size: 0.8rem; }
+.left-panel .card { margin-bottom: 12px; }
+.left-panel .card-header { padding: 8px 12px; font-size: 0.9rem; }
+.left-panel .card-body { padding: 12px; }
+.left-panel label { font-size: 0.85rem; margin-bottom: 2px; }
+.left-panel .form-control,
+.left-panel .form-select { font-size: 0.85rem; padding: 4px 8px; height: auto; }
+.left-panel .btn { font-size: 0.85rem; padding: 4px 10px; }

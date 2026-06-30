@@ -1,0 +1,103 @@
+@model List<StudentManagerCore.Models.RepairRequest>
+@{
+    ViewBag.Title = "我的申报";
+    var page = (int)ViewBag.Page;
+    var totalPages = (int)ViewBag.TotalPages;
+}
+
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="fw-bold mb-0"><i class="bi bi-tools me-2"></i>我的维修申报</h4>
+        <a asp-action="Create" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg me-1"></i>申请维修</a>
+    </div>
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show py-2 small">
+            <i class="bi bi-check-circle me-1"></i>@TempData["Success"]
+            <button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <div class="table-responsive">
+        <table class="table table-hover table-bordered align-middle small">
+            <thead class="table-light">
+                <tr>
+                    <th style="width:50px;">#</th>
+                    <th>标题</th>
+                    <th>位置</th>
+                    <th>故障出现时间</th>
+                    <th>状态</th>
+                    <th>申报时间</th>
+                    <th>处理人</th>
+                    <th>处理备注</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model != null && Model.Any())
+                {
+                    int i = (page - 1) * 20 + 1;
+                    foreach (var item in Model)
+                    {
+                        var statusBadge = item.Status switch
+                        {
+                            "待处理" => "bg-danger",
+                            "处理中" => "bg-warning text-dark",
+                            "已完成" => "bg-success",
+                            "已关闭" => "bg-secondary",
+                            _ => "bg-secondary"
+                        };
+                        <tr>
+                            <td>@(i++)</td>
+                            <td>
+                                <span class="fw-semibold">@item.Title</span>
+                                @if (!string.IsNullOrEmpty(item.Description))
+                                {
+                                    <br /><span class="text-muted" style="font-size:0.85em;">@item.Description</span>
+                                }
+                            </td>
+                            <td>@item.Location</td>
+                            <td>
+                                @if (item.PreferredTime != null)
+                                {
+                                    <span>@item.PreferredTime?.ToString("yyyy-MM-dd HH:mm")</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">-</span>
+                                }
+                            </td>
+                            <td><span class="badge @statusBadge">@item.Status</span></td>
+                            <td>@item.CreateTime.ToString("yyyy-MM-dd HH:mm")</td>
+                            <td>@item.ProcessorName</td>
+                            <td>@item.Remark</td>
+                        </tr>
+                    }
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="7" class="text-center py-4 text-muted">
+                            <i class="bi bi-inbox me-1"></i>暂无申报记录
+                            <br /><a asp-action="Create" class="btn btn-primary btn-sm mt-2">我要申请维修</a>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <nav>
+            <ul class="pagination pagination-sm justify-content-center">
+                @for (int p = 1; p <= totalPages; p++)
+                {
+                    <li class="page-item @(p == page ? "active" : "")">
+                        <a class="page-link" asp-action="MyRequests" asp-route-page="@p">@p</a>
+                    </li>
+                }
+            </ul>
+        </nav>
+    }
+</div>

@@ -1,0 +1,251 @@
+@model Dictionary<string, string>
+@{
+    ViewData["Title"] = "网站管理";
+    var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
+    var isAdmin = role == "管理员";
+}
+
+@if (!isAdmin)
+{
+    <div class="alert alert-danger">
+        <i class="bi bi-exclamation-triangle-fill me-1"></i> 您没有权限访问此页面
+    </div>
+    return;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="bi bi-globe2 me-2"></i>网站管理</h4>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <!-- Site Info Settings -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">基本信息设置</h5>
+            </div>
+            <div class="card-body">
+                <form id="siteConfigForm">
+                    <div class="mb-3">
+                        <label class="form-label">网站标题</label>
+                        <input type="text" id="configSiteName" class="form-control" value="@(Model.GetValueOrDefault("SiteName", ""))" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">网站描述</label>
+                        <input type="text" id="configSiteDescription" class="form-control" value="@(Model.GetValueOrDefault("SiteDescription", ""))" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">版权信息</label>
+                        <input type="text" id="configCopyright" class="form-control" value="@(Model.GetValueOrDefault("Copyright", ""))" />
+                    </div>
+                    <button type="button" class="btn btn-primary" onclick="saveConfigs()">
+                        <i class="bi bi-save me-1"></i> 保存设置
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Background Image Upload -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">登录页背景图</h5>
+            </div>
+            <div class="card-body">
+                <form id="bgUploadForm" method="post" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label class="form-label">选择图片（JPG/PNG）</label>
+                        <input type="file" id="bgFile" name="file" class="form-control" accept=".jpg,.jpeg,.png" />
+                    </div>
+                    <button type="button" class="btn btn-primary" onclick="uploadBg()">
+                        <i class="bi bi-upload me-1"></i> 上传
+                    </button>
+
+                    <!-- Upload status -->
+                    <div id="uploadStatus" class="mt-2" style="display:none;"></div>
+
+                    @if (Model.TryGetValue("BackgroundImage", out var bgPath) && !string.IsNullOrEmpty(bgPath))
+                    {
+                        <div class="mt-3">
+                            <label class="form-label">当前背景图预览：</label>
+                            <div>
+                                <img src="@bgPath" class="img-thumbnail" style="max-height: 200px;" alt="背景图" id="bgPreview" />
+                            </div>
+                        </div>
+                    }
+                </form>
+            </div>
+        </div>
+
+        <!-- Logo Upload -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">校徽 / Logo</h5>
+            </div>
+            <div class="card-body">
+                <form id="logoUploadForm" method="post" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label class="form-label">选择图片（JPG/PNG，建议高度 64px）</label>
+                        <input type="file" id="logoFile" name="file" class="form-control" accept=".jpg,.jpeg,.png" />
+                    </div>
+                    <button type="button" class="btn btn-primary" onclick="uploadLogo()">
+                        <i class="bi bi-upload me-1"></i> 上传
+                    </button>
+                    <div id="logoUploadStatus" class="mt-2" style="display:none;"></div>
+
+                    @if (Model.TryGetValue("Logo", out var logoPath) && !string.IsNullOrEmpty(logoPath))
+                    {
+                        <div class="mt-3">
+                            <label class="form-label">当前 Logo 预览：</label>
+                            <div>
+                                <img src="@logoPath" style="max-height: 64px;" alt="Logo" id="logoPreview" />
+                            </div>
+                        </div>
+                    }
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 网站关闭开关 -->
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card mb-4 border-@(Model.GetValueOrDefault("SiteClosed") == "true" ? "danger" : "success")">
+            <div class="card-header bg-@(Model.GetValueOrDefault("SiteClosed") == "true" ? "danger" : "success") text-white">
+                <h5 class="mb-0"><i class="bi bi-power me-2"></i>网站状态</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        @if (Model.GetValueOrDefault("SiteClosed") == "true")
+                        {
+                            <span class="text-danger fw-bold"><i class="bi bi-exclamation-triangle-fill me-1"></i>网站已关闭</span>
+                            <p class="text-muted small mb-0 mt-1">非管理员用户无法登录系统</p>
+                        }
+                        else
+                        {
+                            <span class="text-success fw-bold"><i class="bi bi-check-circle-fill me-1"></i>网站运行中</span>
+                            <p class="text-muted small mb-0 mt-1">所有用户均可正常登录</p>
+                        }
+                    </div>
+                    <button type="button" class="btn btn-@(Model.GetValueOrDefault("SiteClosed") == "true" ? "success" : "danger") btn-lg"
+                            onclick="toggleSiteStatus()">
+                        @if (Model.GetValueOrDefault("SiteClosed") == "true")
+                        {
+                            <i class="bi bi-play-fill me-1"></i> <span>恢复开放</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-stop-fill me-1"></i> <span>关闭网站</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function saveConfigs() {
+            var keys = ['SiteName', 'SiteDescription', 'Copyright'];
+            var promises = keys.map(function (key) {
+                var value = $('#config' + key).val();
+                return $.post('@Url.Action("Save")', {
+                    ConfigKey: key,
+                    ConfigValue: value,
+                    __RequestVerificationToken: $('[name="__RequestVerificationToken"]').first().val()
+                });
+            });
+
+            $.when.apply($, promises).done(function () {
+                alert('设置已保存！');
+                location.reload();
+            }).fail(function () {
+                alert('保存失败，请重试');
+            });
+        }
+
+        function toggleSiteStatus() {
+            var currentStatus = '@Model.GetValueOrDefault("SiteClosed", "false")';
+            var newStatus = currentStatus === 'true' ? 'false' : 'true';
+            var actionText = newStatus === 'true' ? '关闭' : '恢复开放';
+
+            if (!confirm('确定要' + actionText + '网站吗？' + (newStatus === 'true' ? '\n\n关闭后非管理员用户将无法登录。' : ''))) return;
+
+            $.post('@Url.Action("Save")', {
+                ConfigKey: 'SiteClosed',
+                ConfigValue: newStatus,
+                __RequestVerificationToken: $('[name="__RequestVerificationToken"]').first().val()
+            }).done(function () {
+                location.reload();
+            }).fail(function () {
+                alert('操作失败，请重试');
+            });
+        }
+
+        function uploadBg() {
+            var file = $('#bgFile')[0].files[0];
+            if (!file) {
+                alert('请先选择图片文件');
+                return;
+            }
+
+            var formData = new FormData();
+            formData.append('file', file);
+
+            // Show uploading status
+            $('#uploadStatus').html('<span class="text-info">上传中...</span>').show();
+
+            $.ajax({
+                url: '@Url.Action("UploadBackground")',
+                type: 'POST',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function (res) {
+                    if (res.success) {
+                        $('#uploadStatus').html('<span class="text-success">上传成功！页面即将刷新...</span>');
+                        setTimeout(function () {
+                            location.reload();
+                        }, 1500);
+                    } else {
+                        $('#uploadStatus').html('<span class="text-danger">' + res.message + '</span>');
+                    }
+                },
+                error: function (xhr) {
+                    $('#uploadStatus').html('<span class="text-danger">请求失败：' + (xhr.responseJSON ? xhr.responseJSON.message : xhr.statusText) + '</span>');
+                }
+            });
+        }
+
+        function uploadLogo() {
+            var file = $('#logoFile')[0].files[0];
+            if (!file) {
+                alert('请先选择图片文件');
+                return;
+            }
+            var formData = new FormData();
+            formData.append('file', file);
+            $('#logoUploadStatus').html('<span class="text-info">上传中...</span>').show();
+            $.ajax({
+                url: '@Url.Action("UploadLogo")',
+                type: 'POST',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function (res) {
+                    if (res.success) {
+                        $('#logoUploadStatus').html('<span class="text-success">上传成功！页面即将刷新...</span>');
+                        setTimeout(function () { location.reload(); }, 1500);
+                    } else {
+                        $('#logoUploadStatus').html('<span class="text-danger">' + res.message + '</span>');
+                    }
+                },
+                error: function (xhr) {
+                    $('#logoUploadStatus').html('<span class="text-danger">请求失败：' + (xhr.responseJSON ? xhr.responseJSON.message : xhr.statusText) + '</span>');
+                }
+            });
+        }
+    </script>
+}

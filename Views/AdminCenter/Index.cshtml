@@ -1,0 +1,238 @@
+@model IEnumerable<StudentManagerCore.Models.Admin>
+@{
+    ViewData["Title"] = "管理员中心";
+    var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
+    var isAdmin = role == "管理员";
+}
+
+<div class="d-flex align-items-center gap-3 mb-3">
+    <h4 class="mb-0"><i class="bi bi-gear-fill me-2"></i>管理员中心</h4>
+    @if (isAdmin)
+    {
+        <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addAdminModal">
+            <i class="bi bi-person-plus-fill me-1"></i> 新增管理员
+        </button>
+    }
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover table-striped align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th>用户名</th>
+                        <th>姓名</th>
+                        <th>角色</th>
+                        <th>电话</th>
+                        <th>年级</th>
+                        <th>班级</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var admin in Model)
+                    {
+                        <tr>
+                            <td>@admin.Username</td>
+                            <td>@admin.RealName</td>
+                            <td>@admin.RoleTrimmed</td>
+                            <td>@admin.Phone</td>
+                            <td>@admin.Grade</td>
+                            <td>@admin.ClassName</td>
+                            <td>
+                                <button type="button" class="btn btn-warning btn-sm" onclick="editAdmin(@admin.AdminID, '@admin.Username', '@admin.RealName', '@admin.Phone')">
+                                    <i class="bi bi-pencil-square"></i> 编辑
+                                </button>
+                                @if (isAdmin && admin.Username != "13423297227")
+                                {
+                                    <button type="button" class="btn btn-danger btn-sm" onclick="deleteAdmin(@admin.AdminID, '@admin.RealName')">
+                                        <i class="bi bi-trash"></i> 删除
+                                    </button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- 安全码设置 -->
+<div class="card mt-3">
+    <div class="card-header">
+        <i class="bi bi-shield-lock-fill me-2"></i>安全设置
+    </div>
+    <div class="card-body">
+        <div class="row align-items-end">
+            <div class="col-md-6">
+                <label class="form-label">操作安全码</label>
+                <div class="input-group">
+                    <input type="password" class="form-control" id="securityCode" maxlength="20" placeholder="如需修改安全码，请输入新码" />
+                </div>
+                <div class="form-text">管理员执行彻底删除等敏感操作时，需要输入此安全码确认。</div>
+            </div>
+            <div class="col-md-2">
+                <button type="button" class="btn btn-primary" id="saveSecurityCode"><i class="bi bi-check-lg me-1"></i>保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Admin Modal -->
+<div class="modal fade" id="addAdminModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">新增管理员</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addAdminForm">
+                    <div class="mb-3">
+                        <label class="form-label">用户名</label>
+                        <input type="text" id="addUsername" class="form-control" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">密码</label>
+                        <input type="password" id="addPassword" class="form-control" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">姓名</label>
+                        <input type="text" id="addRealName" class="form-control" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">电话</label>
+                        <input type="text" id="addPhone" class="form-control" />
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="submitAdd()">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Admin Modal -->
+<div class="modal fade" id="editAdminModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">编辑管理员</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editAdminForm">
+                    <input type="hidden" id="editAdminId" />
+                    <div class="mb-3">
+                        <label class="form-label">用户名</label>
+                        <input type="text" id="editUsername" class="form-control" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">密码（留空不修改）</label>
+                        <input type="password" id="editPassword" class="form-control" placeholder="留空则不修改密码" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">姓名</label>
+                        <input type="text" id="editRealName" class="form-control" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">电话</label>
+                        <input type="text" id="editPhone" class="form-control" />
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="submitEdit()">保存修改</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+@section Scripts {
+    <script>
+        function deleteAdmin(id, name) {
+            showConfirm('确认删除该管理员「' + name + '」吗？此操作不可恢复。', function() {
+                $.post('@Url.Action("Delete", "AdminCenter")', { id: id, __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val() })
+                    .done(function (res) {
+                        if (res.success) {
+                            location.reload();
+                        } else {
+                            alert(res.message);
+                        }
+                    }).fail(function (xhr) {
+                        alert('删除失败: ' + (xhr.responseText || '服务器错误'));
+                    });
+            });
+        }
+
+        function editAdmin(id, username, realName, phone) {
+            $('#editAdminId').val(id);
+            $('#editUsername').val(username);
+            $('#editPassword').val('');
+            $('#editRealName').val(realName);
+            $('#editPhone').val(phone);
+            var modal = new bootstrap.Modal(document.getElementById('editAdminModal'));
+            modal.show();
+        }
+
+        function submitAdd() {
+            $.post('@Url.Action("Add", "AdminCenter")', {
+                username: $('#addUsername').val(),
+                password: $('#addPassword').val(),
+                realName: $('#addRealName').val(),
+                phone: $('#addPhone').val(),
+                __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+            }).done(function (res) {
+                if (res.success) {
+                    location.reload();
+                } else {
+                    alert(res.message);
+                }
+            }).fail(function (xhr) {
+                alert('添加失败: ' + (xhr.responseText || '服务器错误'));
+            });
+        }
+
+        function submitEdit() {
+            $.post('@Url.Action("Edit", "AdminCenter")', {
+                id: $('#editAdminId').val(),
+                username: $('#editUsername').val(),
+                password: $('#editPassword').val(),
+                realName: $('#editRealName').val(),
+                phone: $('#editPhone').val(),
+                __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+            }).done(function (res) {
+                if (res.success) {
+                    location.reload();
+                } else {
+                    alert(res.message);
+                }
+            }).fail(function (xhr) {
+                alert('保存失败: ' + (xhr.responseText || '服务器错误'));
+            });
+        }
+
+        // 安全码 - 保存
+        $('#saveSecurityCode').on('click', function() {
+            var code = $('#securityCode').val();
+            $.post('@Url.Action("SaveSecurityCode", "AdminCenter")', {
+                securityCode: code,
+                __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+            }).done(function(res) {
+                if (res.success) {
+                    alert('安全码已保存');
+                } else {
+                    alert(res.message || '保存失败');
+                }
+            }).fail(function() {
+                alert('保存失败，请重试');
+            });
+        });
+    </script>
+}

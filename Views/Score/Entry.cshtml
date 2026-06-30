@@ -1,0 +1,303 @@
+@using StudentManagerCore.Models
+@{
+    ViewData["Title"] = "成绩录入";
+    var exams = ViewBag.ExamSchedules as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="mb-0"><i class="bi bi-pencil-square me-2"></i>成绩录入</h4>
+    </div>
+
+    @Html.AntiForgeryToken()
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label">选择考试</label>
+                    <select id="examSelect" class="form-select" onchange="loadEntryData()">
+                        <option value="">-- 请选择考试 --</option>
+                        @foreach (var exam in exams)
+                        {
+                            <option value="@exam.Id" data-status="@exam.Status">
+                                @exam.Name（@exam.ExamType · @(((DateTime)exam.ExamDate).ToString("yyyy-MM-dd"))）
+                            </option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">考试状态</label>
+                    <input id="examStatus" class="form-control" readonly value="请先选择考试" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="entryContainer" style="display:none;">
+        <div class="card">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center py-2">
+                <span id="entryTitle" class="fw-bold"><i class="bi bi-table me-1"></i>录入表</span>
+                <div>
+                    <span id="saveStatus" class="text-muted me-2 small"></span>
+                    <span class="badge bg-info me-2" style="font-size:0.7rem;">⚡ 失焦自动保存</span>
+                    <button id="saveAllBtn" class="btn btn-primary btn-sm" onclick="saveAllScores()">
+                        <i class="bi bi-save me-1"></i>保存全部
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive" style="max-height:75vh;">
+                    <table class="table table-bordered table-hover mb-0" id="entryTable" style="font-size:0.85rem;">
+                        <thead class="table-light sticky-top">
+                            <tr id="entryHeader"></tr>
+                        </thead>
+                        <tbody id="entryBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        let currentSubjects = [];
+        let currentStudents = [];
+        let currentExamScheduleId = 0;
+        let scoreCache = {};
+        let scoreChanged = {};
+
+        function loadEntryData() {
+            var examId = $('#examSelect').val();
+            if (!examId) {
+                $('#entryContainer').hide();
+                return;
+            }
+
+            currentExamScheduleId = parseInt(examId);
+            var status = $('#examSelect option:selected').data('status');
+            $('#examStatus').val(status || '未知');
+
+            if (status !== '进行中') {
+                $('#entryContainer').hide();
+                $('#saveStatus').text('⚠️ 仅「进行中」的考试可以录入成绩');
+                return;
+            }
+
+            $.post('@Url.Action("GetEntryData")', { examScheduleId: examId }, function (res) {
+                if (!res.success) {
+                    alert(res.message);
+                    $('#entryContainer').hide();
+                    return;
+                }
+
+                currentSubjects = res.subjects;
+                currentStudents = res.students;
+                scoreCache = {};
+                scoreChanged = {};
+
+                if (res.existingScores) {
+                    res.existingScores.forEach(function (sc) {
+                        scoreCache[sc.studentId + '_' + sc.subjectId] = sc.scoreValue;
+                    });
+                }
+
+                $('#entryTitle').text('录入表 · ' + $('#examSelect option:selected').text().split('（')[0]);
+                renderEntryTable();
+                $('#entryContainer').show();
+                $('#saveStatus').text('已加载 ' + currentStudents.length + ' 名学生 × ' + currentSubjects.length + ' 个科目');
+            }).fail(function(xhr) {
+                alert('加载失败: ' + (xhr.responseText || '未知错误'));
+            });
+        }
+
+        function renderEntryTable() {
+            var headerHtml = '<th class="text-center" style="min-width:36px;width:36px;">序号</th>' +
+                             '<th style="min-width:55px;">学号</th>' +
+                             '<th style="min-width:45px;">姓名</th>' +
+                             '<th style="min-width:35px;">年级</th>' +
+                             '<th style="min-width:35px;">班级</th>';
+            currentSubjects.forEach(function (sub) {
+                headerHtml += '<th class="text-center" style="min-width:50px;" title="满分 ' + sub.fullScore + '">' +
+                              sub.subjectName + '<br><small class="text-muted">(' + sub.fullScore + ')</small></th>';
+            });
+            $('#entryHeader').html(headerHtml);
+
+            var bodyHtml = '';
+            currentStudents.forEach(function (stu, idx) {
+                bodyHtml += '<tr>' +
+                    '<td class="text-center">' + (idx + 1) + '</td>' +
+                    '<td style="font-size:0.8rem;">' + htmlEncode(stu.studentNo) + '</td>' +
+                    '<td style="font-size:0.8rem;">' + htmlEncode(stu.name) + '</td>' +
+                    '<td style="font-size:0.8rem;">' + htmlEncode(stu.grade) + '</td>' +
+                    '<td style="font-size:0.8rem;">' + htmlEncode(stu.className) + '</td>';
+
+                currentSubjects.forEach(function (sub) {
+                    var key = stu.studentID + '_' + sub.subjectId;
+                    var val = scoreCache[key];
+                    var displayVal = (val !== undefined && val !== null) ? val : '';
+                    bodyHtml += '<td class="text-center p-1">' +
+                        '<input type="number" class="form-control form-control-sm score-input text-center" ' +
+                        'style="width:85px;" ' +
+                        'data-student="' + stu.studentID + '" ' +
+                        'data-subject="' + sub.subjectId + '" ' +
+                        'data-fullscore="' + sub.fullScore + '" ' +
+                        'value="' + displayVal + '" ' +
+                        'oninput="onScoreChange(this)" ' +
+                        'onblur="onScoreBlur(this)" ' +
+                        'onkeydown="onScoreKeydown(event, this)" ' +
+                        'step="0.5" min="0" max="' + sub.fullScore + '" />' +
+                        '</td>';
+                });
+                bodyHtml += '</tr>';
+            });
+            $('#entryBody').html(bodyHtml);
+        }
+
+        function onScoreChange(input) {
+            var studentId = $(input).data('student');
+            var subjectId = $(input).data('subject');
+            var fullScore = parseInt($(input).data('fullscore')) || 100;
+            var key = studentId + '_' + subjectId;
+            var val = $(input).val();
+
+            // 超满分视觉提示
+            var numVal = parseFloat(val);
+            if (val !== '' && !isNaN(numVal) && (numVal < 0 || numVal > fullScore)) {
+                $(input).addClass('is-invalid');
+            } else {
+                $(input).removeClass('is-invalid');
+            }
+
+            if (val === '') {
+                delete scoreChanged[key];
+            } else {
+                scoreChanged[key] = numVal || 0;
+            }
+
+            var changed = Object.keys(scoreChanged).length;
+            $('#saveStatus').text(changed > 0 ? '⚠️ ' + changed + ' 项待保存' : '✅ 全部已保存');
+        }
+
+        function onScoreKeydown(event, input) {
+            if (event.key === 'Enter' || event.key === 'Tab') {
+                event.preventDefault();
+                var inputs = $('.score-input');
+                var idx = inputs.index(input);
+                var next = inputs.eq(idx + 1);
+                if (next.length) {
+                    next.focus();
+                    next.select();
+                }
+            }
+        }
+
+        // 失焦自动保存单条成绩
+        function onScoreBlur(input) {
+            var key = $(input).data('student') + '_' + $(input).data('subject');
+            var val = $(input).val().trim();
+            var cached = scoreCache[key];
+            var newVal = val === '' ? null : parseFloat(val);
+
+            // 值没变就不保存
+            if (cached === newVal || (cached === undefined && (val === '' || val === null))) return;
+            if (val === '' || isNaN(newVal)) return;
+
+            // 超满分检查
+            var fullScore = parseInt($(input).data('fullscore')) || 100;
+            if (newVal < 0 || newVal > fullScore) {
+                $('#saveStatus').text('⚠️ 分数 ' + newVal + ' 超出满分 ' + fullScore + '，未保存');
+                return;
+            }
+
+            var item = [{
+                studentId: parseInt($(input).data('student')),
+                subjectId: parseInt($(input).data('subject')),
+                scoreValue: newVal
+            }];
+
+            $(input).prop('readonly', true);
+            $('#saveStatus').text('⏳ 自动保存中...');
+
+            $.ajax({
+                url: '@Url.Action("SaveScores")?examScheduleId=' + currentExamScheduleId,
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(item),
+                headers: { 'RequestVerificationToken': $('input[name="__RequestVerificationToken"]').val() },
+                success: function (res) {
+                    if (res.success) {
+                        scoreCache[key] = newVal;
+                        // 如果该值在待保存列表中，移除
+                        delete scoreChanged[key];
+                        var changed = Object.keys(scoreChanged).length;
+                        $('#saveStatus').text(changed > 0 ? '⚠️ ' + changed + ' 项待保存 | ✅ 已自动保存' : '✅ 已自动保存，全部已保存');
+                    } else {
+                        $('#saveStatus').text('❌ 自动保存失败: ' + (res.message || '未知错误'));
+                    }
+                },
+                error: function (xhr) {
+                    $('#saveStatus').text('❌ 自动保存失败: ' + (xhr.responseText || '网络错误'));
+                },
+                complete: function () {
+                    $(input).prop('readonly', false);
+                }
+            });
+        }
+
+        function saveAllScores() {
+            // 检查是否有超出满分的输入
+            var invalidInputs = $('.score-input.is-invalid');
+            if (invalidInputs.length > 0) {
+                if (!confirm('有 ' + invalidInputs.length + ' 个分数超出满分，确定要保存吗？')) {
+                    return;
+                }
+            }
+
+            var changed = Object.keys(scoreChanged);
+            if (changed.length === 0) {
+                alert('没有需要保存的数据');
+                return;
+            }
+
+            var items = [];
+            changed.forEach(function (key) {
+                var parts = key.split('_');
+                items.push({
+                    studentId: parseInt(parts[0]),
+                    subjectId: parseInt(parts[1]),
+                    scoreValue: scoreChanged[key]
+                });
+            });
+
+            $('#saveAllBtn').prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>保存中...');
+
+            $.ajax({
+                url: '@Url.Action("SaveScores")?examScheduleId=' + currentExamScheduleId,
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(items),
+                headers: { 'RequestVerificationToken': $('input[name="__RequestVerificationToken"]').val() },
+                success: function (res) {
+                    if (res.success) {
+                        $('#saveStatus').text('✅ 保存成功: ' + res.message);
+                        scoreChanged = {};
+                        loadEntryData();
+                    } else {
+                        alert(res.message);
+                    }
+                },
+                error: function (xhr) {
+                    alert('保存失败: ' + (xhr.responseText || '请重试'));
+                },
+                complete: function () {
+                    $('#saveAllBtn').prop('disabled', false).html('<i class="bi bi-save me-1"></i>保存全部');
+                }
+            });
+        }
+
+        function htmlEncode(str) {
+            return $('<span>').text(str || '').html();
+        }
+    </script>
+}

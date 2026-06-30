@@ -1,0 +1,249 @@
+@model List<AcademicYear>
+@{
+    ViewBag.Title = "学期/学年管理";
+    var semesters = ViewBag.Semesters as List<Semester> ?? new();
+}
+
+@Html.AntiForgeryToken()
+
+<div class="container-fluid">
+    <h4 class="mb-3"><i class="bi bi-calendar-range me-2"></i>学期 / 学年管理</h4>
+
+    <div class="row g-3">
+        <!-- 左栏：学年 -->
+        <div class="col-md-6">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0"><i class="bi bi-calendar3 me-1 text-primary"></i>学年管理</h6>
+                    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addYearModal">
+                        <i class="bi bi-plus"></i> 新增学年
+                    </button>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr><th>学年名称</th><th>状态</th><th>操作</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var y in Model)
+                            {
+                                <tr>
+                                    <td>@y.YearName</td>
+                                    <td>
+                                        @if (y.IsCurrent)
+                                        {
+                                            <span class="badge bg-success">当前学年</span>
+                                        }
+                                        else
+                                        {
+                                            <a href="javascript:;" class="btn btn-outline-success btn-sm set-current-year" data-id="@y.Id">设为当前</a>
+                                        }
+                                    </td>
+                                    <td>
+                                        <a href="javascript:;" class="btn btn-outline-danger btn-sm delete-year" data-id="@y.Id" title="删除">
+                                            <i class="bi bi-trash"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
+                            @if (Model.Count == 0)
+                            {
+                                <tr><td colspan="3" class="text-center text-muted py-3">暂无学年</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右栏：学期 -->
+        <div class="col-md-6">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0"><i class="bi bi-calendar-week me-1 text-success"></i>学期管理</h6>
+                    <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addSemesterModal">
+                        <i class="bi bi-plus"></i> 新增学期
+                    </button>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr><th>学期名称</th><th>所属学年</th><th>状态</th><th>操作</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var s in semesters)
+                            {
+                                <tr>
+                                    <td>@s.SemesterName</td>
+                                    <td>@(s.AcademicYear?.YearName ?? "-")</td>
+                                    <td>
+                                        @if (s.IsCurrent)
+                                        {
+                                            <span class="badge bg-success">当前学期</span>
+                                        }
+                                        else
+                                        {
+                                            <a href="javascript:;" class="btn btn-outline-success btn-sm set-current-semester" data-id="@s.Id">设为当前</a>
+                                        }
+                                    </td>
+                                    <td>
+                                        <a href="javascript:;" class="btn btn-outline-danger btn-sm delete-semester" data-id="@s.Id" title="删除">
+                                            <i class="bi bi-trash"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
+                            @if (semesters.Count == 0)
+                            {
+                                <tr><td colspan="4" class="text-center text-muted py-3">暂无学期</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 快捷操作 -->
+    <div class="row mt-3">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0"><i class="bi bi-arrow-up-circle me-1 text-warning"></i>升级 / 毕业</h6>
+                </div>
+                <div class="card-body">
+                    <a asp-action="Promote" class="btn btn-warning me-2">
+                        <i class="bi bi-arrow-up me-1"></i>学生升级管理
+                    </a>
+                    <small class="text-muted">将指定年级的学生升到下一个年级，或标记为已毕业</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 新增学年弹窗 -->
+<div class="modal fade" id="addYearModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title">新增学年</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">学年名称 <span class="text-danger">*</span></label>
+                    <input type="text" id="yearName" class="form-control" placeholder="如：2025-2026" />
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="btnAddYear">确定</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 新增学期弹窗 -->
+<div class="modal fade" id="addSemesterModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title">新增学期</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">所属学年 <span class="text-danger">*</span></label>
+                    <select id="semesterYearId" class="form-select">
+                        @foreach (var y in Model)
+                        {
+                            <option value="@y.Id" selected="@(y.IsCurrent ? "selected" : null)">@y.YearName</option>
+                        }
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">学期名称 <span class="text-danger">*</span></label>
+                    <input type="text" id="semesterName" class="form-control" placeholder="如：上学期" />
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-success" id="btnAddSemester">确定</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(function () {
+            var token = $('input[name="__RequestVerificationToken"]').val();
+
+            // 新增学年
+            $('#btnAddYear').click(function () {
+                var name = $('#yearName').val().trim();
+                if (!name) { alert('请输入学年名称'); return; }
+                $.post('@Url.Action("AddAcademicYear")', { yearName: name, __RequestVerificationToken: token }, function (res) {
+                    if (res.success) location.reload();
+                    else alert(res.message);
+                });
+            });
+
+            // 新增学期
+            $('#btnAddSemester').click(function () {
+                var yearId = $('#semesterYearId').val();
+                var name = $('#semesterName').val().trim();
+                if (!name) { alert('请输入学期名称'); return; }
+                $.post('@Url.Action("AddSemester")', { academicYearId: yearId, semesterName: name, __RequestVerificationToken: token }, function (res) {
+                    if (res.success) location.reload();
+                    else alert(res.message);
+                });
+            });
+
+            // 设为当前学年
+            $(document).on('click', '.set-current-year', function () {
+                var btn = $(this);
+                showConfirm('确定设为当前学年？', function() {
+                    $.post('@Url.Action("SetCurrentYear")', { id: btn.data('id'), __RequestVerificationToken: token }, function (res) {
+                        if (res.success) location.reload();
+                        else alert(res.message);
+                    });
+                });
+            });
+
+            // 设为当前学期
+            $(document).on('click', '.set-current-semester', function () {
+                var btn = $(this);
+                showConfirm('确定设为当前学期？', function() {
+                    $.post('@Url.Action("SetCurrentSemester")', { id: btn.data('id'), __RequestVerificationToken: token }, function (res) {
+                        if (res.success) location.reload();
+                        else alert(res.message);
+                    });
+                });
+            });
+
+            // 删除学年
+            $(document).on('click', '.delete-year', function () {
+                var btn = $(this);
+                showConfirm('确定删除该学年？', function() {
+                    $.post('@Url.Action("DeleteYear")', { id: btn.data('id'), __RequestVerificationToken: token }, function (res) {
+                        if (res.success) location.reload();
+                        else alert(res.message);
+                    });
+                });
+            });
+
+            // 删除学期
+            $(document).on('click', '.delete-semester', function () {
+                var btn = $(this);
+                showConfirm('确定删除该学期？', function() {
+                    $.post('@Url.Action("DeleteSemester")', { id: btn.data('id'), __RequestVerificationToken: token }, function (res) {
+                        if (res.success) location.reload();
+                        else alert(res.message);
+                    });
+                });
+            });
+        });
+    </script>
+}

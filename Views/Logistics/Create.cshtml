@@ -1,0 +1,99 @@
+@model StudentManagerCore.Models.RepairRequest
+@{
+    ViewBag.Title = "申请维修";
+}
+
+<div class="container py-4" style="max-width:600px;">
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-4">
+            <h4 class="card-title mb-1"><i class="bi bi-tools me-2"></i>申请维修</h4>
+            <p class="text-muted small mb-4">填写以下信息提交维修申请，后勤人员将尽快处理</p>
+
+            @if (TempData["Success"] != null)
+            {
+                <div class="alert alert-success alert-dismissible fade show py-2 small">
+                    <i class="bi bi-check-circle me-1"></i>@TempData["Success"]
+                    <button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button>
+                </div>
+            }
+
+            @if (!ViewData.ModelState.IsValid)
+            {
+                <div class="alert alert-danger py-2 small">
+                    <i class="bi bi-exclamation-circle me-1"></i>
+                    @foreach (var error in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+                    {
+                        <span>@error.ErrorMessage</span>
+                    }
+                </div>
+            }
+
+            <form method="post" asp-action="Create">
+                @Html.AntiForgeryToken()
+
+                <div class="mb-3">
+                    <label class="form-label small fw-medium">维修标题 <span class="text-danger">*</span></label>
+                    <input type="text" name="Title" class="form-control" placeholder="例如：三楼教室灯管损坏" required maxlength="200" value="@Model?.Title" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-medium">故障描述 <span class="text-danger">*</span></label>
+                    <textarea name="Description" class="form-control" rows="3" placeholder="请详细描述故障情况，方便后勤准备工具和材料" required>@Model?.Description</textarea>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-medium">故障位置 <span class="text-danger">*</span></label>
+                    <input type="text" name="Location" class="form-control" placeholder="例如：教学楼3楼301教室" maxlength="200" required value="@Model?.Location" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-medium">联系电话 <span class="text-danger">*</span></label>
+                    <input type="text" name="ContactPhone" class="form-control" placeholder="您的手机号，方便后勤联系" maxlength="20" required value="@Model?.ContactPhone" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-medium">故障出现时间 <span class="text-danger">*</span></label>
+                    <div class="row g-2">
+                        <div class="col-5">
+                            <input type="date" name="PreferredDate" class="form-control" required value="@(Model?.PreferredTime?.ToString("yyyy-MM-dd"))" />
+                        </div>
+                        <div class="col-3">
+                            <select name="PreferredHour" class="form-select" required>
+                                <option value="">时</option>
+                                @for (int h = 0; h <= 23; h++)
+                                {
+                                    <option value="@h" selected="@(Model?.PreferredTime?.Hour == h)">@h.ToString("00") 时</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-4">
+                            <select name="PreferredMinute" class="form-select" required>
+                                <option value="">分</option>
+                                @{
+                                    var minuteOptions = new[] { "00", "15", "30", "45" };
+                                    foreach (var m in minuteOptions)
+                                    {
+                                        var isSelected = Model?.PreferredTime?.Minute.ToString() == m;
+                                        <option value="@m" selected="@isSelected">@m 分</option>
+                                    }
+                                }
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <div class="text-muted small mt-1">选择故障出现的大致时间，方便后勤追溯排查</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-send me-1"></i>提交申请
+                    </button>
+                    <a asp-action="MyRequests" class="btn btn-outline-secondary">
+                        <i class="bi bi-list me-1"></i>我的申报
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

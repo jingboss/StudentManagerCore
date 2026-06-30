@@ -1,0 +1,266 @@
+@model Admin
+@{
+    ViewData["Title"] = "添加教职工";
+}
+
+<div class="container py-4">
+    <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="bi bi-person-plus-fill me-2"></i>添加教职工</h5>
+        </div>
+        <div class="card-body">
+            <form method="post" asp-action="Add">
+                @Html.AntiForgeryToken()
+
+                <!-- 1. 基本信息 -->
+                <h6 class="border-bottom pb-2 mb-3 text-primary">
+                    <i class="bi bi-info-circle me-1"></i>基本信息
+                </h6>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label">姓名 <span class="text-danger">*</span></label>
+                        <input asp-for="RealName" class="form-control" required />
+                        <span asp-validation-for="RealName" class="text-danger"></span>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">性别</label>
+                        <select asp-for="Gender" class="form-select">
+                            <option value="">-- 请选择 --</option>
+                            <option value="男">男</option>
+                            <option value="女">女</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">民族</label>
+                        <input asp-for="Nation" class="form-control" placeholder="如：汉族" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">出生日期</label>
+                        <input asp-for="BirthDate" class="form-control" type="date" />
+                    </div>
+                </div>
+
+                <!-- 2. 联系信息 -->
+                <h6 class="border-bottom pb-2 mb-3 mt-4 text-primary">
+                    <i class="bi bi-telephone me-1"></i>联系信息
+                </h6>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label">手机号 <span class="text-danger">*</span></label>
+                        <input asp-for="Phone" class="form-control" required />
+                        <span asp-validation-for="Phone" class="text-danger"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">户口所在地</label>
+                        <input asp-for="RegisteredDomicile" class="form-control" />
+                    </div>
+                </div>
+
+                <!-- 3. 学历/资格信息 -->
+                <h6 class="border-bottom pb-2 mb-3 mt-4 text-primary">
+                    <i class="bi bi-mortarboard me-1"></i>学历与资格
+                </h6>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-3">
+                        <label class="form-label">最高学历</label>
+                        <select asp-for="HighestEducation" class="form-select">
+                            <option value="">-- 请选择 --</option>
+                            <option value="中专">中专</option>
+                            <option value="大专">大专</option>
+                            <option value="本科">本科</option>
+                            <option value="硕士">硕士</option>
+                            <option value="博士">博士</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">教师资格证科目</label>
+                        <input asp-for="CertSubject" class="form-control" placeholder="如：小学语文" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">教师资格证号</label>
+                        <input asp-for="CertNumber" class="form-control" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">所属教育局</label>
+                        <input asp-for="CertAuthority" class="form-control" />
+                    </div>
+                </div>
+
+                <!-- 4. 账号信息 -->
+                <h6 class="border-bottom pb-2 mb-3 mt-4 text-primary">
+                    <i class="bi bi-key me-1"></i>账号信息
+                </h6>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label">用户名 <span class="text-danger">*</span></label>
+                        <input asp-for="Username" class="form-control" required />
+                        <span asp-validation-for="Username" class="text-danger"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">密码 <span class="text-danger">*</span></label>
+                        <input asp-for="Password" class="form-control" type="password" required minlength="8" />
+                        <span asp-validation-for="Password" class="text-danger"></span>
+                    </div>
+                </div>
+
+                <!-- 5. 岗位信息 -->
+                <h6 class="border-bottom pb-2 mb-3 mt-4 text-primary">
+                    <i class="bi bi-briefcase me-1"></i>岗位信息
+                </h6>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label">学段</label>
+                        <select asp-for="SchoolType" class="form-select">
+                            <option value="">-- 请选择 --</option>
+                            <option value="小学">小学</option>
+                            <option value="初中">初中</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">角色 <span class="text-danger">*</span></label>
+                        <div class="dropdown" id="addRoleDropdown">
+                            <button class="btn btn-light border form-control text-start d-flex justify-content-between align-items-center" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <span id="addRoleDisplay" class="text-muted small">请选择角色（可多选）</span>
+                                <span class="caret">&#9660;</span>
+                            </button>
+                            <ul class="dropdown-menu p-2 w-100" style="max-height:260px;overflow-y:auto;" id="addRoleMenu">
+                                <li><label class="dropdown-item d-flex align-items-center gap-2 py-1"><input type="checkbox" class="form-check-input add-role-cb" value="班主任"> <span>🔵 班主任</span></label></li>
+                                <li><label class="dropdown-item d-flex align-items-center gap-2 py-1"><input type="checkbox" class="form-check-input add-role-cb" value="科任教师"> <span>🟢 科任教师</span></label></li>
+                                <li><label class="dropdown-item d-flex align-items-center gap-2 py-1"><input type="checkbox" class="form-check-input add-role-cb" value="年级级长"> <span>🟣 年级级长</span></label></li>
+                                <li><label class="dropdown-item d-flex align-items-center gap-2 py-1"><input type="checkbox" class="form-check-input add-role-cb" value="教务主任"> <span>🟠 教务主任</span></label></li>
+                                <li><label class="dropdown-item d-flex align-items-center gap-2 py-1"><input type="checkbox" class="form-check-input add-role-cb" value="校长"> <span>🔴 校长</span></label></li>
+                                <li><label class="dropdown-item d-flex align-items-center gap-2 py-1"><input type="checkbox" class="form-check-input add-role-cb" value="后勤主任"> <span>🛠 后勤主任</span></label></li>
+                            </ul>
+                        </div>
+                        <input type="hidden" name="Role" id="addRoleHidden" value="" />
+                    </div>
+                    <!-- 年级/班级（班主任时才显示） -->
+                    <div class="col-md-4" id="addGradeGroup" style="display:none;">
+                        <label class="form-label">年级</label>
+                        <select asp-for="Grade" class="form-select" id="addGradeSelect">
+                            <option value="">-- 请选择 --</option>
+                            @foreach (var g in ViewBag.GradeList as IEnumerable<dynamic> ?? new List<object>())
+                            {
+                                <option value="@g.Value" data-schooltype="@g.SchoolType">@g.Text</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-4" id="addClassGroup" style="display:none;">
+                        <label class="form-label">班级</label>
+                        <select asp-for="ClassName" class="form-select" id="addClassSelect">
+                            <option value="">-- 请先选择年级 --</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- 所教科目（联动学段） -->
+                <div class="row mb-3" id="addSubjectGroup" style="display:none;">
+                    <div class="col-12">
+                        <label class="form-label fw-bold">所教科目</label>
+                        <div id="addSubjectCheckList" class="d-flex flex-wrap gap-2 border rounded p-2 bg-light" style="min-height:38px;">
+                            <span class="text-muted small">请先选择学段</span>
+                        </div>
+                    </div>
+                </div>
+
+                <hr />
+                <div class="text-end">
+                    <a asp-action="Index" class="btn btn-outline-secondary me-2">
+                        <i class="bi bi-x-lg me-1"></i>取消
+                    </a>
+                    <button type="submit" class="btn btn-primary px-4">
+                        <i class="bi bi-check-lg me-1"></i>保存
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 角色下拉多选：更新隐藏字段和按钮文字
+    $(document).on('change', '#addModalBody .add-role-cb', function() {
+        var checked = $('#addModalBody .add-role-cb:checked');
+        var roles = checked.map(function() { return $(this).val(); }).get();
+        $('#addModalBody #addRoleHidden').val(roles.join(','));
+        if (roles.length > 0) {
+            $('#addModalBody #addRoleDisplay').text('已选 ' + roles.length + ' 个角色').removeClass('text-muted');
+        } else {
+            $('#addModalBody #addRoleDisplay').text('请选择角色（可多选）').addClass('text-muted');
+        }
+        // 班主任联动
+        if (roles.indexOf('班主任') >= 0) {
+            $('#addModalBody #addGradeGroup, #addModalBody #addClassGroup').show();
+            var st = $('#addModalBody select[name="SchoolType"]').val();
+            var gr = $('#addModalBody #addGradeSelect').val();
+            if (st && gr) triggerAddLoadClasses(st, gr);
+        } else {
+            $('#addModalBody #addGradeGroup, #addModalBody #addClassGroup').hide();
+        }
+    });
+
+    // 学段联动：过滤年级 + 加载对应科目
+    $(document).on('change', '#addModalBody select[name="SchoolType"]', function() {
+        var type = $(this).val();
+        // 过滤年级下拉
+        var $gradeSel = $('#addModalBody #addGradeSelect');
+        $gradeSel.val('');
+        $gradeSel.find('option').each(function() {
+            if (!$(this).val()) return;
+            var st = $(this).data('schooltype');
+            $(this).toggle(!type || st === type);
+        });
+        // 清空班级
+        $('#addModalBody #addClassSelect').html('<option value="">-- 请先选择年级 --</option>');
+        // 加载科目
+        var $group = $('#addSubjectGroup');
+        var $list = $('#addSubjectCheckList');
+        if (!type) { $group.hide(); return; }
+        $group.show();
+        $list.html('<span class="text-muted small"><span class="spinner-border spinner-border-sm"></span> 加载科目...</span>');
+        $.get('@Url.Action("GetSubjectsByType")', { type: type }, function(data) {
+            if (data.length === 0) {
+                $list.html('<span class="text-muted small">暂无可用科目</span>');
+                return;
+            }
+            var html = '';
+            data.forEach(function(s) {
+                html += '<label class="form-check-label me-1" style="cursor:pointer;background:#fff;padding:4px 12px;border:1px solid #dee2e6;border-radius:4px;">';
+                html += '<input type="checkbox" class="form-check-input me-1 add-subject-cb" value="' + s.id + '" /> ' + s.name;
+                html += '</label>';
+            });
+            $list.html(html);
+        });
+    });
+
+    // 年级联动：加载班级
+    $(document).on('change', '#addModalBody #addGradeSelect', function() {
+        var gradeName = $(this).val();
+        var schoolType = $('#addModalBody select[name="SchoolType"]').val();
+        if (gradeName && schoolType) {
+            triggerAddLoadClasses(schoolType, gradeName);
+        } else {
+            $('#addModalBody #addClassSelect').html('<option value="">-- 请先选择年级 --</option>');
+        }
+    });
+
+    function triggerAddLoadClasses(schoolType, gradeName) {
+        var $sel = $('#addModalBody #addClassSelect');
+        $sel.html('<option value="">加载中...</option>');
+        $.get('@Url.Action("GetClassesByGrade")', { schoolType: schoolType, gradeName: gradeName }, function(data) {
+            var html = '<option value="">-- 请选择班级 --</option>';
+            data.forEach(function(c) { html += '<option value="' + c.name + '">' + c.name + '</option>'; });
+            $sel.html(html);
+        });
+    }
+
+    // 提交前验证角色
+    $(document).on('submit', '#addModalBody form', function(e) {
+        var ids = $('#addModalBody #addRoleHidden').val();
+        if (!ids) {
+            alert('请至少选择一个角色');
+            e.preventDefault();
+            return false;
+        }
+    });
+</script>

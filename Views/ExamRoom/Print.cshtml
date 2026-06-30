@@ -1,0 +1,83 @@
+@model List<StudentManagerCore.Models.ExamRoom>
+@{
+    var schedule = ViewBag.Schedule as StudentManagerCore.Models.ExamSchedule;
+    var grade = ViewBag.Grade as string;
+    Layout = null;
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>考场安排 - @schedule?.Name</title>
+    <style>
+        @@page { margin: 15mm; }
+        body { font-family: 'Microsoft YaHei', sans-serif; font-size: 12px; }
+        h2 { text-align: center; margin-bottom: 4px; }
+        .sub { text-align: center; color: #666; margin-bottom: 20px; font-size: 13px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        th, td { border: 1px solid #333; padding: 4px 6px; text-align: center; font-size: 11px; }
+        th { background: #f0f0f0; }
+        .room-title { font-size: 14px; font-weight: bold; margin: 16px 0 4px; padding-left: 4px; border-left: 4px solid #333; }
+        .no-print { display: none; }
+        @@media print {
+            .no-print { display: none !important; }
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+    </style>
+</head>
+<body>
+    <h2>@schedule?.Name 考场安排表</h2>
+    <div class="sub">年级：@grade &nbsp;|&nbsp; 考试日期：@schedule?.ExamDate.ToString("yyyy-MM-dd")</div>
+
+    @foreach (var room in Model.OrderBy(r => r.RoomName))
+    {
+        <div class="room-title">@room.RoomName（@room.SeatCount 人）</div>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width:60px">座位号</th>
+                    <th>姓名</th>
+                    <th>班级</th>
+                    <th style="width:60px">座位号</th>
+                    <th>姓名</th>
+                    <th>班级</th>
+                </tr>
+            </thead>
+            <tbody>
+                @{
+                    var students = room.Students?.OrderBy(s => s.SeatNumber).ToList() ?? new();
+                    var half = (int)Math.Ceiling(students.Count / 2.0);
+                }
+                @for (int i = 0; i < half; i++)
+                {
+                    <tr>
+                        <td>@students[i].SeatNumber</td>
+                        <td style="text-align:left">@students[i].Student?.Name</td>
+                        <td style="text-align:left">@students[i].Student?.ClassName</td>
+                        @{
+                            var j = i + half;
+                            if (j < students.Count)
+                            {
+                                <td>@students[j].SeatNumber</td>
+                                <td style="text-align:left">@students[j].Student?.Name</td>
+                                <td style="text-align:left">@students[j].Student?.ClassName</td>
+                            }
+                            else
+                            {
+                                <td></td><td></td><td></td>
+                            }
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+
+    <div class="sub" style="margin-top:20px;">
+        打印时间：@DateTime.Now.ToString("yyyy-MM-dd HH:mm")
+    </div>
+    <div style="text-align:center;margin-top:10px;">
+        <button class="no-print" onclick="window.print()">打印</button>
+    </div>
+</body>
+</html>

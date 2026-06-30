@@ -1,0 +1,1016 @@
+@using StudentManagerCore.Models
+@{
+    ViewData["Title"] = "成绩分析";
+    var exams = ViewBag.ExamSchedules as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="mb-0"><i class="bi bi-bar-chart-line me-2"></i>成绩分析系统</h4>
+    </div>
+
+    <!-- 筛选条件 -->
+    <div class="card mb-3">
+        <div class="card-body py-2">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label small">选择考试</label>
+                    <select id="examSelect" class="form-select" onchange="onExamChange()">
+                        <option value="">-- 请选择考试 --</option>
+                        @foreach (var exam in exams)
+                        {
+                            <option value="@exam.Id">@exam.Name（@exam.ExamType · @(((DateTime)exam.ExamDate).ToString("yyyy-MM-dd"))）</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small">选择年级</label>
+                    <select id="gradeSelect" class="form-select" onchange="onGradeChange()">
+                        <option value="">-- 全部年级 --</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small">选择班级</label>
+                    <select id="classSelect" class="form-select" onchange="onClassChange()">
+                        <option value="">-- 全部班级 --</option>
+                    </select>
+                </div>
+                <div class="col-md-2" id="compareExamGroup" style="display:none;">
+                    <label class="form-label small">对比考试</label>
+                    <select id="compareExamSelect" class="form-select" onchange="loadComparisonData()">
+                        <option value="">-- 选择对比考试 --</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small">&nbsp;</label>
+                    <button class="btn btn-outline-success form-control btn-sm" onclick="exportExcel()">
+                        <i class="bi bi-download me-1"></i>导出 Excel
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 选项卡导航 -->
+    <ul class="nav nav-tabs mb-3" id="analysisTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabStats" type="button">
+                <i class="bi bi-bar-chart-steps me-1"></i>综合统计
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabDetail" type="button">
+                <i class="bi bi-table me-1"></i>学生明细
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabComparison" type="button" onclick="onComparisonTab()">
+                <i class="bi bi-arrow-left-right me-1"></i>成绩对比
+                <small class="text-muted">（进退分·名次升降）</small>
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabTop10" type="button" onclick="onTop10Tab()">
+                <i class="bi bi-trophy me-1"></i>年级排名前10名
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabAiAnalysis" type="button" onclick="onAiAnalysisTab()">
+                <i class="bi bi-robot me-1"></i>AI成绩分析
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="viewContainer" style="display:none;">
+
+        <!-- ============= Tab 1: 综合统计 ============= -->
+        <div class="tab-pane fade show active" id="tabStats">
+            <!-- 概览卡片 -->
+            <div class="row g-2 mb-3" id="overviewCards"></div>
+
+            <!-- 各科统计分析 -->
+            <div class="card mb-3">
+                <div class="card-header bg-white py-2">
+                    <span class="fw-bold"><i class="bi bi-bar-chart-steps me-1"></i>各科统计分析</span>
+                    <span class="text-muted small ms-2">平均分 · 最高分 · 最低分 · 中位数 · 优秀率 · 良好率 · 及格率 · 低分率 · 临界生</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-hover mb-0" style="font-size:0.78rem;">
+                            <thead class="table-light" id="statHeader"></thead>
+                            <tbody id="statBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 分数段分布 -->
+            <div class="card mb-3">
+                <div class="card-header bg-white py-2">
+                    <span class="fw-bold"><i class="bi bi-pie-chart me-1"></i>分数段人数分布</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-bordered mb-0" style="font-size:0.8rem;">
+                            <thead class="table-light" id="segHeader"></thead>
+                            <tbody id="segBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============= Tab 2: 学生明细 ============= -->
+        <div class="tab-pane fade" id="tabDetail">
+            <div class="card">
+                <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                    <span class="fw-bold"><i class="bi bi-table me-1"></i>学生成绩明细表</span>
+                    <span id="viewStats" class="text-muted small"></span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive" style="max-height:600px;overflow-y:auto;">
+                        <table class="table table-bordered table-hover mb-0" style="font-size:0.82rem;">
+                            <thead class="table-light sticky-top" id="viewHeader"></thead>
+                            <tbody id="viewBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============= Tab 3: 成绩对比 ============= -->
+        <div class="tab-pane fade" id="tabComparison">
+            <div class="card">
+                <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                    <span class="fw-bold"><i class="bi bi-arrow-left-right me-1"></i>成绩对比分析</span>
+                    <span id="compareStats" class="text-muted small"></span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive" style="max-height:650px;overflow-y:auto;">
+                        <table class="table table-bordered table-hover mb-0" style="font-size:0.78rem;">
+                            <thead class="table-light sticky-top" id="compHeader"></thead>
+                            <tbody id="compBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============= Tab 4: 年级排名前10名 ============= -->
+        <div class="tab-pane fade" id="tabTop10">
+            <div class="card border-warning">
+                <div class="card-header bg-warning bg-opacity-10 py-2">
+                    <span class="fw-bold"><i class="bi bi-trophy me-1"></i>年级排名前10名</span>
+                    <span id="top10Stats" class="text-muted small"></span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive" style="max-height:600px;overflow-y:auto;">
+                        <table class="table table-bordered table-hover mb-0" style="font-size:0.82rem;">
+                            <thead class="table-light sticky-top" id="top10Header"></thead>
+                            <tbody id="top10Body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- ============= Tab 5: AI成绩分析 ============= -->
+        <div class="tab-pane fade" id="tabAiAnalysis">
+            <div class="card">
+                <div class="card-header bg-white py-2">
+                    <span class="fw-bold"><i class="bi bi-robot me-1"></i>AI智能成绩分析</span>
+                    <span class="text-muted small ms-2">基于AI大模型，生成多维度分析报告</span>
+                </div>
+                <div class="card-body">
+                    <!-- 分析类型选择器 -->
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-2">
+                            <label class="form-label small">分析类型</label>
+                            <select id="aiAnalysisType" class="form-select" onchange="onAiTypeChange()">
+                                <option value="student">学生个人分析</option>
+                                <option value="class">班级整体分析</option>
+                                <option value="subject">科目分析</option>
+                            </select>
+                        </div>
+
+                        <!-- 学生分析选择区 -->
+                        <div class="col-md-3" id="aiStudentGroup">
+                            <label class="form-label small">选择学生</label>
+                            <select id="aiStudentSelect" class="form-select">
+                                <option value="">-- 请先选择考试 --</option>
+                            </select>
+                        </div>
+
+                        <!-- 班级分析选择区 -->
+                        <div class="col-md-3" id="aiClassGroup" style="display:none;">
+                            <label class="form-label small">选择班级</label>
+                            <select id="aiClassSelect" class="form-select">
+                                <option value="">-- 请先选择考试 --</option>
+                            </select>
+                        </div>
+
+                        <!-- 科目分析选择区 -->
+                        <div class="col-md-4" id="aiSubjectGroup" style="display:none;">
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <label class="form-label small">选择班级</label>
+                                    <select id="aiSubjectClassSelect" class="form-select" onchange="onAiSubjectClassChange()">
+                                        <option value="">-- 请先选择考试 --</option>
+                                    </select>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small">选择科目</label>
+                                    <select id="aiSubjectSelect" class="form-select">
+                                        <option value="">-- 请先选择 --</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 操作按钮 -->
+                        <div class="col-md-3 d-flex align-items-end gap-2">
+                            <button class="btn btn-primary" id="btnStartAi" onclick="startAiAnalysis(false)">
+                                <i class="bi bi-stars me-1"></i>开始AI分析
+                            </button>
+                            <button class="btn btn-success" id="btnBatchAi" onclick="startBatchAiAnalysis()" style="display:none;">
+                                <i class="bi bi-lightning me-1"></i>批量分析
+                            </button>
+                            <button class="btn btn-outline-warning" id="btnRegenerateAi" onclick="startAiAnalysis(true)" style="display:none;">
+                                <i class="bi bi-arrow-clockwise me-1"></i>重新生成
+                            </button>
+                            <button class="btn btn-outline-secondary" onclick="clearAiAnalysis()">
+                                <i class="bi bi-x-circle me-1"></i>清除
+                            </button>
+                        </div>
+                    </div>
+                
+                    <!-- 批量进度条 -->
+                    <div id="batchProgress" style="display:none;" class="mb-3">
+                        <div class="d-flex justify-content-between mb-1">
+                            <span id="batchProgressText" class="small">正在批量分析...</span>
+                            <span id="batchProgressCount" class="small text-muted">0/0</span>
+                        </div>
+                        <div class="progress" style="height:20px;">
+                            <div id="batchProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width:0%;">0%</div>
+                        </div>
+                        <div id="batchErrors" class="small text-danger mt-1" style="display:none;"></div>
+                    </div>
+                
+                    <!-- 加载中 -->
+                    <div id="aiLoading" style="display:none;" class="text-center py-5">
+                        <div class="spinner-border text-primary" style="width:3rem;height:3rem;" role="status"></div>
+                        <div class="mt-2 text-muted">AI正在分析成绩数据，请稍候（约10~30秒）...</div>
+                    </div>
+        
+                    <!-- 结果展示 -->
+                    <div id="aiResultCard" style="display:none;">
+                        <div class="alert alert-info py-2" id="aiReportHeader"></div>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span id="aiCacheBadge"></span>
+                        </div>
+                        <div class="card bg-light">
+                            <div class="card-body" id="aiAnalysisContent" style="white-space:pre-wrap;line-height:1.8;font-size:0.95rem;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        let currentExamId = 0;
+        let currentGradeId = 0;
+        let currentClassId = 0;
+        let cachedData = null;
+        let allExams = [];
+        let allClasses = [];
+        @foreach (var exam in exams)
+        {
+            <text>allExams.push({ id: @exam.Id, name: '@exam.Name（@exam.ExamType）' });</text>
+        }
+
+        function onExamChange() {
+            var examId = $('#examSelect').val();
+            if (!examId) {
+                $('#viewContainer').hide();
+                $('#gradeSelect').html('<option value="">-- 全部年级 --</option>');
+                $('#classSelect').html('<option value="">-- 全部班级 --</option>');
+                return;
+            }
+            currentExamId = parseInt(examId);
+            $('#gradeSelect').html('<option value="">加载中...</option>');
+            $('#classSelect').html('<option value="">-- 全部班级 --</option>');
+
+            // 填充对比考试列表（排除自身）
+            var compareHtml = '<option value="">-- 选择对比考试 --</option>';
+            allExams.forEach(function(e) {
+                if (e.id !== currentExamId) {
+                    compareHtml += '<option value="' + e.id + '">' + e.name + '</option>';
+                }
+            });
+            $('#compareExamSelect').html(compareHtml);
+
+            $.post('@Url.Action("GetClassList")', { examScheduleId: examId }, function (res) {
+                if (!res.success || !res.classes || res.classes.length === 0) {
+                    $('#gradeSelect').html('<option value="">-- 暂无数据 --</option>');
+                    $('#classSelect').html('<option value="">-- 暂无班级数据 --</option>');
+                    // 清空top10缓存
+                    $('#top10Header,#top10Body').empty();
+                    return;
+                }
+                allClasses = res.classes;
+
+                // 填充年级下拉
+                var gradeHtml = '<option value="">-- 全部年级 --</option>';
+                if (res.grades) {
+                    res.grades.forEach(function(g) {
+                        gradeHtml += '<option value="' + g.gradeLevelId + '">' + g.gradeName + '</option>';
+                    });
+                }
+                $('#gradeSelect').html(gradeHtml);
+
+                // 填充班级下拉
+                renderClassList(allClasses);
+                // 隐藏数据，等待用户选年级/班级
+                $('#viewContainer').hide();
+                // 清空top10缓存
+                $('#top10Header,#top10Body').empty();
+            }).fail(function() {
+                $('#gradeSelect').html('<option value="">-- 加载失败 --</option>');
+                $('#classSelect').html('<option value="">-- 加载失败 --</option>');
+            });
+        }
+
+        function renderClassList(classList) {
+            var html = '<option value="">-- 全部班级 --</option>';
+            classList.forEach(function (c) {
+                html += '<option value="' + c.classInfoId + '">' + c.gradeName + ' ' + c.className + '</option>';
+            });
+            $('#classSelect').html(html);
+        }
+
+        function onGradeChange() {
+            var gradeId = parseInt($('#gradeSelect').val() || 0);
+            currentGradeId = gradeId;
+            // 按年级过滤班级
+            if (gradeId && allClasses.length > 0) {
+                // 从年级索引反推：每个年级唯一一个名称
+                var gradeName = $('#gradeSelect option:selected').text();
+                var filtered = allClasses.filter(function(c) { return c.gradeName === gradeName; });
+                renderClassList(filtered);
+            } else {
+                renderClassList(allClasses);
+            }
+            loadViewData();
+        }
+
+        function onClassChange() {
+            loadViewData();
+            if ($('#compareExamSelect').val()) loadComparisonData();
+        }
+
+        function loadViewData() {
+            var examId = $('#examSelect').val();
+            var gradeId = $('#gradeSelect').val() || '';
+            var classId = $('#classSelect').val() || '';
+            if (!examId) return;
+
+            currentExamId = parseInt(examId);
+            currentGradeId = gradeId ? parseInt(gradeId) : 0;
+            currentClassId = classId ? parseInt(classId) : 0;
+
+            $.post('@Url.Action("GetViewData")', {
+                examScheduleId: currentExamId,
+                gradeLevelId: currentGradeId || null,
+                classInfoId: currentClassId || null
+            }, function (res) {
+                if (!res.success) {
+                    alert(res.message);
+                    $('#viewContainer').hide();
+                    return;
+                }
+                cachedData = res;
+                renderOverview(res);
+                renderSubjectStats(res);
+                renderSegments(res);
+                renderDetailTable(res);
+                $('#viewContainer').show();
+            }).fail(function() { alert('加载成绩数据失败'); });
+        }
+
+        // ========== 概览卡片 ==========
+        function renderOverview(data) {
+            var count = data.totalStudentCount || 0;
+            var subCount = data.subjects ? data.subjects.length : 0;
+            var critical = data.totalCriticalStudents || 0;
+            var html = '';
+            html += '<div class="col-md-2 col-6"><div class="card bg-primary bg-opacity-10 border-primary"><div class="card-body text-center py-2"><div class="fs-4 fw-bold text-primary">' + count + '</div><small class="text-muted">参考人数</small></div></div></div>';
+            html += '<div class="col-md-2 col-6"><div class="card bg-info bg-opacity-10 border-info"><div class="card-body text-center py-2"><div class="fs-4 fw-bold text-info">' + subCount + '</div><small class="text-muted">考试科目</small></div></div></div>';
+
+            if (data.subjectStats && data.subjectStats.length > 0) {
+                var totalAvg = 0, totalMax = 0, totalPassRate = 0;
+                data.subjectStats.forEach(function(s) {
+                    totalAvg += s.avgScore;
+                    totalMax = Math.max(totalMax, s.maxScore);
+                    totalPassRate += s.passRate;
+                });
+                totalAvg = (totalAvg / data.subjectStats.length).toFixed(1);
+                totalPassRate = (totalPassRate / data.subjectStats.length).toFixed(1);
+
+                html += '<div class="col-md-2 col-6"><div class="card bg-success bg-opacity-10 border-success"><div class="card-body text-center py-2"><div class="fs-4 fw-bold text-success">' + totalAvg + '</div><small class="text-muted">各科平均均分</small></div></div></div>';
+                html += '<div class="col-md-2 col-6"><div class="card bg-warning bg-opacity-10 border-warning"><div class="card-body text-center py-2"><div class="fs-4 fw-bold text-warning">' + totalMax.toFixed(1) + '</div><small class="text-muted">单科最高分</small></div></div></div>';
+                html += '<div class="col-md-2 col-6"><div class="card" style="background:#fff3cd;border-color:#ffc107;"><div class="card-body text-center py-2"><div class="fs-4 fw-bold" style="color:#856404;">' + totalPassRate + '%</div><small class="text-muted">平均及格率</small></div></div></div>';
+                html += '<div class="col-md-2 col-6"><div class="card" style="background:#f8d7da;border-color:#dc3545;"><div class="card-body text-center py-2"><div class="fs-4 fw-bold" style="color:#721c24;">' + critical + '</div><small class="text-muted">临界生人数</small></div></div></div>';
+            }
+            $('#overviewCards').html(html);
+        }
+
+        // ========== 各科统计分析表 ==========
+        function renderSubjectStats(data) {
+            if (!data.subjectStats || data.subjectStats.length === 0) { $('#statHeader,#statBody').empty(); return; }
+            var headerHtml = '<th class="text-center">科目</th>' +
+                             '<th class="text-center">满分</th>' +
+                             '<th class="text-center">人数</th>' +
+                             '<th class="text-center">平均分</th>' +
+                             '<th class="text-center">最高分</th>' +
+                             '<th class="text-center">最低分</th>' +
+                             '<th class="text-center" style="min-width:55px;">中位数</th>' +
+                             '<th class="text-center">优秀率</th>' +
+                             '<th class="text-center">良好率</th>' +
+                             '<th class="text-center">及格率</th>' +
+                             '<th class="text-center">低分率</th>' +
+                             '<th class="text-center">临界生</th>';
+            $('#statHeader').html(headerHtml);
+
+            var bodyHtml = '';
+            data.subjectStats.forEach(function(s) {
+                bodyHtml += '<tr>' +
+                    '<td class="fw-bold">' + htmlEncode(s.subjectName) + '</td>' +
+                    '<td class="text-center">' + s.fullScore + '</td>' +
+                    '<td class="text-center">' + s.studentCount + '</td>' +
+                    '<td class="text-center fw-bold text-primary">' + s.avgScore + '</td>' +
+                    '<td class="text-center text-success">' + s.maxScore + '</td>' +
+                    '<td class="text-center text-danger">' + s.minScore + '</td>' +
+                    '<td class="text-center fw-bold">' + s.medianScore + '</td>' +
+                    '<td class="text-center"><span class="badge bg-success">' + s.excellentRate + '%</span><br><small class="text-muted">' + s.excellentCount + '人</small></td>' +
+                    '<td class="text-center"><span class="badge bg-info">' + s.goodRate + '%</span><br><small class="text-muted">' + s.goodCount + '人</small></td>' +
+                    '<td class="text-center"><span class="badge bg-primary">' + s.passRate + '%</span><br><small class="text-muted">' + s.passCount + '人</small></td>' +
+                    '<td class="text-center"><span class="badge ' + (s.lowRate > 10 ? 'bg-danger' : 'bg-secondary') + '">' + s.lowRate + '%</span><br><small class="text-muted">' + s.lowCount + '人</small></td>' +
+                    '<td class="text-center"><span class="badge bg-warning text-dark">' + s.criticalCount + '人</span></td>' +
+                    '</tr>';
+            });
+            $('#statBody').html(bodyHtml);
+        }
+
+        // ========== 分数段分布 ==========
+        function renderSegments(data) {
+            if (!data.subjectStats || data.subjectStats.length === 0) { $('#segHeader,#segBody').empty(); return; }
+            var headerHtml = '<th class="text-center">科目</th>' +
+                             '<th class="text-center bg-danger bg-opacity-10" style="min-width:80px;">&lt;60%<br><small class="text-muted">不及格</small></th>' +
+                             '<th class="text-center bg-warning bg-opacity-10" style="min-width:80px;">60%~69%<br><small class="text-muted">及格</small></th>' +
+                             '<th class="text-center bg-info bg-opacity-10" style="min-width:80px;">70%~79%<br><small class="text-muted">中等</small></th>' +
+                             '<th class="text-center" style="min-width:90px;background:#d4edda;">80%~89%<br><small class="text-muted">良好</small></th>' +
+                             '<th class="text-center bg-primary bg-opacity-10" style="min-width:80px;">90%~100%<br><small class="text-muted">优秀</small></th>';
+            $('#segHeader').html(headerHtml);
+
+            var bodyHtml = '';
+            data.subjectStats.forEach(function(s) {
+                var total = s.seg0_59 + s.seg60_69 + s.seg70_79 + s.seg80_89 + s.seg90_100;
+                function bar(cnt, clr) {
+                    if (total === 0) return '<div style="height:20px;background:#eee;border-radius:3px;"></div>';
+                    var pct = (cnt / total * 100).toFixed(1);
+                    return '<div style="height:20px;background:' + clr + ';width:' + pct + '%;min-width:4px;border-radius:3px;" title="' + cnt + '人(' + pct + '%)"></div>';
+                }
+                bodyHtml += '<tr>' +
+                    '<td class="fw-bold align-middle">' + htmlEncode(s.subjectName) + '</td>' +
+                    '<td class="text-center align-middle">' + s.seg0_59 + '<br><small class="text-muted">(' + (total > 0 ? (s.seg0_59/total*100).toFixed(1) : 0) + '%)</small></td>' +
+                    '<td class="text-center align-middle">' + s.seg60_69 + '<br><small class="text-muted">(' + (total > 0 ? (s.seg60_69/total*100).toFixed(1) : 0) + '%)</small></td>' +
+                    '<td class="text-center align-middle">' + s.seg70_79 + '<br><small class="text-muted">(' + (total > 0 ? (s.seg70_79/total*100).toFixed(1) : 0) + '%)</small></td>' +
+                    '<td class="text-center align-middle">' + s.seg80_89 + '<br><small class="text-muted">(' + (total > 0 ? (s.seg80_89/total*100).toFixed(1) : 0) + '%)</small></td>' +
+                    '<td class="text-center align-middle">' + s.seg90_100 + '<br><small class="text-muted">(' + (total > 0 ? (s.seg90_100/total*100).toFixed(1) : 0) + '%)</small></td>' +
+                    '</tr>' +
+                    // 可视化进度条
+                    '<tr style="background:#f8f9fa;">' +
+                    '<td></td>' +
+                    '<td colspan="5" class="p-1">' +
+                    '<div class="d-flex" style="gap:2px;height:20px;">' +
+                    bar(s.seg0_59, '#dc3545') +
+                    bar(s.seg60_69, '#ffc107') +
+                    bar(s.seg70_79, '#17a2b8') +
+                    bar(s.seg80_89, '#28a745') +
+                    bar(s.seg90_100, '#007bff') +
+                    '</div></td></tr>';
+            });
+            $('#segBody').html(bodyHtml);
+        }
+
+        // ========== 学生明细 ==========
+        function renderDetailTable(data) {
+            $('#viewStats').text(data.studentScores.length + ' 名学生');
+            var headerHtml = '<th class="text-center" style="width:36px;">排名</th>' +
+                             '<th style="width:55px;">学号</th>' +
+                             '<th style="width:45px;">姓名</th>';
+            data.subjects.forEach(function (sub) {
+                headerHtml += '<th class="text-center" style="min-width:55px;">' +
+                              sub.subjectName + '<br><small class="text-muted">(' + sub.fullScore + ')</small></th>';
+            });
+            headerHtml += '<th class="text-center" style="width:50px;">总分</th>' +
+                          '<th class="text-center" style="width:50px;">平均分</th>' +
+                          '<th class="text-center" style="width:55px;">班级排名</th>' +
+                          '<th class="text-center" style="width:55px;">年级排名</th>' +
+                          '<th class="text-center" style="width:48px;">操作</th>';
+            $('#viewHeader').html(headerHtml);
+
+            var bodyHtml = '';
+            data.studentScores.forEach(function (row) {
+                var rankClass = '';
+                if (row.rank === 1) rankClass = 'table-warning';
+                else if (row.rank <= 3) rankClass = 'table-info';
+                bodyHtml += '<tr class="' + rankClass + '">' +
+                    '<td class="text-center fw-bold">' + row.rank + '</td>' +
+                    '<td>' + htmlEncode(row.studentNo) + '</td>' +
+                    '<td>' + htmlEncode(row.studentName) + '</td>';
+                data.subjects.forEach(function (sub) {
+                    var score = row.scores.find(function (s) { return s.subjectId === sub.subjectId; });
+                    bodyHtml += '<td class="text-center">' + (score ? score.scoreValue : '-') + '</td>';
+                });
+                var classRankStr = row.classRank != null ? row.classRank : '-';
+                var gradeRankStr = row.gradeRank != null ? row.gradeRank : '-';
+                bodyHtml += '<td class="text-center fw-bold">' + row.totalScore + '</td>' +
+                            '<td class="text-center fw-bold text-primary">' + (row.avgScore || '-') + '</td>' +
+                            '<td class="text-center">' + classRankStr + '</td>' +
+                            '<td class="text-center">' + gradeRankStr + '</td>' +
+                            '<td class="text-center"><button class="btn btn-sm btn-outline-info py-0 px-1" style="font-size:0.75rem;" onclick="quickAiAnalysis(' + row.studentId + ')"><i class="bi bi-robot"></i></button></td></tr>';
+            });
+            $('#viewBody').html(bodyHtml);
+        }
+
+        // ========== 成绩对比 ==========
+        function onComparisonTab() {
+            $('#compareExamGroup').show();
+            if ($('#compareExamSelect').val()) loadComparisonData();
+        }
+
+        function loadComparisonData() {
+            var examId = $('#examSelect').val();
+            var compareId = $('#compareExamSelect').val();
+            var classId = $('#classSelect').val() || '';
+
+            if (!examId || !compareId) {
+                $('#compHeader,#compBody').empty();
+                $('#compareStats').text('');
+                return;
+            }
+
+            $.post('@Url.Action("GetComparisonData")', {
+                examScheduleId: parseInt(examId),
+                compareExamId: parseInt(compareId),
+                classInfoId: classId ? parseInt(classId) : null
+            }, function (res) {
+                if (!res.success) { alert(res.message); return; }
+                renderComparison(res);
+            }).fail(function() { alert('加载对比数据失败'); });
+        }
+
+        function renderComparison(data) {
+            $('#compareStats').text(data.rows.length + ' 名学生 · ' + data.examName + ' vs ' + data.compareExamName);
+
+            var headerHtml = '<th class="text-center" style="width:30px;">排名</th>' +
+                             '<th style="width:50px;">学号</th>' +
+                             '<th style="width:45px;">姓名</th>' +
+                             '<th class="text-center" style="width:45px;">当前总分</th>' +
+                             '<th class="text-center" style="width:40px;">原总分</th>' +
+                             '<th class="text-center" style="width:45px;">进退分</th>' +
+                             '<th class="text-center" style="width:35px;">当前<br>排名</th>' +
+                             '<th class="text-center" style="width:35px;">原<br>排名</th>' +
+                             '<th class="text-center" style="width:40px;">名次<br>升降</th>';
+            data.subjects.forEach(function (sub) {
+                headerHtml += '<th class="text-center" style="min-width:75px;">' + sub.subjectName + '<br><small class="text-muted">当前/原/进退</small></th>';
+            });
+            $('#compHeader').html(headerHtml);
+
+            var bodyHtml = '';
+            data.rows.forEach(function (row) {
+                var rankClass = '';
+                if (row.rank1 === 1) rankClass = 'table-warning';
+                else if (row.rank1 <= 3) rankClass = 'table-info';
+
+                var totalDiffCls = row.totalDiff > 0 ? 'text-success' : (row.totalDiff < 0 ? 'text-danger' : '');
+                var totalDiffStr = row.totalDiff > 0 ? '+' + row.totalDiff : (row.totalDiff === 0 ? '0' : row.totalDiff);
+
+                var rankChangeStr = '', rankChangeCls = '';
+                if (row.rankChange !== null && row.rankChange !== undefined) {
+                    if (row.rankChange < 0) {
+                        rankChangeStr = '↑' + Math.abs(row.rankChange);
+                        rankChangeCls = 'text-success';
+                    } else if (row.rankChange > 0) {
+                        rankChangeStr = '↓' + row.rankChange;
+                        rankChangeCls = 'text-danger';
+                    } else {
+                        rankChangeStr = '—';
+                        rankChangeCls = 'text-muted';
+                    }
+                }
+
+                bodyHtml += '<tr class="' + rankClass + '">' +
+                    '<td class="text-center fw-bold">' + row.rank1 + '</td>' +
+                    '<td>' + htmlEncode(row.studentNo) + '</td>' +
+                    '<td>' + htmlEncode(row.studentName) + '</td>' +
+                    '<td class="text-center fw-bold">' + row.totalScore + '</td>' +
+                    '<td class="text-center">' + (row.hasComparison ? row.oldTotal : '-') + '</td>' +
+                    '<td class="text-center fw-bold ' + totalDiffCls + '">' + (row.hasComparison ? totalDiffStr : '-') + '</td>' +
+                    '<td class="text-center">' + row.rank1 + '</td>' +
+                    '<td class="text-center">' + (row.rank2 != null ? row.rank2 : '-') + '</td>' +
+                    '<td class="text-center fw-bold ' + rankChangeCls + '">' + (row.hasComparison ? rankChangeStr : '-') + '</td>';
+
+                data.subjects.forEach(function (sub) {
+                    var sd = row.scoreDiffs ? row.scoreDiffs.find(function(d) { return d.subjectId === sub.subjectId; }) : null;
+                    if (sd) {
+                        var diffCls = sd.diff > 0 ? 'text-success' : (sd.diff < 0 ? 'text-danger' : '');
+                        var diffStr = sd.diff > 0 ? '+' + sd.diff : sd.diff;
+                        bodyHtml += '<td class="text-center small">' + sd.newScore + ' / ' + sd.oldScore +
+                            '<br><span class="' + diffCls + ' fw-bold">' + diffStr + '</span></td>';
+                    } else {
+                        bodyHtml += '<td class="text-center text-muted">-</td>';
+                    }
+                });
+
+                bodyHtml += '</tr>';
+            });
+            $('#compBody').html(bodyHtml);
+        }
+
+        // ========== 年级排名前10名 ==========
+        function onTop10Tab() {
+            // 已在容器内显示时不再重复加载
+            if ($('#top10Header').children().length > 0) return;
+            var examId = $('#examSelect').val();
+            if (!examId) { $('#top10Body').html('<tr><td colspan="99" class="text-center text-muted py-4">请先在上方选择考试</td></tr>'); return; }
+            var classId = $('#classSelect').val() || '';
+
+            $('#top10Body').html('<tr><td colspan="99" class="text-center text-muted py-4">加载中...</td></tr>');
+
+            $.post('@Url.Action("GetTopStudents")', {
+                examScheduleId: parseInt(examId),
+                classInfoId: classId ? parseInt(classId) : null
+            }, function (res) {
+                if (!res.success) { alert(res.message); return; }
+
+                $('#top10Header,#top10Body').empty();
+                if (!res.subjects || res.subjects.length === 0 || res.students.length === 0) {
+                    $('#top10Body').html('<tr><td colspan="99" class="text-center text-muted py-4">暂无数据</td></tr>');
+                    return;
+                }
+
+                $('#top10Stats').text(res.students.length + ' 名学生');
+
+                var headerHtml = '<th class="text-center" style="width:36px;">排名</th>' +
+                                 '<th style="width:55px;">学号</th>' +
+                                 '<th style="width:45px;">姓名</th>';
+                res.subjects.forEach(function (sub) {
+                    headerHtml += '<th class="text-center" style="min-width:55px;">' +
+                                  sub.subjectName + '</th>';
+                });
+                headerHtml += '<th class="text-center" style="width:50px;">总分</th>' +
+                              '<th class="text-center" style="width:50px;">平均分</th>' +
+                              '<th class="text-center" style="width:55px;">年级排名</th>';
+                $('#top10Header').html(headerHtml);
+
+                var bodyHtml = '';
+                res.students.forEach(function (row) {
+                    var cls = row.rank === 1 ? 'table-warning' : (row.rank <= 3 ? 'table-info' : '');
+                    bodyHtml += '<tr class="' + cls + '">' +
+                        '<td class="text-center fw-bold">' + row.rank + '</td>' +
+                        '<td>' + htmlEncode(row.studentNo) + '</td>' +
+                        '<td>' + htmlEncode(row.studentName) + '</td>';
+                    res.subjects.forEach(function (sub) {
+                        var score = row.scores.find(function(s) { return s.subjectId === sub.subjectId; });
+                        bodyHtml += '<td class="text-center">' + (score ? score.scoreValue : '-') + '</td>';
+                    });
+                    bodyHtml += '<td class="text-center fw-bold">' + row.totalScore + '</td>' +
+                                '<td class="text-center fw-bold text-primary">' + (row.avgScore || '-') + '</td>' +
+                                '<td class="text-center fw-bold">' + row.gradeRank + '</td></tr>';
+                });
+                $('#top10Body').html(bodyHtml);
+            }).fail(function() { alert('加载年级排名前10失败'); });
+        }
+
+        // ========== 导出 ==========
+        function exportExcel() {
+            if (!currentExamId) { alert('请先选择考试'); return; }
+            var url = '@Url.Action("ExportExcel")?examScheduleId=' + currentExamId;
+            if (currentClassId) url += '&classInfoId=' + currentClassId;
+            window.location.href = url;
+        }
+
+        function htmlEncode(str) {
+            return $('<span>').text(str || '').html();
+        }
+
+        // ========== Tab 5: AI成绩分析 ==========
+
+        function renderAnalysisHtml(text) {
+            var html = (text || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\n/g, '<br>')
+                .replace(/### (.*?)(?:<br>|$)/g, '<h6 class="mt-3 mb-2 text-primary">$1</h6>')
+                .replace(/## (.*?)(?:<br>|$)/g, '<h5 class="mt-3 mb-2 fw-bold">$1</h5>')
+                .replace(/- (.*?)(?:<br>|$)/g, '<li>$1</li>');
+            html = html.replace(/(<li>.*?<\/li>)/g, '<ul class="mb-2">$1</ul>');
+            html = html.replace(/<\/ul>\s*<ul class="mb-2">/g, '');
+            return html;
+        }
+
+        function onAiAnalysisTab() {
+            onAiTypeChange();
+        }
+
+        function onAiTypeChange() {
+            var type = $('#aiAnalysisType').val();
+            $('#aiStudentGroup').toggle(type === 'student');
+            $('#aiClassGroup').toggle(type === 'class');
+            $('#aiSubjectGroup').toggle(type === 'subject');
+            $('#btnBatchAi').toggle(type === 'student');
+            clearAiAnalysis();
+            if (type === 'student') loadAiStudentList();
+            else if (type === 'class') loadAiClassList();
+            else if (type === 'subject') loadAiSubjectClassList();
+        }
+
+        function loadAiStudentList() {
+            var examId = $('#examSelect').val();
+            var classId = $('#classSelect').val() || '';
+            if (!examId) {
+                $('#aiStudentSelect').html('<option value="">-- 请先选择考试 --</option>');
+                return;
+            }
+            $('#aiStudentSelect').html('<option value="">加载中...</option>');
+            $.post('@Url.Action("GetAiStudents")', {
+                examScheduleId: parseInt(examId),
+                classInfoId: classId ? parseInt(classId) : null
+            }, function (res) {
+                if (!res.success || !res.students || res.students.length === 0) {
+                    $('#aiStudentSelect').html('<option value="">-- 暂无学生数据 --</option>');
+                    return;
+                }
+                var html = '<option value="">-- 请选择学生 --</option>';
+                res.students.forEach(function (s) {
+                    html += '<option value="' + s.studentId + '">' + htmlEncode(s.studentNo) + ' - ' + htmlEncode(s.studentName) + '</option>';
+                });
+                $('#aiStudentSelect').html(html);
+            }).fail(function () {
+                $('#aiStudentSelect').html('<option value="">-- 加载失败 --</option>');
+            });
+        }
+
+        function startStudentAnalysis(forceRegenerate) {
+            var examId = $('#examSelect').val();
+            var studentId = $('#aiStudentSelect').val();
+            if (!examId) { alert('请先选择考试'); return; }
+            if (!studentId) { alert('请先选择学生'); return; }
+            var token = $('input[name="__RequestVerificationToken"]').val();
+            $('#aiLoading').show();
+            $('#aiResultCard').hide();
+            $('#aiAnalysisContent').empty();
+            $('#btnRegenerateAi').hide();
+            $('html, body').animate({ scrollTop: $('#aiLoading').offset().top - 100 }, 500);
+            $.ajax({
+                url: '@Url.Action("GetAiAnalysis")',
+                type: 'POST',
+                data: {
+                    examScheduleId: parseInt(examId),
+                    studentId: parseInt(studentId),
+                    forceRegenerate: forceRegenerate || false
+                },
+                headers: token ? { 'RequestVerificationToken': token } : {}
+            }).done(function (res) {
+                $('#aiLoading').hide();
+                if (!res.success) {
+                    $('#aiAnalysisContent').html('<div class="alert alert-danger mb-0">' + htmlEncode(res.message || 'AI分析失败') + '</div>');
+                    $('#aiResultCard').show();
+                    return;
+                }
+                $('#aiReportHeader').text('学生：' + htmlEncode(res.studentName) + ' 的成绩分析报告');
+                if (res.cached) {
+                    $('#aiCacheBadge').html('<span class="badge bg-success bg-opacity-75"><i class="bi bi-database me-1"></i>缓存报告（' + htmlEncode(res.updatedAt || '') + '生成）</span>' +
+                        '<button class="btn btn-sm btn-outline-warning ms-2" onclick="startStudentAnalysis(true)"><i class="bi bi-arrow-clockwise"></i> 重新生成</button>');
+                } else {
+                    $('#aiCacheBadge').html('<span class="badge bg-info"><i class="bi bi-stars me-1"></i>新生成的报告</span>');
+                }
+                $('#btnRegenerateAi').show();
+                $('#aiAnalysisContent').html(renderAnalysisHtml(res.analysis));
+                $('#aiResultCard').show();
+                $('html, body').animate({ scrollTop: $('#aiResultCard').offset().top - 100 }, 500);
+            }).fail(function () {
+                $('#aiLoading').hide();
+                $('#aiAnalysisContent').html('<div class="alert alert-danger mb-0">网络错误，AI分析请求失败</div>');
+                $('#aiResultCard').show();
+            });
+        }
+
+        function quickAiAnalysis(studentId) {
+            var tab = document.querySelector('button[data-bs-target="#tabAiAnalysis"]');
+            if (tab) { var trigger = new bootstrap.Tab(tab); trigger.show(); }
+            $('#aiAnalysisType').val('student');
+            onAiTypeChange();
+            $('#aiStudentSelect').val(studentId);
+            setTimeout(function () { startStudentAnalysis(false); }, 500);
+        }
+
+        function loadAiClassList() {
+            var examId = $('#examSelect').val();
+            if (!examId) { $('#aiClassSelect').html('<option value="">-- 请先选择考试 --</option>'); return; }
+            $('#aiClassSelect').html('<option value="">加载中...</option>');
+            $.post('@Url.Action("GetAiClassList")', { examScheduleId: parseInt(examId) }, function (res) {
+                if (!res.success || !res.classes || res.classes.length === 0) {
+                    $('#aiClassSelect').html('<option value="">-- 暂无班级数据 --</option>');
+                    return;
+                }
+                var html = '<option value="">-- 请选择班级 --</option>';
+                res.classes.forEach(function (c) { html += '<option value="' + c.classInfoId + '">' + htmlEncode(c.gradeName) + ' ' + htmlEncode(c.className) + '</option>'; });
+                $('#aiClassSelect').html(html);
+            }).fail(function () { $('#aiClassSelect').html('<option value="">-- 加载失败 --</option>'); });
+        }
+
+        function startClassAnalysis(forceRegenerate) {
+            var examId = $('#examSelect').val();
+            var classId = $('#aiClassSelect').val();
+            if (!examId) { alert('请先选择考试'); return; }
+            if (!classId) { alert('请先选择班级'); return; }
+            var token = $('input[name="__RequestVerificationToken"]').val();
+            $('#aiLoading').show();
+            $('#aiResultCard').hide();
+            $('#aiAnalysisContent').empty();
+            $('#btnRegenerateAi').hide();
+            $('html, body').animate({ scrollTop: $('#aiLoading').offset().top - 100 }, 500);
+            $.ajax({
+                url: '@Url.Action("GetAiClassAnalysis")',
+                type: 'POST',
+                data: { examScheduleId: parseInt(examId), classInfoId: parseInt(classId), forceRegenerate: forceRegenerate || false },
+                headers: token ? { 'RequestVerificationToken': token } : {}
+            }).done(function (res) {
+                $('#aiLoading').hide();
+                if (!res.success) {
+                    $('#aiAnalysisContent').html('<div class="alert alert-danger mb-0">' + htmlEncode(res.message || '班级分析失败') + '</div>');
+                    $('#aiResultCard').show();
+                    return;
+                }
+                $('#aiReportHeader').text('' + htmlEncode(res.typeName || '班级分析报告'));
+                if (res.cached) {
+                    $('#aiCacheBadge').html('<span class="badge bg-success bg-opacity-75"><i class="bi bi-database me-1"></i>缓存报告（' + htmlEncode(res.updatedAt || '') + '生成）</span>' +
+                        '<button class="btn btn-sm btn-outline-warning ms-2" onclick="startClassAnalysis(true)"><i class="bi bi-arrow-clockwise"></i> 重新生成</button>');
+                } else {
+                    $('#aiCacheBadge').html('<span class="badge bg-info"><i class="bi bi-stars me-1"></i>新生成的报告</span>');
+                }
+                $('#btnRegenerateAi').show();
+                $('#aiAnalysisContent').html(renderAnalysisHtml(res.analysis));
+                $('#aiResultCard').show();
+                $('html, body').animate({ scrollTop: $('#aiResultCard').offset().top - 100 }, 500);
+            }).fail(function () {
+                $('#aiLoading').hide();
+                $('#aiAnalysisContent').html('<div class="alert alert-danger mb-0">网络错误，班级分析请求失败</div>');
+                $('#aiResultCard').show();
+            });
+        }
+
+        function loadAiSubjectClassList() {
+            var examId = $('#examSelect').val();
+            if (!examId) { $('#aiSubjectClassSelect').html('<option value="">-- 请先选择考试 --</option>'); return; }
+            $('#aiSubjectClassSelect').html('<option value="">加载中...</option>');
+            $.post('@Url.Action("GetAiClassList")', { examScheduleId: parseInt(examId) }, function (res) {
+                if (!res.success || !res.classes || res.classes.length === 0) {
+                    $('#aiSubjectClassSelect').html('<option value="">-- 暂无班级数据 --</option>');
+                    return;
+                }
+                var html = '<option value="">-- 请选择班级 --</option>';
+                res.classes.forEach(function (c) { html += '<option value="' + c.classInfoId + '">' + htmlEncode(c.gradeName) + ' ' + htmlEncode(c.className) + '</option>'; });
+                $('#aiSubjectClassSelect').html(html);
+            }).fail(function () { $('#aiSubjectClassSelect').html('<option value="">-- 加载失败 --</option>'); });
+            $('#aiSubjectSelect').html('<option value="">-- 请先选择班级 --</option>');
+        }
+
+        function onAiSubjectClassChange() {
+            var examId = $('#examSelect').val();
+            if (!examId) return;
+            $('#aiSubjectSelect').html('<option value="">加载中...</option>');
+            $.post('@Url.Action("GetAiSubjectList")', { examScheduleId: parseInt(examId) }, function (res) {
+                if (!res.success || !res.subjects) { $('#aiSubjectSelect').html('<option value="">-- 加载失败 --</option>'); return; }
+                var html = '<option value="">-- 请选择科目 --</option>';
+                res.subjects.forEach(function (s) { html += '<option value="' + s.subjectId + '">' + htmlEncode(s.subjectName) + '</option>'; });
+                $('#aiSubjectSelect').html(html);
+            }).fail(function () { $('#aiSubjectSelect').html('<option value="">-- 加载失败 --</option>'); });
+        }
+
+        function startSubjectAnalysis(forceRegenerate) {
+            var examId = $('#examSelect').val();
+            var classId = $('#aiSubjectClassSelect').val();
+            var subjectId = $('#aiSubjectSelect').val();
+            if (!examId) { alert('请先选择考试'); return; }
+            if (!classId) { alert('请先选择班级'); return; }
+            if (!subjectId) { alert('请先选择科目'); return; }
+            var token = $('input[name="__RequestVerificationToken"]').val();
+            $('#aiLoading').show();
+            $('#aiResultCard').hide();
+            $('#aiAnalysisContent').empty();
+            $('#btnRegenerateAi').hide();
+            $('html, body').animate({ scrollTop: $('#aiLoading').offset().top - 100 }, 500);
+            $.ajax({
+                url: '@Url.Action("GetAiSubjectAnalysis")',
+                type: 'POST',
+                data: { examScheduleId: parseInt(examId), classInfoId: parseInt(classId), subjectId: parseInt(subjectId), forceRegenerate: forceRegenerate || false },
+                headers: token ? { 'RequestVerificationToken': token } : {}
+            }).done(function (res) {
+                $('#aiLoading').hide();
+                if (!res.success) {
+                    $('#aiAnalysisContent').html('<div class="alert alert-danger mb-0">' + htmlEncode(res.message || '科目分析失败') + '</div>');
+                    $('#aiResultCard').show();
+                    return;
+                }
+                $('#aiReportHeader').text('' + htmlEncode(res.typeName || '科目分析报告'));
+                if (res.cached) {
+                    $('#aiCacheBadge').html('<span class="badge bg-success bg-opacity-75"><i class="bi bi-database me-1"></i>缓存报告（' + htmlEncode(res.updatedAt || '') + '生成）</span>' +
+                        '<button class="btn btn-sm btn-outline-warning ms-2" onclick="startSubjectAnalysis(true)"><i class="bi bi-arrow-clockwise"></i> 重新生成</button>');
+                } else {
+                    $('#aiCacheBadge').html('<span class="badge bg-info"><i class="bi bi-stars me-1"></i>新生成的报告</span>');
+                }
+                $('#btnRegenerateAi').show();
+                $('#aiAnalysisContent').html(renderAnalysisHtml(res.analysis));
+                $('#aiResultCard').show();
+                $('html, body').animate({ scrollTop: $('#aiResultCard').offset().top - 100 }, 500);
+            }).fail(function () {
+                $('#aiLoading').hide();
+                $('#aiAnalysisContent').html('<div class="alert alert-danger mb-0">网络错误，科目分析请求失败</div>');
+                $('#aiResultCard').show();
+            });
+        }
+
+        function startAiAnalysis(forceRegenerate) {
+            var type = $('#aiAnalysisType').val();
+            if (type === 'student') startStudentAnalysis(forceRegenerate);
+            else if (type === 'class') startClassAnalysis(forceRegenerate);
+            else if (type === 'subject') startSubjectAnalysis(forceRegenerate);
+        }
+
+        function startBatchAiAnalysis() {
+            var examId = $('#examSelect').val();
+            var gradeId = $('#gradeSelect').val() || '';
+            var classId = $('#classSelect').val() || '';
+            if (!examId) { alert('请先选择考试'); return; }
+            if (!gradeId && !classId) { alert('请先选择年级或班级，缩小批量分析范围'); return; }
+            if (!confirm('将对该年级/班级的所有学生进行AI分析（已缓存的跳过），确定继续？')) return;
+            var token = $('input[name="__RequestVerificationToken"]').val();
+            $('#btnBatchAi').prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>分析中...');
+            $('#batchProgress').show();
+            $('#batchErrors').hide();
+            $('#aiResultCard').hide();
+            doBatchRequest(examId, gradeId, classId, token);
+        }
+
+        function doBatchRequest(examId, gradeId, classId, token) {
+            $.ajax({
+                url: '@Url.Action("BatchAiAnalysis")',
+                type: 'POST',
+                data: { examScheduleId: parseInt(examId), gradeLevelId: gradeId ? parseInt(gradeId) : null, classInfoId: classId ? parseInt(classId) : null },
+                headers: token ? { 'RequestVerificationToken': token } : {}
+            }).done(function (res) {
+                if (!res.success) {
+                    $('#batchProgressText').text('批量分析失败');
+                    $('#btnBatchAi').prop('disabled', false).html('<i class="bi bi-lightning me-1"></i>批量分析');
+                    alert(res.message || '批量分析失败');
+                    return;
+                }
+                var done = res.cachedCount + res.processed;
+                var pct = res.total > 0 ? Math.round(done / res.total * 100) : 0;
+                $('#batchProgressText').text('已分析 ' + done + ' / ' + res.total + ' 名学生');
+                $('#batchProgressCount').text(done + '/' + res.total);
+                $('#batchProgressBar').css('width', pct + '%').text(pct + '%');
+                if (res.errors) { $('#batchErrors').show().text('部分失败: ' + res.errors); }
+                if (res.done) {
+                    $('#batchProgressText').text('批量分析完成！共 ' + res.total + ' 名学生，新增 ' + res.processed + ' 份报告');
+                    $('#batchProgressBar').removeClass('progress-bar-animated').addClass('bg-success');
+                    $('#btnBatchAi').prop('disabled', false).html('<i class="bi bi-lightning me-1"></i>批量分析');
+                    loadAiStudentList();
+                } else {
+                    setTimeout(function () { doBatchRequest(examId, gradeId, classId, token); }, 1500);
+                }
+            }).fail(function () {
+                $('#batchProgressText').text('网络错误，批量分析中断');
+                $('#btnBatchAi').prop('disabled', false).html('<i class="bi bi-lightning me-1"></i>批量分析');
+            });
+        }
+
+        function clearAiAnalysis() {
+            $('#aiResultCard').hide();
+            $('#aiAnalysisContent').empty();
+            $('#aiCacheBadge').empty();
+            $('#btnRegenerateAi').hide();
+            $('#aiReportHeader').text('');
+            $('#aiStudentSelect').val('');
+        }
+    </script>
+}

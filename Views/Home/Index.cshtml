@@ -1,0 +1,407 @@
+@{
+    ViewData["Title"] = "系统首页";
+    var realName = User.FindFirst("RealName")?.Value ?? "";
+    var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
+}
+
+@Html.AntiForgeryToken()
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0"><i class="bi bi-house-door-fill me-2"></i>数据仪表盘</h4>
+    <div>
+        <span class="badge bg-light text-dark fs-6 me-2">
+            <i class="bi bi-person me-1"></i>@role
+        </span>
+        <span class="text-muted">欢迎您，<strong>@realName</strong></span>
+    </div>
+</div>
+
+<!-- 统计卡片 第一行 -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3 col-6">
+        <div class="card bg-primary text-white h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title mb-0">学生总数</h6>
+                        <h2 class="mb-0 mt-1">@ViewBag.StudentCount</h2>
+                    </div>
+                    <i class="bi bi-people-fill fs-1 opacity-50"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card bg-success text-white h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title mb-0">在读学生</h6>
+                        <h2 class="mb-0 mt-1">@ViewBag.ActiveCount</h2>
+                    </div>
+                    <i class="bi bi-check-circle-fill fs-1 opacity-50"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card bg-info text-white h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title mb-0">班主任</h6>
+                        <h2 class="mb-0 mt-1">@ViewBag.TeacherCount</h2>
+                    </div>
+                    <i class="bi bi-person-badge-fill fs-1 opacity-50"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card bg-warning text-white h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title mb-0">管理员</h6>
+                        <h2 class="mb-0 mt-1">@ViewBag.AdminCount</h2>
+                    </div>
+                    <i class="bi bi-shield-lock-fill fs-1 opacity-50"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 统计卡片 第二行 -->
+<div class="row g-3 mb-4">
+    <div class="col-md-2 col-4">
+        <div class="card border-primary h-100 text-center py-2">
+            <div class="card-body p-2">
+                <h5 class="mb-0 text-primary">@ViewBag.GradeCount</h5>
+                <small class="text-muted">年级数</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2 col-4">
+        <div class="card border-info h-100 text-center py-2">
+            <div class="card-body p-2">
+                <h5 class="mb-0 text-info">@ViewBag.ClassCount</h5>
+                <small class="text-muted">班级数</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2 col-4">
+        <div class="card border-success h-100 text-center py-2">
+            <div class="card-body p-2">
+                <h5 class="mb-0 text-success">@ViewBag.NonBzrCount</h5>
+                <small class="text-muted">非班主任</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card border-secondary h-100 text-center py-2">
+            <div class="card-body p-2">
+                <h5 class="mb-0 text-secondary">@ViewBag.GraduatedCount</h5>
+                <small class="text-muted">已毕业</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card border-danger h-100 text-center py-2">
+            <div class="card-body p-2">
+                <h5 class="mb-0 text-danger">@ViewBag.DeletedCount</h5>
+                <small class="text-muted">已删除</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 待办事项 -->
+@{
+    var pendingRepairCount = ViewBag.PendingRepairCount as int? ?? 0;
+}
+@if (pendingRepairCount > 0)
+{
+<div class="row g-3 mb-4">
+    <div class="col-12">
+        <div class="card border-danger">
+            <div class="card-header bg-danger bg-opacity-10 text-danger fw-bold">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>待办事项
+            </div>
+            <div class="card-body">
+                <ul class="list-unstyled mb-0">
+                    <li>
+                        <span class="badge bg-danger me-1">维修</span>
+                        <span>有 <strong>@pendingRepairCount</strong> 条维修申请待处理</span>
+                        <a asp-controller="Logistics" asp-action="Index" class="btn btn-sm btn-outline-danger ms-2">去处理 <i class="bi bi-arrow-right ms-1"></i></a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+}
+
+<!-- 图表区域 -->
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h6 class="mb-0"><i class="bi bi-bar-chart-fill me-2 text-primary"></i>各年级学生人数分布</h6>
+            </div>
+            <div class="card-body">
+                <canvas id="gradeChart" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h6 class="mb-0"><i class="bi bi-pie-chart-fill me-2 text-success"></i>性别比例</h6>
+            </div>
+            <div class="card-body d-flex align-items-center justify-content-center">
+                <canvas id="genderChart" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h6 class="mb-0"><i class="bi bi-grid-3x3-gap-fill me-2 text-warning"></i>学生状态</h6>
+            </div>
+            <div class="card-body d-flex align-items-center justify-content-center">
+                <canvas id="statusChart" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 最近操作 + 快捷导航 -->
+<div class="row g-3 mb-4">
+    <div class="col-md-7">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h6 class="mb-0"><i class="bi bi-clock-history me-2 text-secondary"></i>最近操作</h6>
+                <a asp-controller="AdminCenter" asp-action="OperationLogs" class="btn btn-outline-secondary btn-sm">
+                    查看更多 <i class="bi bi-chevron-right ms-1"></i>
+                </a>
+            </div>
+            <div class="card-body p-0">
+                @if (ViewBag.RecentLogs != null && ((List<StudentManagerCore.Models.OperationLog>)ViewBag.RecentLogs).Any())
+                {
+                    <div class="list-group list-group-flush">
+                        @foreach (var log in (List<StudentManagerCore.Models.OperationLog>)ViewBag.RecentLogs)
+                        {
+                            <div class="list-group-item list-group-item-action py-2 px-3">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <span class="badge bg-@(log.ActionType == "添加" || log.ActionType == "导入" ? "success" :
+                                            log.ActionType == "编辑" || log.ActionType == "编辑公告" || log.ActionType == "发布公告" ? "info" :
+                                            log.ActionType == "删除" || log.ActionType == "删除公告" ? "danger" :
+                                            log.ActionType == "恢复" ? "warning" : "secondary") me-2">
+                                            @log.ActionType
+                                        </span>
+                                        <small>@log.Detail</small>
+                                    </div>
+                                    <small class="text-muted ms-2" style="white-space:nowrap">
+                                        @log.CreateTime.ToString("MM-dd HH:mm")
+                                    </small>
+                                </div>
+                                <small class="text-muted d-block mt-1">
+                                    <i class="bi bi-person me-1"></i>@log.OperatorName
+                                    @if (!string.IsNullOrEmpty(log.TargetName))
+                                    {
+                                        <span class="ms-2"><i class="bi bi-tag me-1"></i>@log.TargetName</span>
+                                    }
+                                </small>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center text-muted py-4">
+                        <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+                        暂无操作记录
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+    <div class="col-md-5">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h6 class="mb-0"><i class="bi bi-lightning me-2 text-warning"></i>快捷导航</h6>
+            </div>
+            <div class="card-body">
+                <div class="row g-2">
+                    <div class="col-6">
+                        <a asp-controller="Student" asp-action="Index" class="text-decoration-none">
+                            <div class="card border-primary h-100 text-center py-2">
+                                <i class="bi bi-people-fill text-primary fs-3"></i>
+                                <small class="mt-1">学生管理</small>
+                            </div>
+                        </a>
+                    </div>
+                    <div class="col-6">
+                        <a asp-controller="Teacher" asp-action="Index" class="text-decoration-none">
+                            <div class="card border-info h-100 text-center py-2">
+                                <i class="bi bi-person-badge-fill text-info fs-3"></i>
+                                <small class="mt-1">教职工管理</small>
+                            </div>
+                        </a>
+                    </div>
+
+                    <div class="col-6">
+                        <a asp-controller="Announce" asp-action="Index" class="text-decoration-none">
+                            <div class="card border-secondary h-100 text-center py-2">
+                                <i class="bi bi-megaphone text-secondary fs-3"></i>
+                                <small class="mt-1">公告管理</small>
+                            </div>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 公告对话框 -->
+<div class="modal fade" id="annModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-warning bg-opacity-10">
+                <h5 class="modal-title"><i class="bi bi-megaphone-fill me-2"></i>公告</h5>
+            </div>
+            <div class="modal-body">
+                <h6 id="annTitle" class="fw-bold mb-3"></h6>
+                <p id="annContent" class="mb-0" style="white-space:pre-wrap"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="annClose">关闭</button>
+                <button type="button" class="btn btn-primary" id="annMarkRead"><i class="bi bi-check2 me-1"></i>已阅读</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script>
+        // 各年级人数柱状图
+        var gradeLabels = @Html.Raw(ViewBag.GradeLabels ?? "[]");
+        var gradeData = @Html.Raw(ViewBag.GradeData ?? "[]");
+        if (gradeLabels.length > 0) {
+            new Chart(document.getElementById('gradeChart'), {
+                type: 'bar',
+                data: {
+                    labels: gradeLabels,
+                    datasets: [{
+                        label: '人数',
+                        data: gradeData,
+                        backgroundColor: ['#0d6efd', '#6610f2', '#6f42c1', '#d63384', '#dc3545',
+                                        '#fd7e14', '#ffc107', '#198754', '#20c997', '#0dcaf0'],
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true, ticks: { stepSize: 1 } }
+                    }
+                }
+            });
+        } else {
+            document.getElementById('gradeChart').parentElement.innerHTML = '<div class="text-center text-muted py-4">暂无数据</div>';
+        }
+
+        // 性别比例饼图
+        var genderLabels = @Html.Raw(ViewBag.GenderLabels ?? "[]");
+        var genderData = @Html.Raw(ViewBag.GenderData ?? "[]");
+        if (genderLabels.length > 0) {
+            new Chart(document.getElementById('genderChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: genderLabels,
+                    datasets: [{
+                        data: genderData,
+                        backgroundColor: ['#0d6efd', '#dc3545']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+        }
+
+        // 学生状态分布环形图
+        var statusLabels = @Html.Raw(ViewBag.StatusLabels ?? "[]");
+        var statusData = @Html.Raw(ViewBag.StatusData ?? "[]");
+        if (statusLabels.length > 0) {
+            var statusColors = {
+                '在读': '#198754',
+                '已毕业': '#6c757d',
+                '休学': '#ffc107',
+                '转学': '#fd7e14',
+                '已删除': '#dc3545'
+            };
+            var colors = statusLabels.map(function(l) { return statusColors[l] || '#0dcaf0'; });
+            new Chart(document.getElementById('statusChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: statusLabels,
+                    datasets: [{
+                        data: statusData,
+                        backgroundColor: colors
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+        }
+
+        // 公告弹窗
+        var annModalEl = document.getElementById('annModal');
+        var annModal = annModalEl ? new bootstrap.Modal(annModalEl, { backdrop: 'static', keyboard: false }) : null;
+
+        $(function() {
+            $.get('@Url.Action("GetUnread", "Home")', function(data) {
+                if (data && data.length > 0) {
+                    showNextAnnouncement(data, 0);
+                }
+            });
+        });
+
+        function showNextAnnouncement(list, index) {
+            if (index >= list.length || !annModal) return;
+            var item = list[index];
+            document.getElementById('annTitle').textContent = item.title;
+            document.getElementById('annContent').textContent = item.content;
+            annModalEl.dataset.list = JSON.stringify(list);
+            annModalEl.dataset.index = index;
+            annModal.show();
+        }
+
+        document.getElementById('annMarkRead').addEventListener('click', function() {
+            var list = JSON.parse(annModalEl.dataset.list || '[]');
+            var idx = parseInt(annModalEl.dataset.index || '0');
+            var item = list[idx];
+            if (!item) return;
+            $.post('@Url.Action("MarkAsRead", "Announce")', { announcementId: item.id, __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val() }, function() {
+                annModal.hide();
+                showNextAnnouncement(list, idx + 1);
+            });
+        });
+
+        document.getElementById('annClose').addEventListener('click', function() {
+            annModal.hide();
+        });
+    </script>
+}

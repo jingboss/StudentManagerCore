@@ -1,0 +1,235 @@
+@model Admin
+@{
+    var isAdmin = ViewBag.IsAdmin as bool? ?? false;
+    var canEditBasic = ViewBag.CanEditBasic as bool? ?? false;
+    var canEditPhone = ViewBag.CanEditPhone as bool? ?? false;
+    var canEditIdCard = ViewBag.CanEditIdCard as bool? ?? false;
+    var canEditCert = ViewBag.CanEditCert as bool? ?? false;
+}
+
+<form asp-action="Profile" method="post" id="profileForm">
+    @Html.AntiForgeryToken()
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="bi bi-info-circle me-2"></i>账号信息
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <label class="col-sm-2 col-form-label">用户名</label>
+                    <div class="col-sm-10">
+                        <input class="form-control" value="@Model.Username" readonly />
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <label class="col-sm-2 col-form-label">角色</label>
+                    <div class="col-sm-10">
+                        <input class="form-control" value="@(Model.Role?.Trim() ?? "")" readonly />
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <label class="col-sm-2 col-form-label">所带班级</label>
+                    <div class="col-sm-10">
+                        <input class="form-control" value="@(Model.ClassName ?? "未分配")" readonly />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="bi bi-person-vcard me-2"></i>基本信息
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <label class="col-sm-2 col-form-label">手机号</label>
+                    <div class="col-sm-10">
+                        @if (canEditPhone)
+                        {
+                            <input asp-for="Phone" class="form-control" />
+                        }
+                        else
+                        {
+                            <input class="form-control" value="@Model.Phone" readonly />
+                            <input type="hidden" asp-for="Phone" />
+                        }
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <label class="col-sm-2 col-form-label">姓名</label>
+                    <div class="col-sm-10">
+                        @if (canEditBasic)
+                        {
+                            <input asp-for="RealName" class="form-control" />
+                        }
+                        else
+                        {
+                            <input class="form-control" value="@Model.RealName" readonly />
+                            <input type="hidden" asp-for="RealName" />
+                        }
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <label class="col-sm-2 col-form-label">性别</label>
+                    <div class="col-sm-10">
+                        @if (canEditBasic)
+                        {
+                            <select asp-for="Gender" class="form-select">
+                                <option value="">请选择</option>
+                                <option value="男">男</option>
+                                <option value="女">女</option>
+                            </select>
+                        }
+                        else
+                        {
+                            <input class="form-control" value="@Model.Gender" readonly />
+                            <input type="hidden" asp-for="Gender" />
+                        }
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <label class="col-sm-2 col-form-label">民族</label>
+                    <div class="col-sm-10">
+                        @if (canEditBasic)
+                        {
+                            <input asp-for="Nation" class="form-control" />
+                        }
+                        else
+                        {
+                            <input class="form-control" value="@Model.Nation" readonly />
+                            <input type="hidden" asp-for="Nation" />
+                        }
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <label class="col-sm-2 col-form-label">出生日期</label>
+                    <div class="col-sm-10">
+                        @if (canEditBasic)
+                        {
+                            <input asp-for="BirthDate" class="form-control" type="date" />
+                        }
+                        else
+                        {
+                            <input class="form-control" value="@Model.BirthDate?.ToString("yyyy-MM-dd")" readonly />
+                            <input type="hidden" asp-for="BirthDate" />
+                        }
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <label class="col-sm-2 col-form-label">户籍所在地</label>
+                    <div class="col-sm-10">
+                        @if (canEditBasic)
+                        {
+                            <input asp-for="RegisteredDomicile" class="form-control" />
+                        }
+                        else
+                        {
+                            <input class="form-control" value="@Model.RegisteredDomicile" readonly />
+                            <input type="hidden" asp-for="RegisteredDomicile" />
+                        }
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <label class="col-sm-2 col-form-label">最高学历</label>
+                    <div class="col-sm-10">
+                        @if (canEditBasic)
+                        {
+                            <input asp-for="HighestEducation" class="form-control" />
+                        }
+                        else
+                        {
+                            <input class="form-control" value="@Model.HighestEducation" readonly />
+                            <input type="hidden" asp-for="HighestEducation" />
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="bi bi-credit-card me-2"></i>证件信息
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <label class="col-sm-2 col-form-label">身份证号码</label>
+                    <div class="col-sm-10">
+                        @if (canEditIdCard)
+                        {
+                            <input asp-for="IDCardNumber" class="form-control" />
+                        }
+                        else
+                        {
+                            <div class="form-control-plaintext">
+                                @if (string.IsNullOrEmpty(Model.IDCardNumber))
+                                {
+                                    <span class="text-muted">未设置（无权查看）</span>
+                                }
+                                else
+                                {
+                                    <span>******@(Model.IDCardNumber.Length > 4 ? Model.IDCardNumber.Substring(Model.IDCardNumber.Length - 4) : "****")</span>
+                                }
+                            </div>
+                            <input type="hidden" asp-for="IDCardNumber" />
+                        }
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <label class="col-sm-2 col-form-label">证书科目</label>
+                    <div class="col-sm-10">
+                        @if (canEditCert)
+                        {
+                            <input asp-for="CertSubject" class="form-control" />
+                        }
+                        else
+                        {
+                            <input class="form-control" value="@Model.CertSubject" readonly />
+                            <input type="hidden" asp-for="CertSubject" />
+                        }
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <label class="col-sm-2 col-form-label">证书编号</label>
+                    <div class="col-sm-10">
+                        @if (canEditCert)
+                        {
+                            <input asp-for="CertNumber" class="form-control" />
+                        }
+                        else
+                        {
+                            <input class="form-control" value="@Model.CertNumber" readonly />
+                            <input type="hidden" asp-for="CertNumber" />
+                        }
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <label class="col-sm-2 col-form-label">发证机关</label>
+                    <div class="col-sm-10">
+                        @if (canEditCert)
+                        {
+                            <input asp-for="CertAuthority" class="form-control" />
+                        }
+                        else
+                        {
+                            <input class="form-control" value="@Model.CertAuthority" readonly />
+                            <input type="hidden" asp-for="CertAuthority" />
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (canEditBasic || canEditPhone || canEditIdCard || canEditCert)
+        {
+            <div class="row mb-3">
+                <div class="col-sm-12 text-center">
+                    <button type="submit" class="btn btn-primary btn-lg">
+                        <i class="bi bi-check-lg me-1"></i>保存修改
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary btn-lg ms-2" onclick="$('#changePwdModal').modal('show')">
+                        <i class="bi bi-key me-1"></i>修改密码
+                    </button>
+                </div>
+            </div>
+        }
+    </form>

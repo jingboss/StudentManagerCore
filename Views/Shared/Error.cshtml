@@ -1,0 +1,37 @@
+@{
+    ViewData["Title"] = "服务器错误";
+    var statusCode = ViewBag.StatusCode ?? 500;
+}
+
+<div class="text-center py-5">
+    <h1 class="display-1 text-danger" style="font-size:6rem;">@statusCode</h1>
+    <i class="bi bi-exclamation-triangle-fill text-danger" style="font-size:4rem;"></i>
+    @if (statusCode == 500)
+    {
+        <h3 class="text-muted mt-3">服务器内部错误</h3>
+        <p class="mt-2 text-muted">抱歉，处理您的请求时发生了错误。请稍后重试。</p>
+    }
+    else if (statusCode == 403)
+    {
+        <h3 class="text-muted mt-3">权限不足</h3>
+        <p class="mt-2 text-muted">您没有访问此页面的权限。</p>
+    }
+    else if (statusCode == 400)
+    {
+        <h3 class="text-muted mt-3">请求错误</h3>
+        <p class="mt-2 text-muted">请求格式不正确或参数无效。</p>
+    }
+    else if (statusCode == 401)
+    {
+        <h3 class="text-muted mt-3">未登录</h3>
+        <p class="mt-2 text-muted">请先登录后再访问此页面。</p>
+    }
+    else
+    {
+        <h3 class="text-muted mt-3">发生错误</h3>
+        <p class="mt-2 text-muted">抱歉，处理您的请求时发生了错误。</p>
+    }
+    <a asp-controller="Home" asp-action="Index" class="btn btn-primary mt-2">
+        <i class="bi bi-house-door-fill me-1"></i> 返回首页
+    </a>
+</div>

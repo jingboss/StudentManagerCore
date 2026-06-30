@@ -1,0 +1,98 @@
+@model StudentManagerCore.Models.RepairRequest
+@{
+    ViewBag.Title = "处理维修";
+    var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value?.Trim() ?? "";
+    var isManager = role == "管理员" || role == "后勤主任";
+}
+
+<div class="container py-4" style="max-width:700px;">
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-4">
+            <h4 class="card-title mb-1"><i class="bi bi-card-checklist me-2"></i>维修详情</h4>
+            <p class="text-muted small mb-3">申报时间：@Model.CreateTime.ToString("yyyy-MM-dd HH:mm")</p>
+
+            <table class="table table-bordered small">
+                <tr><th style="width:100px;" class="table-light">标题</th><td><strong>@Model.Title</strong></td></tr>
+                @if (!string.IsNullOrEmpty(Model.Description))
+                {
+                    <tr><th class="table-light">描述</th><td>@Model.Description</td></tr>
+                }
+                @if (!string.IsNullOrEmpty(Model.Location))
+                {
+                    <tr><th class="table-light">位置</th><td>@Model.Location</td></tr>
+                }
+                @if (Model.PreferredTime != null)
+                {
+                    <tr><th class="table-light">故障出现时间</th><td>@Model.PreferredTime?.ToString("yyyy-MM-dd HH:mm")</td></tr>
+                }
+                <tr><th class="table-light">申报人</th><td>@Model.CreatorName</td></tr>
+                @if (!string.IsNullOrEmpty(Model.ContactPhone))
+                {
+                    <tr><th class="table-light">联系电话</th><td>@Model.ContactPhone</td></tr>
+                }
+                <tr><th class="table-light">状态</th><td>
+                    @{
+                        var badgeCls = Model.Status switch { "待处理" => "bg-danger", "处理中" => "bg-warning text-dark", "已完成" => "bg-success", "已关闭" => "bg-secondary", _ => "bg-secondary" };
+                    }
+                    <span class="badge @badgeCls">@Model.Status</span>
+                </td></tr>
+                @if (Model.ProcessTime != null)
+                {
+                    <tr><th class="table-light">处理时间</th><td>@Model.ProcessTime?.ToString("yyyy-MM-dd HH:mm")</td></tr>
+                    <tr><th class="table-light">处理人</th><td>@Model.ProcessorName</td></tr>
+                }
+                @if (!string.IsNullOrEmpty(Model.Remark))
+                {
+                    <tr><th class="table-light">处理备注</th><td>@Model.Remark</td></tr>
+                }
+            </table>
+
+            @if (isManager && Model.Status != "已完成" && Model.Status != "已关闭")
+            {
+                <form method="post" asp-action="Process">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@Model.Id" />
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-medium">处理状态</label>
+                        <select name="status" class="form-select">
+                            @if (Model.Status == "待处理")
+                            {
+                                <option value="处理中" selected>处理中</option>
+                                <option value="已完成">已完成</option>
+                                <option value="已关闭">已关闭</option>
+                            }
+                            else if (Model.Status == "处理中")
+                            {
+                                <option value="处理中" selected>处理中</option>
+                                <option value="已完成" selected>已完成</option>
+                                <option value="已关闭">已关闭</option>
+                            }
+                            else
+                            {
+                                <option value="已完成">已完成</option>
+                                <option value="已关闭">已关闭</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-medium">处理备注</label>
+                        <textarea name="remark" class="form-control" rows="3" placeholder="填写处理情况、花费等">@Model.Remark</textarea>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check2 me-1"></i>确认处理
+                    </button>
+                    <a asp-action="Index" class="btn btn-outline-secondary">返回清单</a>
+                </form>
+            }
+            else
+            {
+                <a asp-action="Index" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left me-1"></i>返回清单
+                </a>
+            }
+        </div>
+    </div>
+</div>

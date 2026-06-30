@@ -1,0 +1,278 @@
+@model StudentManagerCore.Models.Student
+@{
+    ViewData["Title"] = "学生详情";
+    var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
+    var isAdmin = role == "管理员";
+    var isBanZhuren = ViewBag.IsTeacher as bool? ?? false;
+    var isRestricted = ViewBag.IsRestrictedView as bool? ?? false;
+    var _gradeMap = ViewBag.GradeDisplayMap as Dictionary<string, string>;
+    Func<string?, string> gradeDisplay = (g) => g != null && _gradeMap?.ContainsKey(g) == true ? _gradeMap[g] : (g ?? "");
+}
+@functions {
+    string MaskIdCard(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return "";
+        if (value.Length <= 8) return value;
+        return value.Substring(0, value.Length - 8) + "********";
+    }
+    string MaskPhone(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return "";
+        if (value.Length <= 4) return value;
+        return value.Substring(0, value.Length - 4) + "****";
+    }
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="bi bi-eye me-2"></i>学生详情</h4>
+    <div>
+        <a asp-action="Edit" asp-route-id="@Model.StudentID" class="btn btn-warning btn-sm">
+            <i class="bi bi-pencil-square me-1"></i> 编辑
+        </a>
+        <a asp-action="Index" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i> 返回列表
+        </a>
+    </div>
+</div>
+
+@if (isRestricted)
+{
+    <!-- 受限视图：仅显示姓名、性别、年级、班级 -->
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <div class="text-center mb-4">
+                <h5 class="card-title mb-1">@Model.Name</h5>
+                <span class="badge bg-secondary">@Model.Gender</span>
+            </div>
+            <table class="table table-bordered mb-0">
+                <tr>
+                    <th style="width:120px;" class="bg-light">姓名</th>
+                    <td>@Model.Name</td>
+                </tr>
+                <tr>
+                    <th class="bg-light">性别</th>
+                    <td>@Model.Gender</td>
+                </tr>
+                <tr>
+                    <th class="bg-light">年级</th>
+                    <td>@gradeDisplay(Model.Grade)</td>
+                </tr>
+                <tr>
+                    <th class="bg-light">班级</th>
+                    <td>@Model.ClassName</td>
+                </tr>
+            </table>
+            <div class="text-center text-muted small mt-3">
+                <i class="bi bi-lock me-1"></i>权限受限，仅显示基本信息
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="card">
+        <div class="card-body">
+            <table class="table table-bordered">
+                <tr>
+                    <th style="width:150px;" class="bg-light">学号</th>
+                    <td>@Model.StudentNo</td>
+                    <th style="width:150px;" class="bg-light">姓名</th>
+                    <td>@Model.Name</td>
+                </tr>
+                <tr>
+                    <th class="bg-light">性别</th>
+                    <td>@Model.Gender</td>
+                    <th class="bg-light">民族</th>
+                    <td>@Model.Nation</td>
+                </tr>
+                <tr>
+                    <th class="bg-light">年级</th>
+                    <td>@gradeDisplay(Model.Grade)</td>
+                    <th class="bg-light">班级</th>
+                    <td>@Model.ClassName</td>
+                </tr>
+                <tr>
+                    <th class="bg-light">身份证号</th>
+                    <td colspan="3">
+                        <span class="masked-value" data-full="@Model.IDCardNumber">@MaskIdCard(Model.IDCardNumber)</span>
+                        <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline text-decoration-none" onclick="toggleMask(this)"><i class="bi bi-eye"></i></button>
+                    </td>
+                </tr>
+                <tr>
+                    <th class="bg-light">户口性质</th>
+                    <td>@Model.HouseholdType</td>
+                    <th class="bg-light">是否非本地户籍</th>
+                    <td>@Model.IsNonLocalHousehold</td>
+                </tr>
+                <tr>
+                    <th class="bg-light">是否随迁子女</th>
+                    <td>@Model.IsMigrantChild</td>
+                    <th class="bg-light">是否进城务工人员子女</th>
+                    <td>@Model.IsMigrantWorkerChild</td>
+                </tr>
+                <tr>
+                    <th class="bg-light">户口所在地（省市）</th>
+                    <td colspan="3">@Model.HouseholdCity</td>
+                </tr>
+                <tr>
+                    <th class="bg-light">户口簿中首页家庭地址</th>
+                    <td colspan="3">@Model.HouseholdAddress</td>
+                </tr>
+                <tr>
+                    <th class="bg-light">现居住家庭地址</th>
+                    <td colspan="3">@Model.CurrentResidence</td>
+                </tr>
+                <tr>
+                    <th class="bg-light">父亲姓名</th>
+                    <td>@Model.FatherName</td>
+                    <th class="bg-light">父亲电话</th>
+                    <td>
+                        <span class="masked-value" data-full="@Model.FatherPhone">@MaskPhone(Model.FatherPhone)</span>
+                        <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline text-decoration-none" onclick="toggleMask(this)"><i class="bi bi-eye"></i></button>
+                    </td>
+                </tr>
+                <tr>
+                    <th class="bg-light">母亲姓名</th>
+                    <td>@Model.MotherName</td>
+                    <th class="bg-light">母亲电话</th>
+                    <td>
+                        <span class="masked-value" data-full="@Model.MotherPhone">@MaskPhone(Model.MotherPhone)</span>
+                        <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline text-decoration-none" onclick="toggleMask(this)"><i class="bi bi-eye"></i></button>
+                    </td>
+                </tr>
+                <tr>
+                    <th class="bg-light">就读状态</th>
+                    <td colspan="3">
+                        @if (Model.Status == "在读")
+                        {
+                            <span class="badge bg-success">在读</span>
+                        }
+                        else if (Model.Status == "毕业")
+                        {
+                            <span class="badge bg-secondary">毕业</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-info">@Model.Status</span>
+                        }
+                    </td>
+                </tr>
+                <tr>
+                    <th class="bg-light">备注</th>
+                    <td colspan="3">@Model.Remark</td>
+                </tr>
+                <tr>
+                    <th class="bg-light">创建时间</th>
+                    <td>@(Model.CreateTime?.ToString("yyyy-MM-dd HH:mm") ?? "")</td>
+                    <th class="bg-light">更新时间</th>
+                    <td>@(Model.UpdateTime?.ToString("yyyy-MM-dd HH:mm") ?? "")</td>
+                </tr>
+            </table>
+
+            <!-- 成绩简表 -->
+            <h5 class="text-primary border-bottom pb-2 mt-4 mb-3"><i class="bi bi-bar-chart me-1"></i>最近成绩</h5>
+            <div id="scoreBrief">
+                @{
+                    var recentExams = ViewBag.RecentExams as List<object>;
+                    if (recentExams != null && recentExams.Count > 0)
+                    {
+                        foreach (dynamic exam in recentExams)
+                        {
+                            <div class="exam-card mb-3 p-3 border rounded">
+                                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                                    <div>
+                                        <h6 class="mb-1 fw-bold">@exam.Name</h6>
+                                        <small class="text-muted">@exam.ExamType &middot; @exam.ExamDate</small>
+                                    </div>
+                                    <div class="text-end">
+                                        <span class="badge bg-primary fs-6 me-1">总分 @exam.totalScore</span>
+                                        <span class="badge bg-info fs-6">均分 @exam.avgScore</span>
+                                    </div>
+                                </div>
+                                <div class="mt-2 small text-muted">
+                                    班级排名: <strong>@(exam.classRank != null ? exam.classRank + "/" + exam.classTotal : "-")</strong>
+                                    &nbsp;|&nbsp; 年级排名: <strong>@(exam.gradeRank != null ? exam.gradeRank + "/" + exam.gradeTotal : "-")</strong>
+                                </div>
+                                @if (exam.Subjects != null && ((IEnumerable<dynamic>)exam.Subjects).Any())
+                                {
+                                    <hr class="my-2" />
+                                    <table class="table table-sm table-bordered mb-0 mt-1">
+                                        <thead class="table-light">
+                                            <tr><th>科目</th><th class="text-center">成绩</th></tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (dynamic sub in exam.Subjects)
+                                            {
+                                                <tr>
+                                                    <td>@sub.SubjectName</td>
+                                                    <td class="text-center fw-bold">@sub.ScoreValue</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                }
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <p class="text-muted small">暂无成绩记录</p>
+                    }
+                }
+            </div>
+
+            <!-- AI分析报告 -->
+            <h5 class="text-success border-bottom pb-2 mt-4 mb-3"><i class="bi bi-robot me-1"></i>AI分析报告</h5>
+            <div id="aiReportSection">
+                @{
+                    var recentExamsForAi = ViewBag.RecentExams as List<object>;
+                    if (recentExamsForAi != null && recentExamsForAi.Count > 0)
+                    {
+                        <div class="d-flex gap-2 mb-3">
+                            <select id="aiReportExamSelect" class="form-select" style="max-width:300px;">
+                                <option value="">-- 选择考试查看AI报告 --</option>
+                                @foreach (dynamic exam in recentExamsForAi)
+                                {
+                                    <option value="@exam.ExamId">@exam.Name</option>
+                                }
+                            </select>
+                            <button class="btn btn-success btn-sm" onclick="btnViewAiReport(@Model.StudentID)">
+                                <i class="bi bi-file-text me-1"></i>查看报告
+                            </button>
+                        </div>
+                        <div id="aiReportContent" style="display:none;">
+                            <div class="alert alert-success py-2" id="aiReportHeader"></div>
+                            <div class="card bg-light">
+                                <div class="card-body" id="aiReportBody" style="white-space:pre-wrap;line-height:1.8;font-size:0.9rem;"></div>
+                            </div>
+                        </div>
+                        <div id="aiReportEmpty" class="text-muted small">
+                            <i class="bi bi-info-circle me-1"></i>暂无AI分析报告。请先到「成绩分析 → AI成绩分析」中生成。
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="text-muted small">暂无考试数据，无法查看AI报告</p>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+}
+<script>
+    function toggleMask(btn) {
+        var span = btn.closest("td").querySelector(".masked-value");
+        if (!span) return;
+        var icon = btn.querySelector("i");
+        if (span.dataset.fullVisible === "1") {
+            span.textContent = span.dataset.masked;
+            icon.className = "bi bi-eye";
+            span.dataset.fullVisible = "0";
+        } else {
+            span.dataset.masked = span.textContent;
+            span.textContent = span.dataset.full;
+            icon.className = "bi bi-eye-slash";
+            span.dataset.fullVisible = "1";
+        }
+    }
+</script>

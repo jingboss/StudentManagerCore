@@ -1,0 +1,918 @@
+﻿@{
+    ViewBag.Title = "考试安排管理";
+    var schedules = Model as List<ExamSchedule> ?? new();
+    var semesters = ViewBag.Semesters as IEnumerable<dynamic> ?? new List<dynamic>();
+    var grades = ViewBag.Grades as IEnumerable<dynamic> ?? new List<object>();
+    var allSubjects = ViewBag.AllSubjects as List<Subject> ?? new();
+    var examTypes = new[] { "期中", "期末", "月考", "单元测试", "模拟考" };
+    var statusList = new[] { "未开始", "进行中", "已结束" };
+}
+
+<div class="container-fluid">
+    <h4 class="mb-3"><i class="bi bi-calendar-event me-2"></i>考试安排管理</h4>
+
+    <!-- 搜索筛选栏 -->
+    <div class="card bg-light mb-3">
+        <div class="card-body py-2">
+            <form method="get" class="row g-2 align-items-end">
+                <div class="col-auto">
+                    <label class="small text-muted mb-1">考试名称</label>
+                    <input type="text" name="keyword" class="form-control form-control-sm" placeholder="搜索考试名称" value="@ViewBag.Keyword" />
+                </div>
+                <div class="col-auto">
+                    <label class="small text-muted mb-1">考试类型</label>
+                    <select name="examType" class="form-select form-select-sm">
+                        <option value="">全部</option>
+                        @foreach (var t in examTypes)
+                        {
+                            <option value="@t" selected="@(ViewBag.FilterExamType == t)">@t</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <label class="small text-muted mb-1">状态</label>
+                    <select name="status" class="form-select form-select-sm">
+                        <option value="">全部</option>
+                        @foreach (var st in statusList)
+                        {
+                            <option value="@st" selected="@(ViewBag.FilterStatus == st)">@st</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-search me-1"></i>搜索</button>
+                    <a asp-action="Index" class="btn btn-outline-secondary btn-sm">重置</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-end mb-2">
+        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addModal">
+            <i class="bi bi-plus-circle me-1"></i>新增考试安排
+        </button>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>考试名称</th>
+                        <th>考试类型</th>
+                        <th>适用年级</th>
+                        <th>考试日期段</th>
+                        <th>关联学期</th>
+                        <th>状态</th>
+                        <th>考试科目</th>
+                        <th>负责人</th>
+                        <th>创建时间</th>
+                        <th style="width:100px">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (schedules.Count == 0)
+                    {
+                        <tr><td colspan="10" class="text-center text-muted py-3">暂无考试安排</td></tr>
+                    }
+                    @foreach (var s in schedules)
+                    {
+                        var subjectNames = s.ExamSubjects?.Where(es => es.Subject != null).Select(es => es.Subject!.Name).ToList() ?? new();
+                        var subjectIds = s.ExamSubjects?.Select(es => es.SubjectId).ToList() ?? new();
+                        var effectiveEndDate = s.EndDate ?? s.ExamDate;
+                        var isDatePast = effectiveEndDate.Date < DateTime.Now.Date;
+                        var rowClass = isDatePast && s.Status != "已结束" ? "table-warning" : "";
+                        var dateDisplay = s.EndDate.HasValue
+                            ? s.ExamDate.ToString("yyyy-MM-dd") + " 至 " + s.EndDate.Value.ToString("yyyy-MM-dd")
+                            : s.ExamDate.ToString("yyyy-MM-dd");
+                        <tr class="@rowClass">
+                            <td>
+                                <span class="fw-bold">@s.Name</span>
+                                @if (isDatePast && s.Status != "已结束")
+                                {
+                                    <span class="badge bg-danger ms-1" title="考试日期已过但状态未更新">!</span>
+                                }
+                            </td>
+                            <td><span class="badge bg-info">@s.ExamType</span></td>
+                            <td>@(s.Grades ?? "全部年级")</td>
+                            <td>@dateDisplay</td>
+                            <td>@(s.Semester?.AcademicYear?.YearName + " " + s.Semester?.SemesterName)</td>
+                            <td>
+                                @if (s.Status == "未开始") { <span class="badge bg-secondary">未开始</span> }
+                                else if (s.Status == "进行中") { <span class="badge bg-success">进行中</span> }
+                                else { <span class="badge bg-warning text-dark">已结束</span> }
+                            </td>
+                            <td>
+                                @if (subjectNames.Any()) { @string.Join("、", subjectNames) }
+                                else { <span class='text-muted'>未设置科目</span> }
+                            </td>
+                            <td>
+                                @{
+                                    var examTeachers = (ViewBag.AllExamTeachers as IEnumerable<ExamSubjectTeacher> ?? Enumerable.Empty<ExamSubjectTeacher>())
+                                        .Where(est => est.ExamScheduleId == s.Id)
+                                        .ToList();
+                                    var teacherInfo = new List<string>();
+                                    if (examTeachers.Any())
+                                    {
+                                        var bySubject = examTeachers.GroupBy(et => et.SubjectId);
+                                        foreach (var subjGroup in bySubject)
+                                        {
+                                            var subjName = s.ExamSubjects?.FirstOrDefault(es => es.SubjectId == subjGroup.Key)?.Subject?.Name ?? "科目" + subjGroup.Key;
+                                            var byClass = subjGroup.GroupBy(et => et.ClassInfo?.ClassName ?? "未知");
+                                            var parts = new List<string>();
+                                            foreach (var clsGroup in byClass)
+                                            {
+                                                var teacherNames = clsGroup.Where(et => et.Admin != null).Select(et => et.Admin!.RealName);
+                                                parts.Add($"{clsGroup.Key}:{string.Join(",", teacherNames)}");
+                                            }
+                                            teacherInfo.Add($"{subjName}[{string.Join(";", parts)}]");
+                                        }
+                                    }
+                                }
+                                @if (teacherInfo.Any())
+                                {
+                                    <span class="small">
+                                        @foreach (var t in teacherInfo)
+                                        {
+                                            @t<br />
+                                        }
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class='text-muted small'>未分配</span>
+                                }
+                            </td>
+                            <td class="small text-muted">@s.CreateTime.ToString("yyyy-MM-dd HH:mm")</td>
+                            <td>
+                                <button class="btn btn-outline-primary btn-sm edit-btn" data-id="@s.Id"
+                                        data-name="@s.Name" data-examtype="@s.ExamType"
+                                        data-grades="@s.Grades" data-examdate="@s.ExamDate.ToString("yyyy-MM-dd")"
+                                        data-enddate="@(s.EndDate?.ToString("yyyy-MM-dd") ?? "")"
+                                        data-semesterid="@s.SemesterId" data-status="@s.Status"
+                                        data-subjectids="@string.Join(",", subjectIds)"
+                                        title="编辑"><i class="bi bi-pencil"></i></button>
+                                <a asp-controller="ExamRoom" asp-action="Index" asp-route-examScheduleId="@s.Id"
+                                   class="btn btn-outline-success btn-sm" title="考场管理">
+                                    <i class="bi bi-building"></i>
+                                </a>
+                                <button class="btn btn-outline-info btn-sm assign-teacher-btn"
+                                        data-examscheduleid="@s.Id" data-examname="@s.Name"
+                                        title="分配负责人">
+                                    <i class="bi bi-person-plus"></i>
+                                </button>
+                                <button class="btn btn-outline-danger btn-sm delete-btn" data-id="@s.Id" data-name="@s.Name" title="删除"><i class="bi bi-trash"></i></button>
+                                <button class="btn btn-outline-secondary btn-sm subject-btn" data-id="@s.Id" data-name="@s.Name" data-grades="@s.Grades" title="考试科目安排">
+                                    <i class="bi bi-book me-1"></i>科目
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- 新增 Modal -->
+<div class="modal fade" id="addModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form id="addForm" onsubmit="return false;">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title">新增考试安排</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">考试名称<span class="text-danger">*</span></label>
+                        <input name="name" class="form-control" placeholder="如：2024学年第一学期期中考试" required />
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">考试类型</label>
+                            <select name="examType" class="form-select">
+                                @foreach (var t in examTypes)
+                                {
+                                    <option value="@t">@t</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">开始日期</label>
+                            <input name="examDate" type="date" class="form-control" value="@DateTime.Now.ToString("yyyy-MM-dd")" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">结束日期</label>
+                            <input name="endDate" type="date" class="form-control" />
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">适用年级（不选则全部年级）</label>
+                        <div class="border rounded p-2" style="max-height:150px;overflow-y:auto;">
+                            @if (grades.Any())
+                            {
+                                foreach (var g in grades)
+                                {
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input grade-check" type="checkbox" name="gradeItem" value="@g.Value" />
+                                        <label class="form-check-label">@g.Text</label>
+                                    </div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="text-muted small">暂无年级数据，请先在年级管理中设置年级</div>
+                            }
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">关联学期</label>
+                            <select name="semesterId" class="form-select" required>
+                                <option value="">-- 请选择学期 --</option>
+                                @foreach (var sem in semesters)
+                                {
+                                    <option value="@sem.Id">@sem.Display</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">状态</label>
+                            <select name="status" class="form-select">
+                                @foreach (var st in statusList)
+                                {
+                                    <option value="@st">@st</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" id="addSubmit">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑 Modal -->
+<div class="modal fade" id="editModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form id="editForm" onsubmit="return false;">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" />
+                <div class="modal-header">
+                    <h5 class="modal-title">编辑考试安排</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">考试名称<span class="text-danger">*</span></label>
+                        <input name="name" class="form-control" />
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">考试类型</label>
+                            <select name="examType" class="form-select">
+                                @foreach (var t in examTypes)
+                                {
+                                    <option value="@t">@t</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">开始日期</label>
+                            <input name="examDate" type="date" class="form-control" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">结束日期</label>
+                            <input name="endDate" type="date" class="form-control" />
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">适用年级</label>
+                        <div class="border rounded p-2" style="max-height:150px;overflow-y:auto;">
+                            @if (grades.Any())
+                            {
+                                foreach (var g in grades)
+                                {
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input grade-check" type="checkbox" value="@g.Value" />
+                                        <label class="form-check-label">@g.Text</label>
+                                    </div>
+                                }
+                            }
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">关联学期</label>
+                            <select name="semesterId" class="form-select" required>
+                                <option value="">-- 请选择学期 --</option>
+                                @foreach (var sem in semesters)
+                                {
+                                    <option value="@sem.Id">@sem.Display</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">状态</label>
+                            <select name="status" class="form-select">
+                                @foreach (var st in statusList)
+                                {
+                                    <option value="@st">@st</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" id="editSubmit">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 考试科目管理 Modal -->
+<div class="modal fade" id="subjectManageModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form id="subjectManageForm" onsubmit="return false;">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-gear me-1"></i>考试科目管理</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">① 选择年级</label>
+                        <select id="subjectGradeSelect" class="form-select" required>
+                            <option value="">-- 请选择年级 --</option>
+                        </select>
+                    </div>
+                    <div id="subjectManageContent" style="display:none;">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label fw-bold mb-0">② 勾选考试科目</label>
+                            <div class="d-flex gap-1 flex-wrap">
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="selectAllSubjBtn">全选</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" id="deselectAllSubjBtn">取消全选</button>
+                            </div>
+                        </div>
+                        <div class="border rounded p-3" id="subjectCheckList" style="max-height:350px;overflow-y:auto;">
+                            <div class="text-muted text-center py-4">请先选择年级</div>
+                        </div>
+                    </div>
+                    <div id="subjectManageNoGrade" class="text-muted text-center py-4" style="display:none;">
+                        请先选择一个年级
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                    <button type="button" class="btn btn-primary" id="subjectManageSave">保存设置</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 考试科目安排 Modal（考试维度） -->
+<div class="modal fade" id="examSubjectModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form id="examSubjectForm" onsubmit="return false;">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="examScheduleId" />
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-book me-1"></i>考试科目安排 - <span id="examSubjectTitle"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <label class="form-label fw-bold mb-0">选择考试科目</label>
+                        <div class="d-flex gap-1 flex-wrap">
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="examSubjSelectAll">全选</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="examSubjDeselectAll">取消全选</button>
+                        </div>
+                    </div>
+                    <div class="border rounded p-3" id="examSubjectCheckList" style="max-height:400px;overflow-y:auto;">
+                        <div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm me-1"></span>加载中...</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                    <button type="button" class="btn btn-primary" id="examSubjectSave">保存科目安排</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 分配负责人 Modal -->
+<div class="modal fade" id="assignTeacherModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form id="assignTeacherForm" onsubmit="return false;">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="examScheduleId" />
+                <div class="modal-header">
+                    <h5 class="modal-title">分配负责人 - <span id="assignModalTitle"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label small">角色 <span class="text-danger">*</span></label>
+                            <select id="assignRoleSelect" class="form-select form-select-sm">
+                                <option value="">-- 请选择角色 --</option>
+                                <option value="班主任">班主任</option>
+                                <option value="科任老师">科任老师</option>
+                                <option value="年级级长">年级级长</option>
+                                <option value="教务主任">教务主任</option>
+                                <option value="校长">校长</option>
+                                <option value="后勤主任">后勤主任</option>
+                                <option value="教师">教师</option>
+                                <option value="非管理员">非管理员</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small">姓名</label>
+                            <input type="text" id="assignNameInput" class="form-control form-control-sm" placeholder="模糊搜索" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small">账号</label>
+                            <input type="text" id="assignAccountInput" class="form-control form-control-sm" placeholder="模糊搜索" />
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <button type="button" class="btn btn-primary btn-sm" id="btnSearchAdmins">
+                            <i class="bi bi-search me-1"></i>搜索
+                        </button>
+                        <span class="text-muted small" id="searchResultCount"></span>
+                    </div>
+                    <div id="assignAdminList" class="border rounded p-3" style="max-height:380px;overflow-y:auto;">
+                        <div class="text-muted text-center py-4">请选择角色后点击搜索</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                    <button type="button" class="btn btn-primary" id="assignTeacherSubmit">保存分配</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 删除确认 modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <form id="deleteForm" onsubmit="return false;">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" />
+                <div class="modal-body text-center py-4">
+                    <i class="bi bi-exclamation-triangle text-danger" style="font-size:2.5rem;"></i>
+                    <p class="mt-2 mb-0">确定要删除考试安排 <strong id="deleteName"></strong> 吗？</p>
+                </div>
+                <div class="modal-footer justify-content-center border-0 pt-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-danger" id="deleteSubmit">确认删除</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(function () {
+            var token = $('input[name="__RequestVerificationToken"]').val();
+
+            // ---- 新增考试
+            $('#addSubmit').click(function () {
+                var btn = $(this);
+                btn.prop('disabled', true);
+                var checkedGrades = $('input[name="gradeItem"]:checked').map(function () { return $(this).val(); }).get().join(',');
+                $.post('@Url.Action("Create")', {
+                    name: $('#addModal input[name="name"]').val(),
+                    examType: $('#addModal select[name="examType"]').val(),
+                    grades: checkedGrades || '',
+                    examDate: $('#addModal input[name="examDate"]').val(),
+                    endDate: $('#addModal input[name="endDate"]').val() || '',
+                    semesterId: $('#addModal select[name="semesterId"]').val(),
+                    status: $('#addModal select[name="status"]').val(),
+                    __RequestVerificationToken: token
+                }, function (res) {
+                    btn.prop('disabled', false);
+                    if (res.success) { location.reload(); }
+                    else { alert(res.message || '保存失败'); }
+                }).fail(function (xhr) {
+                    btn.prop('disabled', false);
+                    alert('请求失败: ' + (xhr.responseText || '网络错误'));
+                });
+            });
+
+            // 编辑 - 加载数据
+            $('.edit-btn').click(function () {
+                var btn = $(this);
+                var id = btn.data('id');
+                $('#editModal input[name="id"]').val(id);
+                $('#editModal input[name="name"]').val(btn.data('name'));
+                $('#editModal select[name="examType"]').val(btn.data('examtype'));
+                $('#editModal input[name="examDate"]').val(btn.data('examdate'));
+                $('#editModal input[name="endDate"]').val(btn.data('enddate') || '');
+                $('#editModal select[name="semesterId"]').val(btn.data('semesterid'));
+                $('#editModal select[name="status"]').val(btn.data('status'));
+
+                // 回填年级
+                var gradesStr = btn.data('grades') || '';
+                var gradeArr = gradesStr.split(',').filter(function (g) { return g.trim(); });
+                $('#editModal .grade-check').each(function () {
+                    $(this).prop('checked', gradeArr.indexOf($(this).val()) >= 0);
+                });
+
+                $('#editModal').modal('show');
+            });
+
+            $('#editSubmit').click(function () {
+                var btn = $(this).prop('disabled', true);
+                var checkedGrades = $('#editModal .grade-check:checked').map(function () { return $(this).val(); }).get().join(',');
+                $.post('@Url.Action("Edit")', {
+                    id: $('#editModal input[name="id"]').val(),
+                    name: $('#editModal input[name="name"]').val(),
+                    examType: $('#editModal select[name="examType"]').val(),
+                    grades: checkedGrades || '',
+                    examDate: $('#editModal input[name="examDate"]').val(),
+                    endDate: $('#editModal input[name="endDate"]').val() || '',
+                    semesterId: $('#editModal select[name="semesterId"]').val(),
+                    status: $('#editModal select[name="status"]').val(),
+                    __RequestVerificationToken: token
+                }, function (res) {
+                    btn.prop('disabled', false);
+                    if (res.success) { location.reload(); }
+                    else { alert(res.message || '保存失败'); }
+                }).fail(function (xhr) {
+                    btn.prop('disabled', false);
+                    alert('请求失败: ' + (xhr.responseText || '网络错误'));
+                });
+            });
+
+            // 删除
+            $('.delete-btn').click(function () {
+                var btn = $(this);
+                $('#deleteModal input[name="id"]').val(btn.data('id'));
+                $('#deleteName').text(btn.data('name'));
+                $('#deleteModal').modal('show');
+            });
+
+            $('#deleteSubmit').click(function () {
+                var btn = $(this).prop('disabled', true);
+                $.post('@Url.Action("Delete")', {
+                    id: $('#deleteModal input[name="id"]').val(),
+                    __RequestVerificationToken: token
+                }, function (res) {
+                    btn.prop('disabled', false);
+                    if (res.success) { location.reload(); }
+                    else { alert(res.message || '删除失败'); }
+                }).fail(function (xhr) {
+                    btn.prop('disabled', false);
+                    alert('请求失败: ' + (xhr.responseText || '网络错误'));
+                });
+            });
+
+            // ---- 负责人分配逻辑 ----
+            var currentAssignExamId = 0;
+
+            // 打开分配对话框
+            $(document).on('click', '.assign-teacher-btn', function () {
+                currentAssignExamId = $(this).data('examscheduleid');
+                var examName = $(this).data('examname');
+                $('#assignModalTitle').text(examName);
+                $('#assignTeacherModal input[name="examScheduleId"]').val(currentAssignExamId);
+                $('#assignRoleSelect').val('');
+                $('#assignNameInput').val('');
+                $('#assignAccountInput').val('');
+                $('#assignAdminList').html('<div class="text-muted text-center py-4">请选择角色后点击搜索</div>');
+                $('#searchResultCount').text('');
+                $('#assignTeacherModal').modal('show');
+            });
+
+            // 搜索教职工
+            $('#btnSearchAdmins').click(function () {
+                var role = $('#assignRoleSelect').val();
+                if (!role) { alert('请选择角色'); return; }
+
+                var name = $('#assignNameInput').val().trim();
+                var account = $('#assignAccountInput').val().trim();
+                var $list = $('#assignAdminList');
+                $list.html('<div class="text-center text-muted py-3"><span class="spinner-border spinner-border-sm me-1"></span>搜索中...</div>');
+
+                $.get('@Url.Action("SearchAdminsForExam")', {
+                    examScheduleId: currentAssignExamId,
+                    role: role,
+                    name: name || '',
+                    account: account || ''
+                }, function (res) {
+                    if (!res.success) {
+                        $list.html('<div class="text-danger text-center py-3">' + htmlEncode(res.message) + '</div>');
+                        return;
+                    }
+                    if (!res.admins || res.admins.length === 0) {
+                        $list.html('<div class="text-muted text-center py-4"><i class="bi bi-search me-1"></i>未找到匹配的教职工</div>');
+                        $('#searchResultCount').text('共 0 条');
+                        return;
+                    }
+                    $('#searchResultCount').text('共 ' + res.admins.length + ' 条');
+                    var subjInfo = (res.examSubjects || []).map(function (s) { return s.subjectName; }).join('、');
+
+                    var html = '<div class="small text-muted mb-2">将分配给考试科目：<strong>' + htmlEncode(subjInfo || '（暂无科目）') + '</strong></div>';
+                    res.admins.forEach(function (a) {
+                        var checked = a.isAssigned ? 'checked' : '';
+                        html += '<div class="form-check mb-1">';
+                        html += '    <input class="form-check-input admin-check" type="checkbox" value="' + a.adminID + '" ' + checked + ' id="admin_' + a.adminID + '" />';
+                        html += '    <label class="form-check-label" for="admin_' + a.adminID + '">';
+                        html +=         htmlEncode(a.realName || '') + ' <span class="text-muted small">(' + htmlEncode(a.role) + ') 账号:' + htmlEncode(a.username);
+                        if (a.grade) html += ' | ' + htmlEncode(a.grade);
+                        if (a.className) html += ' ' + htmlEncode(a.className);
+                        if (a.isAssigned) html += ' <span class="badge bg-success bg-opacity-75">已分配</span>';
+                        html += '    </span></label>';
+                        html += '</div>';
+                    });
+                    $list.html(html);
+                }).fail(function () {
+                    $list.html('<div class="text-danger text-center py-3">网络错误</div>');
+                });
+            });
+
+            // 保存分配
+            $('#assignTeacherSubmit').click(function () {
+                var btn = $(this).prop('disabled', true);
+                if (!currentAssignExamId) {
+                    alert('数据错误');
+                    btn.prop('disabled', false);
+                    return;
+                }
+
+                var adminIds = [];
+                $('#assignAdminList .admin-check:checked').each(function () {
+                    adminIds.push(parseInt($(this).val()));
+                });
+
+                $.ajax({
+                    url: '@Url.Action("SaveExamTeachers")',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(adminIds),
+                    headers: { 'RequestVerificationToken': token },
+                    success: function (res) {
+                        btn.prop('disabled', false);
+                        if (res.success) { location.reload(); }
+                        else { alert(res.message || '保存失败'); }
+                    },
+                    error: function () {
+                        btn.prop('disabled', false);
+                        alert('请求失败');
+                    }
+                });
+            });
+
+            function htmlEncode(str) {
+                return $('<span>').text(str || '').html();
+            }
+
+            // ---- 考试科目管理 ----
+            var allGradeLevels = [];
+            var allManageSubjects = [];
+
+            $('#subjectManageModal').on('show.bs.modal', function () {
+                $.get('@Url.Action("GetGradeSubjectData")', function (res) {
+                    if (!res.success) { alert(res.message || '加载失败'); return; }
+                    allGradeLevels = res.gradeLevels || [];
+                    allManageSubjects = res.allSubjects || [];
+
+                    var $select = $('#subjectGradeSelect');
+                    $select.empty().append('<option value="">-- 请选择年级 --</option>');
+                    allGradeLevels.forEach(function (g) {
+                        $select.append('<option value="' + g.gradeLevelID + '">' + htmlEncode(g.displayName) + '</option>');
+                    });
+
+                    $('#subjectManageContent').hide();
+                    $('#subjectManageNoGrade').show();
+                    $('#subjectCheckList').html('<div class="text-muted text-center py-4">请先选择年级</div>');
+                });
+            });
+
+            $('#subjectGradeSelect').change(function () {
+                var gradeLevelId = parseInt($(this).val());
+                if (!gradeLevelId) {
+                    $('#subjectManageContent').hide();
+                    $('#subjectManageNoGrade').show();
+                    return;
+                }
+                $('#subjectManageNoGrade').hide();
+                $('#subjectManageContent').show();
+                $('#subjectCheckList').html('<div class="text-center text-muted py-3"><span class="spinner-border spinner-border-sm me-1"></span>加载中...</div>');
+
+                $.get('@Url.Action("GetGradeSubjects")', { gradeLevelId: gradeLevelId }, function (checkedIds) {
+                    var html = '';
+                    allManageSubjects.forEach(function (subj) {
+                        var isChecked = checkedIds.indexOf(subj.id) >= 0;
+                        html += '<div class="form-check form-check-inline" style="min-width:120px;">';
+                        html += '    <input class="form-check-input manage-subject-check" type="checkbox" value="' + subj.id + '"' + (isChecked ? ' checked' : '') + ' />';
+                        html += '    <label class="form-check-label">' + htmlEncode(subj.name) + '</label>';
+                        html += '</div>';
+                    });
+                    if (allManageSubjects.length === 0) {
+                        html = '<div class="text-muted text-center py-3">暂无可选科目，请先在科目管理中创建</div>';
+                    }
+                    $('#subjectCheckList').html(html);
+                });
+            });
+
+            $('#selectAllSubjBtn').click(function () {
+                $('.manage-subject-check').prop('checked', true);
+            });
+            $('#deselectAllSubjBtn').click(function () {
+                $('.manage-subject-check').prop('checked', false);
+            });
+
+            $('#subjectManageSave').click(function () {
+                var btn = $(this).prop('disabled', true);
+                var gradeLevelId = parseInt($('#subjectGradeSelect').val());
+                if (!gradeLevelId) {
+                    alert('请先选择年级');
+                    btn.prop('disabled', false);
+                    return;
+                }
+                var subjectIds = [];
+                $('.manage-subject-check:checked').each(function () {
+                    subjectIds.push(parseInt($(this).val()));
+                });
+
+                $.ajax({
+                    url: '@Url.Action("SaveGradeSubjects")',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ gradeLevelId: gradeLevelId, subjectIds: subjectIds }),
+                    headers: { 'RequestVerificationToken': token },
+                    success: function (res) {
+                        btn.prop('disabled', false);
+                        if (res.success) {
+                            alert('保存成功！');
+                            location.reload();
+                        } else {
+                            alert(res.message || '保存失败');
+                        }
+                    },
+                    error: function () {
+                        btn.prop('disabled', false);
+                        alert('请求失败');
+                    }
+                });
+            });
+
+            // ---- 考试科目安排（考试维度） ----
+            $(document).on('click', '.subject-btn', function () {
+                var examId = $(this).data('id');
+                var examName = $(this).data('name');
+                var grades = $(this).data('grades') || '';
+                $('#examSubjectTitle').text(examName);
+                $('#examSubjectModal input[name="examScheduleId"]').val(examId);
+                $('#examSubjectCheckList').html('<div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm me-1"></span>加载中...</div>');
+
+                // 根据年级名称判断学段
+                function detectSchoolType(gradesStr) {
+                    if (!gradesStr) return 'all';
+                    var primaryGrades = '一年级,二年级,三年级,四年级,五年级,六年级';
+                    var middleGrades = '七年级,八年级,九年级';
+                    var hasPrimary = false, hasMiddle = false;
+                    var items = gradesStr.split(',');
+                    items.forEach(function(g) {
+                        g = g.trim();
+                        if (primaryGrades.indexOf(g) >= 0) hasPrimary = true;
+                        if (middleGrades.indexOf(g) >= 0) hasMiddle = true;
+                    });
+                    if (hasPrimary && !hasMiddle) return 'primary';
+                    if (hasMiddle && !hasPrimary) return 'middle';
+                    return 'all';
+                }
+                var schoolType = detectSchoolType(grades);
+
+                $.get('@Url.Action("GetSubjects")', function (allSubjects) {
+                    // 按学段过滤
+                    var filtered = allSubjects;
+                    if (schoolType === 'primary') {
+                        filtered = allSubjects.filter(function (s) { return s.grade && s.grade.indexOf('小') >= 0; });
+                    } else if (schoolType === 'middle') {
+                        filtered = allSubjects.filter(function (s) { return s.grade && s.grade.indexOf('初') >= 0; });
+                    }
+
+                    $.get('@Url.Action("GetExamSubjects")', { examScheduleId: examId }, function (examSubjects) {
+                        var checkedIds = examSubjects.map(function(e) { return e.subjectId; });
+                        var fullScoreMap = {};
+                        examSubjects.forEach(function(e) { if (e.fullScore) fullScoreMap[e.subjectId] = e.fullScore; });
+
+                        var html = '';
+                        if (filtered.length === 0) {
+                            html = '<div class="text-muted text-center py-3">暂无可选科目</div>';
+                        } else if (schoolType === 'primary') {
+                            // 小学 - 平铺显示，每行带满分
+                            filtered.forEach(function (subj) {
+                                var isChecked = checkedIds.indexOf(subj.id) >= 0;
+                                var fs = fullScoreMap[subj.id] || subj.fullScore || 100;
+                                html += '<div class="form-check form-check-inline mb-1" style="min-width:170px;">';
+                                html += '    <input class="form-check-input exam-subject-check" type="checkbox" value="' + subj.id + '"' + (isChecked ? ' checked' : '') + ' />';
+                                html += '    <label class="form-check-label me-1">' + htmlEncode(subj.name) + '</label>';
+                                html += '    <input type="number" class="form-control form-control-sm exam-subject-fullscore d-inline-block" style="width:58px;display:inline!important;" value="' + fs + '" min="1" />';
+                                html += '    <small class="text-muted">分</small>';
+                                html += '</div>';
+                            });
+                        } else {
+                            // 初中或混合 - 按年级分组
+                            var grouped = {};
+                            filtered.forEach(function (s) {
+                                var key = s.grade || '全校';
+                                if (!grouped[key]) grouped[key] = [];
+                                grouped[key].push(s);
+                            });
+                            var keys = Object.keys(grouped).sort();
+                            keys.forEach(function (grade) {
+                                html += '<div class="mb-2">';
+                                html += '    <div class="fw-bold small text-secondary border-bottom pb-1 mb-1">' + htmlEncode(grade) + '</div>';
+                                html += '    <div class="d-flex flex-wrap">';
+                                grouped[grade].forEach(function (subj) {
+                                    var isChecked = checkedIds.indexOf(subj.id) >= 0;
+                                    var fs = fullScoreMap[subj.id] || subj.fullScore || 100;
+                                    html += '        <div class="form-check form-check-inline mb-1" style="min-width:170px;">';
+                                    html += '            <input class="form-check-input exam-subject-check" type="checkbox" value="' + subj.id + '"' + (isChecked ? ' checked' : '') + ' />';
+                                    html += '            <label class="form-check-label me-1">' + htmlEncode(subj.name) + '</label>';
+                                    html += '            <input type="number" class="form-control form-control-sm exam-subject-fullscore d-inline-block" style="width:58px;display:inline!important;" value="' + fs + '" min="1" />';
+                                    html += '            <small class="text-muted">分</small>';
+                                    html += '        </div>';
+                                });
+                                html += '    </div>';
+                                html += '</div>';
+                            });
+                        }
+                        $('#examSubjectCheckList').html(html);
+                        $('#examSubjectModal').modal('show');
+                    });
+                });
+            });
+
+            $('#examSubjSelectAll').click(function () {
+                $('.exam-subject-check').prop('checked', true);
+            });
+            $('#examSubjDeselectAll').click(function () {
+                $('.exam-subject-check').prop('checked', false);
+            });
+
+            $('#examSubjectSave').click(function () {
+                var btn = $(this).prop('disabled', true);
+                var examScheduleId = parseInt($('#examSubjectModal input[name="examScheduleId"]').val());
+                if (!examScheduleId) {
+                    alert('数据错误');
+                    btn.prop('disabled', false);
+                    return;
+                }
+                var subjects = [];
+                $('.exam-subject-check:checked').each(function () {
+                    var ck = $(this);
+                    var container = ck.closest('.form-check');
+                    var fsInput = container.find('.exam-subject-fullscore');
+                    var fs = fsInput.length ? parseInt(fsInput.val()) || null : null;
+                    subjects.push({
+                        subjectId: parseInt(ck.val()),
+                        fullScore: fs
+                    });
+                });
+
+                $.ajax({
+                    url: '@Url.Action("SaveExamSubjects")?examScheduleId=' + examScheduleId,
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(subjects),
+                    headers: { 'RequestVerificationToken': token },
+                    success: function (res) {
+                        btn.prop('disabled', false);
+                        if (res.success) {
+                            alert('科目安排已保存！');
+                            location.reload();
+                        } else {
+                            alert(res.message || '保存失败');
+                        }
+                    },
+                    error: function () {
+                        btn.prop('disabled', false);
+                        alert('请求失败');
+                    }
+                });
+            });
+        });
+    </script>
+}

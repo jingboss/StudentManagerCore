@@ -1,0 +1,753 @@
+@{
+    ViewBag.Title = "科目管理";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+<!-- 科目列表 -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5>科目列表</h5>
+        <div>
+            <button type="button" class="btn btn-primary btn-sm me-1" onclick="showAddModal()">
+                <i class="bi bi-plus-lg"></i> 批量新增科目
+            </button>
+            <button type="button" class="btn btn-info btn-sm" onclick="showGradeSubjectModal()">
+                <i class="bi bi-diagram-3"></i> 年级科目安排
+            </button>
+        </div>
+    </div>
+    <div class="card-body">
+        <!-- 筛选栏 -->
+        <form method="get" class="row g-2 mb-3 align-items-end" id="filterForm">
+            <div class="col-auto">
+                <label class="small text-muted mb-1">年级</label>
+                <select name="grade" class="form-select form-select-sm" id="filterGrade" style="min-width:130px;">
+                    <option value="">全部年级</option>
+                    @{
+                        var filterGrades = ViewBag.Grades as IEnumerable<dynamic>;
+                        if (filterGrades != null)
+                        {
+                            foreach (var g in filterGrades)
+                            {
+                                <option value="@g.Value" selected="@(ViewBag.FilterGrade == g.Value)">@g.Text</option>
+                            }
+                        }
+                    }
+                </select>
+            </div>
+            <div class="col-auto">
+                <label class="small text-muted mb-1">班级</label>
+                <select name="classId" class="form-select form-select-sm" id="filterClass" style="min-width:130px;">
+                    <option value="">全部班级</option>
+                </select>
+            </div>
+            <div class="col-auto d-flex align-items-end gap-1">
+                <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-funnel"></i> 筛选</button>
+                <a href="@Url.Action("Index")" class="btn btn-outline-secondary btn-sm"><i class="bi bi-x-lg"></i> 清除</a>
+            </div>
+        </form>
+
+        <table class="table table-bordered table-hover" id="subjectTable">
+            <thead class="table-light">
+                <tr>
+                    <th>编号</th>
+                    <th>科目名称</th>
+                    <th>适用年级</th>
+                    <th>班级</th>
+                    <th>满分</th>
+                    <th>登分老师</th>
+                    <th>排序</th>
+                    <th>创建时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in Model)
+                {
+                    <tr>
+                        <td>@item.Id</td>
+                        <td>@item.Name</td>
+                        <td>@(item.Grade ?? "全校")</td>
+                        <td>
+                            @{
+                                var cmap = ViewBag.ClassMap as Dictionary<int, List<string>>;
+                                cmap ??= new Dictionary<int, List<string>>();
+                                List<string>? classList = null;
+                                var hasClass = cmap.TryGetValue(item.Id, out classList);
+                            }
+                            @if (hasClass && classList != null && classList!.Count > 0)
+                            {
+                                @string.Join("、", classList!)
+                            }
+                            else
+                            {
+                                <span class="text-muted">—</span>
+                            }
+                        </td>
+                        <td>@item.FullScore</td>
+                        <td>
+                            @{
+                                var tmap = ViewBag.TeacherMap as Dictionary<int, List<string>>;
+                                tmap ??= new Dictionary<int, List<string>>();
+                                List<string>? teacherList = null;
+                                var has = tmap.TryGetValue(item.Id, out teacherList);
+                            }
+                            @if (has && teacherList != null && teacherList!.Count > 0)
+                            {
+                                @string.Join("、", teacherList!)
+                            }
+                            else
+                            {
+                                <span class="text-muted">—</span>
+                            }
+                        </td>
+                        <td>@item.SortOrder</td>
+                        <td>@item.CreateTime.ToString("yyyy-MM-dd HH:mm")</td>
+                        <td>
+                            <button class="btn btn-warning btn-sm" onclick="showEditModal(@item.Id,'@item.Name.Replace("'","\\'")','@item.Grade',@item.SortOrder,@item.FullScore)">编辑</button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteSubject(@item.Id)">删除</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 新增模态框：多选 -->
+<div class="modal fade" id="addModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form id="addForm">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title">批量新增科目</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">
+                                    <input type="checkbox" id="selectAllSubjects" onchange="toggleAll('subjects',this)" class="me-1" />
+                                    科目名称（多选）
+                                </label>
+                                <div class="border rounded p-2" style="max-height:300px;overflow-y:auto">
+                                    <div class="form-check">
+                                        <input class="form-check-input subject-check" type="checkbox" name="names" value="语文" id="subj_语文">
+                                        <label class="form-check-label" for="subj_语文">语文</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input subject-check" type="checkbox" name="names" value="数学" id="subj_数学">
+                                        <label class="form-check-label" for="subj_数学">数学</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input subject-check" type="checkbox" name="names" value="英语" id="subj_英语">
+                                        <label class="form-check-label" for="subj_英语">英语</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input subject-check" type="checkbox" name="names" value="道德与法治" id="subj_道德与法治">
+                                        <label class="form-check-label" for="subj_道德与法治">道德与法治</label>
+                                    </div>
+                                    <hr class="my-1" />
+                                    <div class="form-check">
+                                        <input class="form-check-input subject-check" type="checkbox" name="names" value="科学" id="subj_科学">
+                                        <label class="form-check-label" for="subj_科学">科学</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input subject-check" type="checkbox" name="names" value="音乐" id="subj_音乐">
+                                        <label class="form-check-label" for="subj_音乐">音乐</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input subject-check" type="checkbox" name="names" value="体育" id="subj_体育">
+                                        <label class="form-check-label" for="subj_体育">体育</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input subject-check" type="checkbox" name="names" value="美术" id="subj_美术">
+                                        <label class="form-check-label" for="subj_美术">美术</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input subject-check" type="checkbox" name="names" value="信息技术" id="subj_信息技术">
+                                        <label class="form-check-label" for="subj_信息技术">信息技术</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input subject-check" type="checkbox" name="names" value="劳动" id="subj_劳动">
+                                        <label class="form-check-label" for="subj_劳动">劳动</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input subject-check" type="checkbox" name="names" value="综合实践" id="subj_综合实践">
+                                        <label class="form-check-label" for="subj_综合实践">综合实践</label>
+                                    </div>
+                                    <hr class="my-1" />
+                                    <div class="form-check">
+                                        <input class="form-check-input subject-check" type="checkbox" name="names" value="历史" id="subj_历史">
+                                        <label class="form-check-label" for="subj_历史">历史</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input subject-check" type="checkbox" name="names" value="地理" id="subj_地理">
+                                        <label class="form-check-label" for="subj_地理">地理</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input subject-check" type="checkbox" name="names" value="物理" id="subj_物理">
+                                        <label class="form-check-label" for="subj_物理">物理</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input subject-check" type="checkbox" name="names" value="化学" id="subj_化学">
+                                        <label class="form-check-label" for="subj_化学">化学</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input subject-check" type="checkbox" name="names" value="生物" id="subj_生物">
+                                        <label class="form-check-label" for="subj_生物">生物</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">
+                                    <input type="checkbox" id="selectAllGrades" onchange="toggleAll('grades',this)" class="me-1" />
+                                    适用年级（多选，不选=全校）
+                                </label>
+                                <div class="border rounded p-2" style="max-height:300px;overflow-y:auto">
+                                    @{
+                                        var grades = ViewBag.Grades as IEnumerable<dynamic>;
+                                        if (grades != null && grades.Any())
+                                        {
+                                            foreach (var g in grades)
+                                            {
+                                                <div class="form-check">
+                                                    <input class="form-check-input grade-check" type="checkbox" name="grades" value="@g.Value" id="grade_@g.Value">
+                                                    <label class="form-check-label" for="grade_@g.Value">@g.Text</label>
+                                                </div>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <div class="text-muted small p-2">暂无年级数据，请先在班级管理中创建年级</div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="alert alert-info py-2 small">
+                        <i class="bi bi-info-circle"></i>
+                        将为您选择的每个科目 × 每个年级各创建一条记录。
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary" id="batchSaveBtn"><i class="bi bi-check-lg"></i> 批量创建</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑模态框（单条） -->
+<div class="modal fade" id="editModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="editForm">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title">编辑科目</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="id" id="editId" value="0" />
+                    <div class="mb-3">
+                        <label class="form-label">科目名称</label>
+                        <select class="form-select" name="name" id="editName" required>
+                            <option value="">-- 请选择 --</option>
+                            <optgroup label="主科">
+                                <option value="语文">语文</option>
+                                <option value="数学">数学</option>
+                                <option value="英语">英语</option>
+                                <option value="道德与法治">道德与法治</option>
+                            </optgroup>
+                            <optgroup label="小学必修">
+                                <option value="科学">科学</option>
+                                <option value="音乐">音乐</option>
+                                <option value="体育">体育</option>
+                                <option value="美术">美术</option>
+                                <option value="信息技术">信息技术</option>
+                                <option value="劳动">劳动</option>
+                                <option value="综合实践">综合实践</option>
+                            </optgroup>
+                            <optgroup label="初中必修">
+                                <option value="历史">历史</option>
+                                <option value="地理">地理</option>
+                                <option value="物理">物理</option>
+                                <option value="化学">化学</option>
+                                <option value="生物">生物</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">适用年级</label>
+                        <select class="form-select" name="grade" id="editGrade">
+                            <option value="">-- 全校 --</option>
+                            @{
+                                var gradeList = ViewBag.Grades as IEnumerable<dynamic>;
+                                if (gradeList != null)
+                                {
+                                    foreach (var g in gradeList)
+                                    {
+                                        <option value="@g.Value">@g.Text</option>
+                                    }
+                                }
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3" id="classSection" style="display:none">
+                        <label class="form-label fw-bold">适用班级（多选）</label>
+                        <div class="border rounded p-2" id="classCheckboxList" style="max-height:150px;overflow-y:auto">
+                            <div class="text-muted small p-2">请先选择年级</div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-success mt-2" id="btnApplyClasses"><i class="bi bi-check2"></i> 应用</button>
+                        <span id="classApplyResult" class="small text-muted ms-2"></span>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">满分</label>
+                        <input type="number" class="form-control" name="fullScore" id="editFullScore" value="100" min="1" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">排序</label>
+                        <input type="number" class="form-control" name="sortOrder" id="editOrder" value="0" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">
+                            <a class="btn btn-sm btn-outline-info" data-bs-toggle="collapse" href="#teacherSection" role="button">
+                                <i class="bi bi-person-plus"></i> 指定教师
+                            </a>
+                            <span class="small text-muted ms-2">按班级分配任教老师</span>
+                        </label>
+                        <div class="collapse" id="teacherSection">
+                            <div class="row g-2 mb-2">
+                                <div class="col-auto">
+                                    <select class="form-select form-select-sm" id="teacherClassSelect">
+                                        <option value="">-- 全校该科目 --</option>
+                                    </select>
+                                </div>
+                                <div class="col">
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                                        <input type="text" class="form-control" id="teacherSearch" placeholder="搜索教师姓名..." />
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="border rounded p-2" id="teacherCheckboxList" style="max-height:200px;overflow-y:auto">
+                                <div class="text-muted small p-2">加载中...</div>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-success mt-2" id="btnApplyTeachers"><i class="bi bi-check2"></i> 应用</button>
+                            <span id="teacherApplyResult" class="small text-muted ms-2"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary">保存</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 年级科目安排 Modal -->
+<div class="modal fade" id="gradeSubjectModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form id="gradeSubjectForm" onsubmit="return false;">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-diagram-3 me-1"></i>年级科目安排</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">① 选择年级</label>
+                        <select id="gsGradeSelect" class="form-select" required>
+                            <option value="">-- 请选择年级 --</option>
+                        </select>
+                    </div>
+                    <div id="gsContent" style="display:none;">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label fw-bold mb-0">② 勾选该年级开设的科目</label>
+                            <div class="d-flex gap-1 flex-wrap">
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="gsSelectAll">全选</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" id="gsDeselectAll">取消全选</button>
+                            </div>
+                        </div>
+                        <div class="border rounded p-3" id="gsSubjectCheckList" style="max-height:350px;overflow-y:auto;">
+                            <div class="text-muted text-center py-4">请先选择年级</div>
+                        </div>
+                        <div class="alert alert-info small mt-2 mb-0">
+                            <i class="bi bi-info-circle me-1"></i>排课和考试时，该年级只显示这里勾选的科目。
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                    <button type="button" class="btn btn-primary" id="gsSaveBtn">保存设置</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    // 全选/取消全选
+    function toggleAll(group, checkbox) {
+        $('.' + group + '-check').prop('checked', checkbox.checked);
+    }
+
+    // 新增表单提交
+    $('#addForm').on('submit', function(e) {
+        e.preventDefault();
+        var names = $('.subject-check:checked').map(function(){ return $(this).val(); }).get();
+        if (names.length === 0) { alert('请至少选择一个科目'); return; }
+
+        $('#batchSaveBtn').prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> 创建中...');
+
+        $.post('@Url.Action("Add")', {
+            __RequestVerificationToken: $('[name="__RequestVerificationToken"]').val(),
+            names: names,
+            grades: $('.grade-check:checked').map(function(){ return $(this).val(); }).get()
+        }, function(res) {
+            if (res.success) {
+                location.reload();
+            } else {
+                alert(res.message);
+                $('#batchSaveBtn').prop('disabled', false).html('<i class="bi bi-check-lg"></i> 批量创建');
+            }
+        }).fail(function() {
+            alert('请求失败，请重试');
+            $('#batchSaveBtn').prop('disabled', false).html('<i class="bi bi-check-lg"></i> 批量创建');
+        });
+    });
+
+    function showAddModal() {
+        // 重置所有勾选
+        $('.subject-check, .grade-check').prop('checked', false);
+        $('#selectAllSubjects, #selectAllGrades').prop('checked', false);
+        $('#addModal').modal('show');
+    }
+
+    function showEditModal(id, name, grade, order, fullScore) {
+        $('#editId').val(id);
+        $('#editName').val(name);
+        $('#editGrade').val(grade || '');
+        $('#editOrder').val(order);
+        $('#editFullScore').val(fullScore || 100);
+        $('#editModal').modal('show');
+        // 先清空班级下拉和教师列表
+        $('#teacherClassSelect').html('<option value="">-- 全校该科目 --</option>');
+        $('#teacherCheckboxList').html('<div class="text-muted small p-2">加载中...</div>');
+        // 加载班级和教师
+        if (grade) {
+            $('#classSection').show();
+            loadClassCheckboxes(grade, id);
+            loadClassDropdown(grade);
+        } else {
+            $('#classSection').hide();
+            loadTeachers(id);
+        }
+    }
+
+    // 年级切换时加载班级
+    $('#editGrade').on('change', function () {
+        var grade = $(this).val();
+        var subjectId = $('#editId').val();
+        if (grade) {
+            $('#classSection').show();
+            loadClassCheckboxes(grade, subjectId);
+            loadClassDropdown(grade);
+        } else {
+            $('#classSection').hide();
+        }
+    });
+
+    // 加载班级下拉（用于教师分配）
+    function loadClassDropdown(grade) {
+        $.getJSON('@Url.Action("GetClassesByGrade")', { grade: grade }, function (classes) {
+            var html = '<option value="">-- 全校该科目 --</option>';
+            if (classes && classes.length > 0) {
+                $.each(classes, function (i, c) {
+                    html += '<option value="' + c.classInfoID + '">' + c.className + '</option>';
+                });
+            }
+            $('#teacherClassSelect').html(html);
+            var subjectId = $('#editId').val();
+            loadTeachers(subjectId);
+        });
+    }
+
+    // 班级下拉变化时重新加载教师
+    $(document).on('change', '#teacherClassSelect', function () {
+        var subjectId = $('#editId').val();
+        loadTeachers(subjectId);
+    });
+
+    // 加载教师列表和已授权教师
+    function loadTeachers(subjectId) {
+        if (!subjectId) return;
+        $('#teacherCheckboxList').html('<div class="text-muted small p-2">加载中...</div>');
+        $('#teacherApplyResult').text('');
+        $('#teacherSearch').val('');
+        var classId = $('#teacherClassSelect').val();
+        window._currentClassId = classId || null;
+
+        $.get('@Url.Action("GetTeachers")', function (teachers) {
+            if (!teachers || teachers.length === 0) {
+                $('#teacherCheckboxList').html('<div class="text-muted small p-2">暂无可选教师</div>');
+                return;
+            }
+            window._allTeachers = teachers;
+            window._currentSubjectId = subjectId;
+            renderTeacherCheckboxes(teachers, []);
+            // 加载已授权教师
+            var url = '@Url.Action("GetSubjectTeachers")?subjectId=' + subjectId;
+            if (classId) url += '&classId=' + classId;
+            $.get(url, function (selectedIds) {
+                renderTeacherCheckboxes(teachers, selectedIds || []);
+            });
+        });
+    }
+
+    function renderClassCheckboxes(classes, selectedIds) {
+        var html = '';
+        $.each(classes, function (i, c) {
+            var checked = selectedIds.indexOf(c.classInfoID) >= 0 ? 'checked' : '';
+            html += '<div class="form-check form-check-inline" style="min-width:120px">' +
+                '<input class="form-check-input class-check" type="checkbox" ' +
+                'value="' + c.classInfoID + '" id="class_' + c.classInfoID + '" ' + checked + '>' +
+                '<label class="form-check-label" for="class_' + c.classInfoID + '">' + c.className + '</label></div>';
+        });
+        $('#classCheckboxList').html(html);
+    }
+
+    // 班级应用按钮
+    $('#btnApplyClasses').click(function () {
+        var subjectId = window._currentSubjectId || $('#editId').val();
+        if (!subjectId) return;
+        var classIds = $('.class-check:checked').map(function () { return parseInt($(this).val()); }).get();
+        $('#btnApplyClasses').prop('disabled', true);
+        $('#classApplyResult').text('保存中...');
+        $.ajax({
+            url: '@Url.Action("SaveSubjectClasses")?subjectId=' + subjectId,
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(classIds),
+            success: function () {
+                $('#classApplyResult').text('✅ 已应用');
+                $('#btnApplyClasses').prop('disabled', false);
+            },
+            error: function () {
+                $('#classApplyResult').text('❌ 保存失败');
+                $('#btnApplyClasses').prop('disabled', false);
+            }
+        });
+    });
+
+    // 加载教师列表和已授权教师
+    function loadTeachers(subjectId) {
+        $('#teacherCheckboxList').html('<div class="text-muted small p-2">加载中...</div>');
+        $('#teacherApplyResult').text('');
+        $('#teacherSearch').val('');
+        $.get('@Url.Action("GetTeachers")', function (teachers) {
+            if (!teachers || teachers.length === 0) {
+                $('#teacherCheckboxList').html('<div class="text-muted small p-2">暂无可选教师</div>');
+                return;
+            }
+            window._allTeachers = teachers;
+            window._currentSubjectId = subjectId;
+            renderTeacherCheckboxes(teachers, []);
+            // 加载已授权
+            $.get('@Url.Action("GetSubjectTeachers")', { subjectId: subjectId }, function (selectedIds) {
+                renderTeacherCheckboxes(teachers, selectedIds || []);
+            });
+        });
+    }
+
+    function renderTeacherCheckboxes(teachers, selectedIds) {
+        var keyword = ($('#teacherSearch').val() || '').trim().toLowerCase();
+        var html = '';
+        $.each(teachers, function (i, t) {
+            if (keyword && t.realName.toLowerCase().indexOf(keyword) < 0) return;
+            var checked = selectedIds.indexOf(t.adminID) >= 0 ? 'checked' : '';
+            html += '<div class="form-check form-check-inline" style="min-width:160px">' +
+                '<input class="form-check-input teacher-check" type="checkbox" name="teacherIds" ' +
+                'value="' + t.adminID + '" id="t_' + t.adminID + '" ' + checked + '>' +
+                '<label class="form-check-label" for="t_' + t.adminID + '">' +
+                t.realName + ' <span class="text-muted small">(' + t.role + (t.className ? ' - ' + t.className : '') + ')</span>' +
+                '</label></div>';
+        });
+        if (html === '') html = '<div class="text-muted small p-2">未找到匹配教师</div>';
+        $('#teacherCheckboxList').html(html);
+    }
+
+    // 搜索过滤
+    $(document).on('input', '#teacherSearch', function () {
+        var selectedIds = $('.teacher-check:checked').map(function () { return $(this).val(); }).get();
+        renderTeacherCheckboxes(window._allTeachers || [], selectedIds);
+    });
+
+    // 应用按钮（按班级保存教师授权）
+    $('#btnApplyTeachers').click(function () {
+        var subjectId = window._currentSubjectId;
+        if (!subjectId) return;
+        var teacherIds = $('.teacher-check:checked').map(function () { return parseInt($(this).val()); }).get();
+        var classId = window._currentClassId;
+        $('#btnApplyTeachers').prop('disabled', true);
+        $('#teacherApplyResult').text('保存中...');
+        $.ajax({
+            url: '@Url.Action("SaveSubjectTeachers")?subjectId=' + subjectId + (classId ? '&classId=' + classId : ''),
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(teacherIds),
+            success: function () {
+                $('#teacherApplyResult').text('✅ 已应用');
+                $('#btnApplyTeachers').prop('disabled', false);
+            },
+            error: function () {
+                $('#teacherApplyResult').text('❌ 保存失败');
+                $('#btnApplyTeachers').prop('disabled', false);
+            }
+        });
+    });
+
+    // 编辑表单提交（不含教师授权，教师单独用"应用"按钮）
+    $('#editForm').on('submit', function (e) {
+        e.preventDefault();
+        var formData = $(this).serialize();
+        $.post('@Url.Action("Edit")', formData, function (res) {
+            if (res.success) {
+                location.reload();
+            } else {
+                alert(res.message);
+            }
+        });
+    });
+
+    function deleteSubject(id) {
+        showConfirm('确定要删除该科目吗？', function() {
+            $.post('@Url.Action("Delete")', { id: id, __RequestVerificationToken: $('[name="__RequestVerificationToken"]').val() }, function(res) {
+                if (res.success) { location.reload(); }
+                else { alert(res.message); }
+            });
+        });
+    }
+
+    // ====== 年级科目安排 ======
+    var gsGradeLevels = [];
+    var gsAllSubjects = [];
+
+    function showGradeSubjectModal() {
+        $.get('@Url.Action("GetGradeSubjectData", "ExamSchedule")', function (res) {
+            if (!res.success) { alert(res.message || '加载失败'); return; }
+            gsGradeLevels = res.gradeLevels || [];
+            gsAllSubjects = res.allSubjects || [];
+
+            var $sel = $('#gsGradeSelect');
+            $sel.empty().append('<option value="">-- 请选择年级 --</option>');
+            gsGradeLevels.forEach(function (g) {
+                $sel.append('<option value="' + g.gradeLevelID + '">' + g.displayName + '</option>');
+            });
+            $('#gsContent').hide();
+            $('#gsSubjectCheckList').html('<div class="text-muted text-center py-4">请先选择年级</div>');
+            $('#gradeSubjectModal').modal('show');
+        });
+    }
+
+    $(document).on('change', '#gsGradeSelect', function () {
+        var gradeLevelId = parseInt($(this).val());
+        if (!gradeLevelId) {
+            $('#gsContent').hide();
+            return;
+        }
+        $('#gsContent').show();
+        $('#gsSubjectCheckList').html('<div class="text-center text-muted py-3"><span class="spinner-border spinner-border-sm me-1"></span>加载中...</div>');
+
+        $.get('@Url.Action("GetGradeSubjects", "ExamSchedule")', { gradeLevelId: gradeLevelId }, function (checkedIds) {
+            var html = '';
+            gsAllSubjects.forEach(function (subj) {
+                var checked = checkedIds.indexOf(subj.id) >= 0 ? 'checked' : '';
+                html += '<div class="form-check form-check-inline" style="min-width:150px;margin-bottom:4px;">' +
+                    '<input class="form-check-input gs-subject-cb" type="checkbox" value="' + subj.id + '" id="gss_' + subj.id + '" ' + checked + '>' +
+                    '<label class="form-check-label" for="gss_' + subj.id + '">' + subj.name + '</label></div>';
+            });
+            $('#gsSubjectCheckList').html(html || '<div class="text-muted py-2">无可选科目，请先在科目列表添加科目</div>');
+        });
+    });
+
+    $(document).on('click', '#gsSelectAll', function () {
+        $('.gs-subject-cb').prop('checked', true);
+    });
+
+    $(document).on('click', '#gsDeselectAll', function () {
+        $('.gs-subject-cb').prop('checked', false);
+    });
+
+    $(document).on('click', '#gsSaveBtn', function () {
+        var gradeLevelId = parseInt($('#gsGradeSelect').val());
+        if (!gradeLevelId) { alert('请先选择年级'); return; }
+        var subjectIds = $('.gs-subject-cb:checked').map(function () { return parseInt($(this).val()); }).get();
+        var btn = $(this).prop('disabled', true);
+        $.ajax({
+            url: '@Url.Action("SaveGradeSubjects", "ExamSchedule")',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(subjectIds),
+            headers: { 'RequestVerificationToken': $('[name="__RequestVerificationToken"]').val() },
+            success: function (res) {
+                if (res.success) {
+                    alert('保存成功');
+                    $('#gradeSubjectModal').modal('hide');
+                } else {
+                    alert(res.message || '保存失败');
+                }
+                btn.prop('disabled', false);
+            },
+            error: function () {
+                alert('请求失败，请重试');
+                btn.prop('disabled', false);
+            }
+        });
+    });
+    // ====== 科目筛选：年级联动班级 ======
+    function loadFilterClasses() {
+        var grade = $('#filterGrade').val();
+        var $sel = $('#filterClass');
+        var prevVal = $sel.val();
+        if (grade) {
+            $sel.html('<option value="">加载中...</option>');
+            $.get('@Url.Action("GetClassesByGrade")', { grade: grade }, function(data) {
+                var html = '<option value="">全部班级</option>';
+                var selectedClassId = '@(ViewBag.FilterClassId?.ToString() ?? "")';
+                data.forEach(function(c) {
+                    var sel = (c.classInfoID == selectedClassId) ? ' selected' : '';
+                    html += '<option value="' + c.classInfoID + '"' + sel + '>' + c.className + '</option>';
+                });
+                $sel.html(html);
+            });
+        } else {
+            $sel.html('<option value="">全部班级</option>');
+        }
+    }
+
+    // 年级 change 时加载班级
+    $(document).on('change', '#filterGrade', function() {
+        $('#filterClass').val('');
+        loadFilterClasses();
+    });
+
+    // 页面加载时，如果有年级筛选则自动加载班级
+    $(function() {
+        var grade = '@ViewBag.FilterGrade';
+        if (grade) {
+            loadFilterClasses();
+        }
+    });
+</script>
+}

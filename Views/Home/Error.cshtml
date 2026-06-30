@@ -1,0 +1,30 @@
+@{
+    ViewData["Title"] = "页面未找到";
+    Layout = "_Layout";
+    var code = ViewBag.StatusCode as int? ?? 0;
+    var title = code switch
+    {
+        404 => "页面未找到",
+        403 => "访问被拒绝",
+        401 => "未授权",
+        _ => "系统错误"
+    };
+    var message = code switch
+    {
+        404 => "您访问的页面不存在或已被移除。",
+        403 => "您没有权限访问此页面。",
+        401 => "请先登录再访问。",
+        _ => "服务器内部错误，请稍后重试。"
+    };
+}
+
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6 text-center">
+            <div style="font-size:96px; color:#dc3545; font-weight:bold; line-height:1;">@(code > 0 ? code.ToString() : "!")</div>
+            <h3 class="mt-3">@title</h3>
+            <p class="text-muted mt-2">@message</p>
+            <a href="/" class="btn btn-primary mt-3"><i class="bi bi-house-door-fill me-1"></i>返回首页</a>
+        </div>
+    </div>
+</div>

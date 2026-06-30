@@ -1,0 +1,501 @@
+@using System.Text.Json
+@using StudentManagerCore.Models
+@{
+    ViewData["Title"] = "排课管理";
+    var gradeLevels = ViewBag.GradeLevels as List<GradeLevel> ?? new();
+    var semesters = ViewBag.Semesters as List<Semester> ?? new();
+    var teachers = ViewBag.Teachers as List<Admin> ?? new();
+    var classInfos = ViewBag.ClassInfos as List<ClassInfo> ?? new();
+    var subjects = ViewBag.Subjects as List<Subject> ?? new();
+}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-plus/dist/index.css" />
+<div class="container-fluid mt-3">
+    <h4><i class="bi bi-calendar-week-fill me-2"></i>排课管理</h4>
+    <hr />
+    <div id="scheduleApp" v-cloak>
+        <el-tabs v-model="activeTab" type="border-card">
+            <el-tab-pane label="班级作息" name="tabConfig">
+                <div class="row">
+                    <div class="col-md-5">
+                        <el-card>
+                            <template #header><i class="bi bi-gear-fill me-1"></i>排课节次设置 <small>全年级统一</small></template>
+                            <el-form label-position="top" size="small">
+                                <el-row :gutter="12">
+                                    <el-col :span="12"><el-form-item label="每周天数">
+                                        <el-select v-model="daysPerWeek" style="width:100%">
+                                            <el-option :value="5" label="5天（周一至周五）" />
+                                            <el-option :value="6" label="6天（周一至周六）" />
+                                            <el-option :value="7" label="7天（周日至周六）" />
+                                        </el-select>
+                                    </el-form-item></el-col>
+                                    <el-col :span="6"><el-form-item label="每天节数">
+                                        <el-input-number v-model="periodsPerDay" :min="1" :max="12" style="width:100%" />
+                                    </el-form-item></el-col>
+                                    <el-col :span="6"><el-form-item label="每节时长">
+                                        <el-input-number v-model="durationMinutes" :min="30" :max="60" style="width:100%" />
+                                    </el-form-item></el-col>
+                                </el-row>
+                                <el-button type="primary" size="small" style="width:100%;margin-top:4px;" :loading="genLoading" @@click="generateDefault">
+                                    <i class="bi bi-save me-1"></i>生成默认节次
+                                </el-button>
+                            </el-form>
+                        </el-card>
+                    </div>
+                    <div class="col-md-7">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <el-button size="small" type="primary" plain :loading="saveLoading" @@click="saveAllPeriods">
+                                <i class="bi bi-check2 me-1"></i>保存全校作息
+                            </el-button>
+                            <div>
+                                <el-button size="small" plain @@click="showAddPublicDialog"><i class="bi bi-clock-history me-1"></i>设置公共时间</el-button>
+                                <el-button size="small" plain @@click="resetDefault"><i class="bi bi-arrow-counterclockwise me-1"></i>重置</el-button>
+                            </div>
+                        </div>
+                        <div style="margin-bottom:8px;"><span class="small fw-bold me-2">时段选择：</span>
+                            <el-checkbox-group v-model="checkedSections">
+                                <el-checkbox v-for="s in allSections" :key="s" :label="s" :value="s" />
+                            </el-checkbox-group>
+                        </div>
+                        <el-table :data="periodList" border size="small" style="font-size:0.82rem;" max-height="600">
+                            <el-table-column label="时段" width="70" align="center">
+                                <template #default="{ row }"><span class="fw-bold small" :style="{color: sectionColor(row.sectionName)}">{{ row.sectionDisplay }}</span></template>
+                            </el-table-column>
+                            <el-table-column label="排课节次" width="130" align="center">
+                                <template #default="{ row }"><span class="fw-bold">{{ row.displayName }}</span></template>
+                            </el-table-column>
+                            <el-table-column label="开始时间" width="150" align="center">
+                                <template #default="{ row }"><el-time-picker v-model="row.startTime" format="HH:mm" value-format="HH:mm" placeholder="点击设置开始时间" size="small" style="width:120px;" /></template>
+                            </el-table-column>
+                            <el-table-column label="结束时间" width="150" align="center">
+                                <template #default="{ row }"><el-time-picker v-model="row.endTime" format="HH:mm" value-format="HH:mm" placeholder="点击设置结束时间" size="small" style="width:120px;" /></template>
+                            </el-table-column>
+                            <el-table-column label="操作" width="80" align="center">
+                                <template #default="{ row }">
+                                    <el-button circle size="small" type="success" plain title="添加" @@click="addPeriodAfter(row.periodNumber)"><i class="bi bi-plus-lg"></i></el-button>
+                                    <el-button circle size="small" type="danger" plain title="删除" @@click="removePeriod(row.periodNumber)"><i class="bi bi-dash-lg"></i></el-button>
+                                </template>
+                            </el-table-column>
+                        </el-table>
+                        <div class="text-center text-muted small mt-2" v-if="periodList.length === 0">暂无数据</div>
+                    </div>
+                </div>
+                <el-dialog v-model="publicDialogVisible" title="添加公共时段" width="320px" :close-on-click-modal="false">
+                    <el-form label-position="top" size="small">
+                        <el-form-item label="时段选择"><el-select v-model="publicPosition" style="width:100%">
+                            <el-option v-for="(label, idx) in positionOptions" :key="idx" :value="idx+1" :label="label" />
+                        </el-select></el-form-item>
+                        <el-form-item label="时段名称"><el-input v-model="publicName" placeholder="如：早读、课间操" /></el-form-item>
+                        <el-form-item label="时长（分钟）"><el-input-number v-model="publicDuration" :min="5" :max="120" style="width:100%" /></el-form-item>
+                    </el-form>
+                    <template #footer>
+                        <el-button @@click="publicDialogVisible=false">取消</el-button>
+                        <el-button type="primary" :loading="publicLoading" @@click="submitPublicTime">添加</el-button>
+                    </template>
+                </el-dialog>
+            </el-tab-pane>
+
+            <!-- ===== Tab2: 课时任课 ===== -->
+            <el-tab-pane label="课时任课" name="tabHours">
+                <el-card>
+                    <template #header><i class="bi bi-book me-1"></i>周课时配置 <span class="text-muted small ms-2">{{ hourStatus }}</span></template>
+                    <div style="margin-bottom:12px;">
+                        <el-select v-model="hourGradeId" placeholder="选择年级" size="small" style="width:200px;" @@change="loadGradeSubjectHours">
+                            <el-option v-for="g in gradeOptions" :key="g.id" :value="g.id" :label="g.name" />
+                        </el-select>
+                        <span class="small text-muted ms-2">{{ hourSummary }}</span>
+                    </div>
+                    <el-table :data="hourSubjectList" border size="small" style="font-size:0.82rem;" max-height="500">
+                        <el-table-column label="科目" min-width="120">
+                            <template #default="{ row }">{{ row.subjectName }}</template>
+                        </el-table-column>
+                        <el-table-column label="周课时" width="120" align="center">
+                            <template #default="{ row }">
+                                <el-input-number v-model="row.periodsPerWeek" :min="0" :max="30" size="small" controls-position="right" style="width:100px;" @@change="saveHourDebounce(row)" />
+                            </template>
+                        </el-table-column>
+                        <el-table-column label="可任教教师" min-width="180">
+                            <template #default="{ row }">
+                                <span class="text-muted small">{{ getTeacherNames(row.subjectId) || '—' }}</span>
+                            </template>
+                        </el-table-column>
+                    </el-table>
+                </el-card>
+            </el-tab-pane>
+
+            <!-- ===== Tab3: 排课管理 ===== -->
+            <el-tab-pane label="排课管理" name="tabGrid">
+                <div style="margin-bottom:12px;display:flex;gap:8px;align-items:end;flex-wrap:wrap;">
+                    <div><label class="small text-muted">年级</label>
+                        <el-select v-model="gridGradeId" placeholder="选择年级" size="small" style="width:140px;" @@change="gridLoadClasses">
+                            <el-option v-for="g in gradeOptions" :key="g.id" :value="g.id" :label="g.name" />
+                        </el-select></div>
+                    <div><label class="small text-muted">班级</label>
+                        <el-select v-model="gridClassId" placeholder="选择班级" size="small" style="width:140px;" @@change="gridOnChange">
+                            <el-option v-for="c in gridClassOptions" :key="c.id" :value="c.id" :label="c.name" />
+                        </el-select></div>
+                    <div><label class="small text-muted">学期</label>
+                        <el-select v-model="gridSemesterId" placeholder="选择学期" size="small" style="width:160px;" @@change="gridOnChange">
+                            <el-option v-for="s in semesterOptions" :key="s.id" :value="s.id" :label="s.label" />
+                        </el-select></div>
+                </div>
+                <el-card v-if="gridClassId && gridSemesterId">
+                    <div style="overflow-x:auto;">
+                        <table class="table table-bordered mb-0" style="font-size:0.8rem;table-layout:fixed;">
+                            <thead><tr><th style="width:80px;">节次</th>
+                                <th v-for="d in gridDays" :key="d">{{ d }}</th>
+                            </tr></thead>
+                            <tbody>
+                                <tr v-for="p in gridTotalPeriods" :key="p">
+                                    <td class="text-center align-middle" style="font-size:0.75rem;color:#495057;">
+                                        第{{ p }}节<br/><small>{{ getPeriodTime(p) }}</small>
+                                    </td>
+                                    <td v-for="d in gridDayCount" :key="d" class="text-center align-middle" style="height:65px;cursor:pointer;"
+                                        @@click="gridOpenEditor(d, p)">
+                                        <div v-if="gridCellData[d] && gridCellData[d][p]" style="font-weight:600;font-size:0.85rem;">{{ gridCellData[d][p].subjectName }}</div>
+                                        <div v-if="gridCellData[d] && gridCellData[d][p]" style="font-size:0.75rem;color:#6c757d;">{{ gridCellData[d][p].teacherName }}</div>
+                                        <span v-else class="text-muted">+</span>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </el-card>
+                <div v-else class="text-center text-muted py-5">请选择年级、班级和学期</div>
+
+                <!-- 单元格编辑对话框 -->
+                <el-dialog v-model="cellEditorVisible" title="编辑排课" width="320px" :close-on-click-modal="false">
+                    <el-form label-position="top" size="small">
+                        <el-form-item label="科目">
+                            <el-select v-model="cellSubjectId" placeholder="选择科目" style="width:100%" @@change="onCellSubjectChange">
+                                <el-option v-for="s in gridSubjects" :key="s.id" :value="s.id" :label="s.name" />
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="教师">
+                            <el-select v-model="cellTeacherId" placeholder="选择教师" style="width:100%">
+                                <el-option v-for="t in cellTeacherOptions" :key="t.id" :value="t.id" :label="t.name" />
+                            </el-select>
+                        </el-form-item>
+                    </el-form>
+                    <template #footer>
+                        <el-button @@click="gridClearCell()" type="danger" plain>清空</el-button>
+                        <el-button @@click="cellEditorVisible=false">取消</el-button>
+                        <el-button type="primary" :loading="cellSaving" @@click="gridSaveCell()">确定</el-button>
+                    </template>
+                </el-dialog>
+            </el-tab-pane>
+
+            <!-- ===== Tab4: 自动排课 ===== -->
+            <el-tab-pane label="自动排课" name="tabAuto">
+                <div class="row">
+                    <div class="col-md-6">
+                        <el-card>
+                            <template #header><i class="bi bi-magic me-1"></i>一键自动排课</template>
+                            <el-form label-position="top" size="small">
+                                <el-form-item label="年级">
+                                    <el-select v-model="autoGradeId" placeholder="选择年级" style="width:100%">
+                                        <el-option v-for="g in gradeOptions" :key="g.id" :value="g.id" :label="g.name" />
+                                    </el-select>
+                                </el-form-item>
+                                <el-form-item label="学期">
+                                    <el-select v-model="autoSemesterId" placeholder="选择学期" style="width:100%">
+                                        <el-option v-for="s in semesterOptions" :key="s.id" :value="s.id" :label="s.label" />
+                                    </el-select>
+                                </el-form-item>
+                                <el-alert v-if="autoMessage" :type="autoMsgType" show-icon :description="autoMessage" style="margin-bottom:12px;" closable />
+                                <el-button type="primary" style="width:100%;" :loading="autoLoading" @@click="runAutoSchedule">
+                                    <i class="bi bi-lightning-fill me-1"></i>开始自动排课
+                                </el-button>
+                                <div v-if="autoResult" class="alert alert-info small py-2 mt-2 mb-0">{{ autoResult }}</div>
+                            </el-form>
+                        </el-card>
+                    </div>
+                </div>
+            </el-tab-pane>
+        </el-tabs>
+    </div>
+</div>
+
+<style>
+    [v-cloak] { display: none; }
+    .el-button { line-height: 1; }
+    .el-button i { margin-right: 4px; }
+    .el-table .el-button { padding: 4px; min-height: auto; }
+    .el-tabs--border-card>.el-tabs__header { background: #f5f7fa; }
+</style>
+
+@section Scripts {
+<script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/element-plus"></script>
+<script>
+const { createApp, ref, reactive, computed, onMounted, watch } = Vue;
+const { ElMessage, ElMessageBox } = ElementPlus;
+
+var allClasses = @Html.Raw(JsonSerializer.Serialize(classInfos.Select(c => new { c.ClassInfoID, c.GradeLevelID, c.ClassName })));
+var gradeInfos = @Html.Raw(JsonSerializer.Serialize(gradeLevels.Select(g => new { g.GradeLevelID, Name = g.DisplayName })));
+var semesterInfos = @Html.Raw(JsonSerializer.Serialize(semesters.Select(s => new { s.Id, Label = (s.AcademicYear?.YearName + " " + s.SemesterName).Trim() })));
+var dayNames = ['周一','周二','周三','周四','周五','周六','周日'];
+var token = $('[name="__RequestVerificationToken"]').first().val();
+function post(url, data) { return $.post(url, Object.assign(data||{}, {__RequestVerificationToken: token})); }
+function ajaxPost(url, data) { return $.ajax({url:url,method:'POST',contentType:'application/json',data:JSON.stringify(data),headers:{'RequestVerificationToken':token}}); }
+
+const scheduleApp = createApp({
+    setup() {
+        const activeTab = ref('tabConfig');
+        const allSections = ['早晨','上午','下午','晚修'];
+        const defaultSection = ['','上午','上午','上午','上午','下午','下午','下午','晚修','晚修','晚修'];
+        const gradeOptions = (gradeInfos||[]).map(function(g){return{id:g.GradeLevelID,name:g.Name};});
+        const semesterOptions = (semesterInfos||[]).map(function(s){return{id:s.Id,label:s.Label};});
+
+        // ====== Tab1: 班级作息 ======
+        const daysPerWeek = ref(5); const periodsPerDay = ref(7); const durationMinutes = ref(45);
+        const genLoading = ref(false); const saveLoading = ref(false);
+        const checkedSections = ref(['上午','下午']);
+        const rawPeriods = ref([]); const periodList = ref([]);
+        const publicDialogVisible = ref(false); const publicPosition = ref(1);
+        const publicName = ref(''); const publicDuration = ref(20); const publicLoading = ref(false);
+
+        function sectionColor(s) { return {'早晨':'#e6a23c','上午':'#409eff','下午':'#67c23a','晚修':'#909399'}[s]||'#909399'; }
+
+        function syncPeriodList() {
+            var checked = checkedSections.value; var list = [];
+            rawPeriods.value.forEach(function(p) {
+                var defSec = p.periodNumber < defaultSection.length ? defaultSection[p.periodNumber] : '晚修';
+                var isCustom = p.sectionName && allSections.indexOf(p.sectionName) < 0;
+                if (checked.indexOf(isCustom ? defSec : (p.sectionName||defSec)) >= 0) {
+                    list.push({ periodNumber: p.periodNumber,
+                        sectionName: isCustom ? defSec : (p.sectionName||defSec),
+                        sectionDisplay: isCustom ? p.sectionName : defSec,
+                        displayName: isCustom ? p.sectionName : ('第'+p.periodNumber+'节'),
+                        startTime: p.startTime||'', endTime: p.endTime||'' });
+                }
+            });
+            periodList.value = list;
+        }
+        watch(rawPeriods, function(){syncPeriodList();},{deep:true});
+        watch(checkedSections, function(){syncPeriodList();},{deep:true});
+
+        function syncBackToRaw() {
+            periodList.value.forEach(function(pl) {
+                var rp = rawPeriods.value.find(function(p){return p.periodNumber===pl.periodNumber;});
+                if (rp) { rp.startTime = pl.startTime||''; rp.endTime = pl.endTime||''; }
+            });
+        }
+
+        function loadConfig() {
+            $.get('@Url.Action("GetGlobalSchedule")', function(res) {
+                if (res.success && res.hasConfig) {
+                    daysPerWeek.value = res.config.daysPerWeek; periodsPerDay.value = res.config.periodsPerDay;
+                    rawPeriods.value = (res.periods||[]).map(function(p){return{periodNumber:p.periodNumber,startTime:p.startTime||'',endTime:p.endTime||'',sectionName:p.sectionName||''};});
+                } else rawPeriods.value = [];
+            });
+        }
+
+        function generateDefault() {
+            genLoading.value = true;
+            post('@Url.Action("SaveGlobalSchedule")',{daysPerWeek:daysPerWeek.value,periodsPerDay:periodsPerDay.value,durationMinutes:durationMinutes.value})
+            .done(function(res){genLoading.value=false;if(res.success){ElMessage.success(res.message);loadConfig();}else ElMessage.error(res.message);})
+            .fail(function(){genLoading.value=false;ElMessage.error('请求失败');});
+        }
+
+        function saveAllPeriods() {
+            syncBackToRaw(); saveLoading.value = true;
+            var items = rawPeriods.value.map(function(p){return{periodNumber:p.periodNumber,startTime:p.startTime||'',endTime:p.endTime||'',sectionName:p.sectionName||''};});
+            ajaxPost('@Url.Action("SaveGlobalSchedulePeriods")', items)
+            .done(function(res){saveLoading.value=false;if(res.success){ElMessage.success('已保存');loadConfig();}else ElMessage.error(res.message);})
+            .fail(function(){saveLoading.value=false;ElMessage.error('保存失败');});
+        }
+
+        function addPeriodAfter(pn) {
+            var idx = rawPeriods.value.findIndex(function(p){return p.periodNumber===pn;});
+            if(idx<0)return; var nextPn=pn+1; var endVal=rawPeriods.value[idx].endTime||'12:00';
+            rawPeriods.value.forEach(function(p){if(p.periodNumber>pn)p.periodNumber++;});
+            rawPeriods.value.splice(idx+1,0,{periodNumber:nextPn,startTime:endVal,endTime:'',sectionName:rawPeriods.value[idx].sectionName});
+            ElMessage.info('已添加，点击保存生效');
+        }
+
+        function removePeriod(pn) {
+            if(rawPeriods.value.length<=1){ElMessage.warning('至少保留一节');return;}
+            ElMessageBox.confirm('确定删除？','提示',{type:'warning'}).then(function(){
+                rawPeriods.value=rawPeriods.value.filter(function(p){return p.periodNumber!==pn;});
+                rawPeriods.value.forEach(function(p,idx){p.periodNumber=idx+1;});
+                ElMessage.info('已删除，点击保存生效');
+            }).catch(function(){});
+        }
+
+        function resetDefault() {
+            ElMessageBox.confirm('重置将恢复默认（上午4节+下午3节），确定继续？','提示',{type:'warning'}).then(function(){
+                daysPerWeek.value=5;periodsPerDay.value=7;durationMinutes.value=45;generateDefault();
+            }).catch(function(){});
+        }
+
+        const positionOptions = computed(function(){
+            var opts=['第1节前'];for(var i=1;i<periodsPerDay.value;i++)opts.push('第'+i+'节-第'+(i+1)+'节之间');return opts;
+        });
+
+        function showAddPublicDialog(){publicDialogVisible.value=true;publicName.value='';publicDuration.value=20;}
+        function submitPublicTime(){
+            if(!publicName.value.trim()){ElMessage.warning('请输入时段名称');return;}
+            publicLoading.value=true;
+            post('@Url.Action("InsertPeriod")',{beforePeriod:publicPosition.value,name:publicName.value.trim(),durationMinutes:publicDuration.value})
+            .done(function(res){publicLoading.value=false;if(res.success){ElMessage.success(res.message);publicDialogVisible.value=false;loadConfig();}else ElMessage.error(res.message);})
+            .fail(function(){publicLoading.value=false;ElMessage.error('请求失败');});
+        }
+
+        // ====== Tab2: 课时任课 ======
+        const hourGradeId = ref(0); const hourSubjectList = ref([]);
+        const hourTeachers = ref([]); const hourTotalSlots = ref(0);
+        const hourStatus = computed(function(){return hourGradeId.value?'已加载':'请选择年级';});
+        const hourSummary = computed(function(){
+            var total=hourSubjectList.value.reduce(function(s,r){return s+r.periodsPerWeek;},0);
+            return '总课时：'+total+' / 可用时段：'+(hourTotalSlots.value||'未配置');
+        });
+        var hourTimer = null;
+
+        function loadGradeSubjectHours() {
+            var gid = hourGradeId.value; if(!gid){hourSubjectList.value=[];hourTeachers.value=[];return;}
+            $.get('@Url.Action("GetGradeSubjectHours")',{gradeLevelId:gid},function(res){
+                if(!res.success){ElMessage.error(res.message);return;}
+                hourSubjectList.value=(res.data||[]).map(function(d){return{subjectId:d.subjectId,subjectName:d.subjectName,periodsPerWeek:d.periodsPerWeek};});
+                hourTeachers.value=res.teachers||[]; hourTotalSlots.value=res.totalSlots||0;
+            });
+        }
+
+        function saveHourDebounce(row) {
+            if(hourTimer)clearTimeout(hourTimer);
+            hourTimer=setTimeout(function(){
+                post('@Url.Action("SaveGradeSubjectHour")',{gradeLevelId:hourGradeId.value,subjectId:row.subjectId,periodsPerWeek:row.periodsPerWeek})
+                .done(function(r){if(r.success)loadGradeSubjectHours();else ElMessage.error(r.message);});
+            },500);
+        }
+
+        function getTeacherNames(subjectId) {
+            return hourTeachers.value.filter(function(t){return t.subjectId===subjectId;}).map(function(t){return t.teacherName;}).join(', ');
+        }
+
+        // ====== Tab3: 排课管理 ======
+        const gridGradeId = ref(0); const gridClassId = ref(0); const gridSemesterId = ref(0);
+        const gridClassOptions = ref([]); const gridSubjects = ref([]); const gridTeachers = ref([]);
+        const gridPeriods = ref([]); const gridDayCount = ref(5); const gridDays = ref(['周一','周二','周三','周四','周五']);
+        const gridTotalPeriods = ref(8); const gridCellData = ref({});
+        const cellEditorVisible = ref(false); const cellSaving = ref(false);
+        const cellSubjectId = ref(0); const cellTeacherId = ref(0); const cellTeacherOptions = ref([]);
+        var cellEditPos = {day:0,period:0};
+
+        function gridLoadClasses() {
+            var gid = gridGradeId.value; gridClassId.value=0; gridClassOptions.value=[];
+            if(!gid)return;
+            allClasses.filter(function(c){return c.GradeLevelID===gid;}).sort(function(a,b){return(a.ClassName||'').localeCompare(b.ClassName||'');}).forEach(function(c){
+                gridClassOptions.value.push({id:c.ClassInfoID,name:c.ClassName});
+            });
+        }
+
+        function gridOnChange() {
+            var cid=gridClassId.value, sid=gridSemesterId.value;
+            if(cid&&sid) gridLoadSchedule(cid,sid);
+        }
+
+        function gridLoadSchedule(classId, semesterId) {
+            $.get('@Url.Action("GetClassSchedule")',{classId:classId,semesterId:semesterId},function(res){
+                if(!res.success){ElMessage.error(res.message);return;}
+                var d=res.data; gridSubjects.value=d.subjects||[]; gridTeachers.value=d.teachers||[];
+                gridPeriods.value=d.periods||[]; gridDayCount.value=d.daysPerWeek||5; gridTotalPeriods.value=d.periodsPerDay||8;
+                gridDays.value=dayNames.slice(0,gridDayCount.value);
+                var map={};(d.schedules||[]).forEach(function(s){
+                    if(!map[s.dayOfWeek])map[s.dayOfWeek]={};
+                    map[s.dayOfWeek][s.period]={subjectName:s.subjectName,teacherName:s.teacherName,subjectId:s.subjectId,teacherId:s.teacherId};
+                });
+                gridCellData.value=map;
+            });
+        }
+
+        function getPeriodTime(p) {
+            var pi=gridPeriods.value.find(function(x){return x.PeriodNumber===p;});
+            return pi?(pi.StartTime+'~'+pi.EndTime):'';
+        }
+
+        function gridOpenEditor(day, period) {
+            cellEditPos={day:day,period:period}; cellSubjectId.value=0; cellTeacherId.value=0; cellTeacherOptions.value=[];
+            var cell=gridCellData.value[day]?gridCellData.value[day][period]:null;
+            cellEditorVisible.value=true;
+        }
+
+        function onCellSubjectChange() {
+            var sid=cellSubjectId.value; cellTeacherId.value=0; cellTeacherOptions.value=[];
+            if(sid){
+                var seen={};
+                gridTeachers.value.forEach(function(t){
+                    if(t.subjectId===sid&&!seen[t.teacherId]){seen[t.teacherId]=true;cellTeacherOptions.value.push({id:t.teacherId,name:t.teacherName});}
+                });
+            }
+            // 预选已存在的教师
+            var cell=gridCellData.value[cellEditPos.day]?gridCellData.value[cellEditPos.day][cellEditPos.period]:null;
+            if(cell&&cell.subjectId===sid) cellTeacherId.value=cell.teacherId;
+        }
+
+        function gridSaveCell() {
+            var sid=cellSubjectId.value, tid=cellTeacherId.value;
+            if(!sid||!tid){ElMessage.warning('请选择科目和教师');return;}
+            cellSaving.value=true;
+            post('@Url.Action("SaveCell")',{classId:gridClassId.value,semesterId:gridSemesterId.value,dayOfWeek:cellEditPos.day,period:cellEditPos.period,subjectId:sid,teacherId:tid})
+            .done(function(res){
+                cellSaving.value=false;
+                if(res.success){cellEditorVisible.value=false;gridLoadSchedule(gridClassId.value,gridSemesterId.value);ElMessage.success('已保存');}
+                else if(res.conflict){
+                    ElMessageBox.confirm(res.message,'教师冲突',{type:'warning',confirmButtonText:'覆盖',cancelButtonText:'取消'}).then(function(){
+                        post('@Url.Action("SaveCell")',{classId:gridClassId.value,semesterId:gridSemesterId.value,dayOfWeek:cellEditPos.day,period:cellEditPos.period,subjectId:sid,teacherId:tid,force:true})
+                        .done(function(r2){if(r2.success){cellEditorVisible.value=false;gridLoadSchedule(gridClassId.value,gridSemesterId.value);ElMessage.success('已覆盖');}else ElMessage.error(r2.message);});
+                    }).catch(function(){});
+                }else ElMessage.error(res.message);
+            }).fail(function(){cellSaving.value=false;ElMessage.error('保存失败');});
+        }
+
+        function gridClearCell() {
+            post('@Url.Action("ClearCell")',{classId:gridClassId.value,semesterId:gridSemesterId.value,dayOfWeek:cellEditPos.day,period:cellEditPos.period})
+            .done(function(res){if(res.success){cellEditorVisible.value=false;gridLoadSchedule(gridClassId.value,gridSemesterId.value);ElMessage.info('已清空');}});
+        }
+
+        // ====== Tab4: 自动排课 ======
+        const autoGradeId = ref(0); const autoSemesterId = ref(0);
+        const autoLoading = ref(false); const autoMessage = ref(''); const autoMsgType = ref('info'); const autoResult = ref('');
+
+        function runAutoSchedule() {
+            var gid=autoGradeId.value,sid=autoSemesterId.value;
+            if(!gid||!sid){ElMessage.warning('请选择年级和学期');return;}
+            ElMessageBox.confirm('自动排课将清除该年级所有班级的现有课表并重新生成，确定继续？','提示',{type:'warning',confirmButtonText:'确定',cancelButtonText:'取消'}).then(function(){
+                autoLoading.value=true;autoMessage.value='排课中...';autoMsgType.value='info';autoResult.value='';
+                post('@Url.Action("AutoSchedule")',{gradeLevelId:gid,semesterId:sid})
+                .done(function(r){
+                    autoLoading.value=false;
+                    if(r.success){autoMessage.value=r.message;autoMsgType.value='success';autoResult.value='已为 '+r.stats.classCount+' 个班安排 '+r.stats.slotsPerClass+' 节/周';}
+                    else{autoMessage.value=r.message;autoMsgType.value='error';}
+                }).fail(function(){autoLoading.value=false;autoMessage.value='请求失败';autoMsgType.value='error';});
+            }).catch(function(){});
+        }
+
+        onMounted(function(){loadConfig();});
+
+        return {
+            activeTab, gradeOptions, semesterOptions, allSections, defaultSection, sectionColor,
+            // Tab1
+            daysPerWeek, periodsPerDay, durationMinutes, genLoading, saveLoading, checkedSections,
+            rawPeriods, periodList, publicDialogVisible, publicPosition, publicName, publicDuration, publicLoading, positionOptions,
+            generateDefault, saveAllPeriods, addPeriodAfter, removePeriod, resetDefault,
+            showAddPublicDialog, submitPublicTime, syncPeriodList,
+            // Tab2
+            hourGradeId, hourSubjectList, hourTeachers, hourTotalSlots, hourStatus, hourSummary,
+            loadGradeSubjectHours, saveHourDebounce, getTeacherNames,
+            // Tab3
+            gridGradeId, gridClassId, gridSemesterId, gridClassOptions, gridSubjects, gridTeachers,
+            gridPeriods, gridDayCount, gridDays, gridTotalPeriods, gridCellData,
+            cellEditorVisible, cellSaving, cellSubjectId, cellTeacherId, cellTeacherOptions,
+            gridLoadClasses, gridOnChange, gridOpenEditor, onCellSubjectChange, gridSaveCell, gridClearCell, getPeriodTime,
+            // Tab4
+            autoGradeId, autoSemesterId, autoLoading, autoMessage, autoMsgType, autoResult, runAutoSchedule
+        };
+    }
+});
+
+scheduleApp.use(ElementPlus);
+scheduleApp.mount('#scheduleApp');
+</script>
+}

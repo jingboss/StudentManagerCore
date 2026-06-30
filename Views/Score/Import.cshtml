@@ -1,0 +1,294 @@
+@using StudentManagerCore.Models
+@{
+    ViewData["Title"] = "批量导入";
+    var exams = ViewBag.ExamSchedules as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="mb-0"><i class="bi bi-upload me-2"></i>批量导入</h4>
+    </div>
+
+    @Html.AntiForgeryToken()
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card mb-3">
+                <div class="card-body">
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-6">
+                            <label class="form-label">选择考试 <span class="text-danger">*</span></label>
+                            <select id="examSelect" class="form-select" onchange="onExamChange()">
+                                <option value="">-- 请选择考试 --</option>
+                                @foreach (var exam in exams)
+                                {
+                                    <option value="@exam.Id" data-status="@exam.Status">@exam.Name（@exam.ExamType · @(((DateTime)exam.ExamDate).ToString("yyyy-MM-dd"))）</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">&nbsp;</label>
+                            <button id="downloadBtn" class="btn btn-outline-primary form-control" onclick="downloadTemplate()" disabled>
+                                <i class="bi bi-download me-1"></i>下载模板
+                            </button>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">&nbsp;</label>
+                            <button id="importBtn" class="btn btn-primary form-control" onclick="$('#fileInput').click()" disabled>
+                                <i class="bi bi-upload me-1"></i>上传文件
+                            </button>
+                        </div>
+                    </div>
+                    <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none;" onchange="uploadFile(this)" />
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header bg-white py-2">
+                    <i class="bi bi-info-circle me-1"></i>导入说明
+                </div>
+                <div class="card-body small">
+                    <ol class="mb-0 ps-3">
+                        <li>先选择考试安排</li>
+                        <li>下载导入模板</li>
+                        <li>在模板中填写分数</li>
+                        <li>上传填好的文件</li>
+                        <li>预览确认后保存</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="previewContainer" style="display:none;">
+        <div class="card">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center py-2">
+                <span class="fw-bold" id="previewTitle"><i class="bi bi-eye me-1"></i>导入预览</span>
+                <div>
+                    <span id="previewStats" class="text-muted me-2 small"></span>
+                    <button id="confirmBtn" class="btn btn-success btn-sm" onclick="confirmImport()">
+                        <i class="bi bi-check-lg me-1"></i>确认导入
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive" style="max-height:60vh;">
+                    <table class="table table-bordered table-hover mb-0" style="font-size:0.85rem;">
+                        <thead class="table-light" id="previewHeader"></thead>
+                        <tbody id="previewBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        let currentExamId = 0;
+        let previewData = null;
+
+        function onExamChange() {
+            currentExamId = parseInt($('#examSelect').val() || 0);
+            var status = $('#examSelect option:selected').data('status');
+            var isActive = (status === '进行中');
+            $('#downloadBtn').prop('disabled', !currentExamId || !isActive);
+            $('#importBtn').prop('disabled', !currentExamId || !isActive);
+            $('#previewContainer').hide();
+            previewData = null;
+
+            if (currentExamId && !isActive) {
+                $('#downloadBtn').after('<small id="statusWarn" class="text-danger d-block mt-1">⚠️ 仅「进行中」的考试可以导入成绩</small>');
+            } else {
+                $('#statusWarn').remove();
+            }
+        }
+
+        function downloadTemplate() {
+            if (!currentExamId) { alert('请先选择考试'); return; }
+            var url = '@Url.Action("DownloadTemplate")?examScheduleId=' + currentExamId;
+            var btn = $('#downloadBtn');
+            btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>下载中...');
+            fetch(url).then(function(r) {
+                if (!r.ok) { alert('下载失败: ' + r.status); btn.prop('disabled', false).html('<i class="bi bi-download me-1"></i>下载模板'); return; }
+                r.blob().then(function(blob) {
+                    var a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    var disposition = r.headers.get('Content-Disposition') || '';
+                    var match = disposition.match(/filename="?(.+?)"?$/);
+                    a.download = match ? match[1] : '导入模板.xlsx';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(a.href);
+                    btn.prop('disabled', false).html('<i class="bi bi-download me-1"></i>下载模板');
+                });
+            }).catch(function() {
+                alert('下载失败，请重试');
+                btn.prop('disabled', false).html('<i class="bi bi-download me-1"></i>下载模板');
+            });
+        }
+
+        function uploadFile(input) {
+            if (!currentExamId) { alert('请先选择考试'); return; }
+            if (!input.files || !input.files[0]) return;
+
+            var formData = new FormData();
+            formData.append('excelFile', input.files[0]);
+            formData.append('examScheduleId', currentExamId);
+
+            $('#previewContainer').hide();
+            $('#confirmBtn').prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>解析中...');
+
+            $.ajax({
+                url: '@Url.Action("ImportPreview")',
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function (res) {
+                    if (!res.success) {
+                        alert(res.message);
+                        return;
+                    }
+                    previewData = res;
+                    renderPreview(res);
+                    $('#previewContainer').show();
+                },
+                error: function (xhr) {
+                    var msg = '解析失败';
+                    try {
+                        var res = JSON.parse(xhr.responseText);
+                        if (res.message) msg = res.message;
+                    } catch(e) {
+                        msg = xhr.responseText || '请求失败 (HTTP ' + xhr.status + ')';
+                    }
+                    alert(msg);
+                },
+                complete: function () {
+                    $('#confirmBtn').prop('disabled', false).html('<i class="bi bi-check-lg me-1"></i>确认导入');
+                }
+            });
+
+            input.value = '';
+        }
+
+        function renderPreview(data) {
+            var examName = $('#examSelect option:selected').text();
+            $('#previewTitle').text('导入预览 · ' + examName);
+            $('#previewStats').text('共 ' + data.totalCount + ' 行，成功 ' + data.successCount + '，失败 ' + data.errorCount);
+
+            var subjects = [];
+            if (data.rows.length > 0 && data.rows[0].scores) {
+                data.rows[0].scores.forEach(function (s) {
+                    subjects.push(s.subjectName);
+                });
+            }
+
+            var headerHtml = '<th>序号</th><th>学号</th><th>姓名</th><th>年级</th><th>班级</th>';
+            subjects.forEach(function (sub) {
+                headerHtml += '<th class="text-center">' + sub + '</th>';
+            });
+            headerHtml += '<th>状态</th>';
+            $('#previewHeader').html(headerHtml);
+
+            var bodyHtml = '';
+            data.rows.forEach(function (row, idx) {
+                var hasError = row.error;
+                bodyHtml += '<tr class="' + (hasError ? 'table-danger' : '') + '">' +
+                    '<td>' + (idx + 1) + '</td>' +
+                    '<td>' + htmlEncode(row.studentNo) + '</td>' +
+                    '<td>' + htmlEncode(row.name) + '</td>' +
+                    '<td>' + htmlEncode(row.grade) + '</td>' +
+                    '<td>' + htmlEncode(row.className) + '</td>';
+
+                if (row.scores) {
+                    row.scores.forEach(function (sc) {
+                        var cls = sc.error ? 'text-danger' : '';
+                        bodyHtml += '<td class="text-center ' + cls + '">' +
+                            (sc.score != null ? sc.score : '-') +
+                            (sc.error ? '<br><small class="text-danger">' + sc.error + '</small>' : '') +
+                            '</td>';
+                    });
+                }
+
+                bodyHtml += '<td class="text-center">' +
+                    (hasError ? '<span class="text-danger">' + row.error + '</span>' : '<span class="text-success">✓</span>') +
+                    '</td></tr>';
+            });
+            $('#previewBody').html(bodyHtml);
+        }
+
+        function confirmImport() {
+            if (!previewData || !previewData.rows || previewData.rows.length === 0) {
+                alert('没有可导入的数据');
+                return;
+            }
+
+            if (previewData.errorCount > 0) {
+                if (!confirm('有 ' + previewData.errorCount + ' 行数据存在错误，确定要跳过错误行继续导入吗？')) {
+                    return;
+                }
+            }
+
+            var submitRows = [];
+            previewData.rows.forEach(function (row) {
+                if (row.error) return;
+                var scores = [];
+                if (row.scores) {
+                    row.scores.forEach(function (sc) {
+                        scores.push({
+                            subjectId: sc.subjectId,
+                            scoreValue: sc.score
+                        });
+                    });
+                }
+                submitRows.push({
+                    studentId: row.studentId,
+                    studentNo: row.studentNo,
+                    name: row.name,
+                    scores: scores
+                });
+            });
+
+            $('#confirmBtn').prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>导入中...');
+
+            $.ajax({
+                url: '@Url.Action("SaveImport")',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    examScheduleId: previewData.examScheduleId,
+                    rows: submitRows
+                }),
+                headers: { 'RequestVerificationToken': $('input[name="__RequestVerificationToken"]').val() },
+                success: function (res) {
+                    if (res.success) {
+                        alert('✅ ' + res.message);
+                        $('#previewContainer').hide();
+                        previewData = null;
+                    } else {
+                        alert(res.message);
+                    }
+                },
+                error: function (xhr) {
+                    var msg = '导入失败';
+                    try {
+                        var res = JSON.parse(xhr.responseText);
+                        if (res.message) msg = res.message;
+                    } catch(e) {
+                        msg = xhr.responseText || '请求失败 (HTTP ' + xhr.status + ')';
+                    }
+                    alert(msg);
+                },
+                complete: function () {
+                    $('#confirmBtn').prop('disabled', false).html('<i class="bi bi-check-lg me-1"></i>确认导入');
+                }
+            });
+        }
+
+        function htmlEncode(str) {
+            return $('<span>').text(str || '').html();
+        }
+    </script>
+}

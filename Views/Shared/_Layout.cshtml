@@ -1,0 +1,714 @@
+@using Microsoft.EntityFrameworkCore
+@using StudentManagerCore.Data
+@inject AppDbContext _db
+@{
+    var siteName = ViewBag.SiteName ?? "管理中心";
+    var copyright = ViewBag.Copyright ?? await _db.SiteConfigs
+        .Where(c => c.ConfigKey == "Copyright")
+        .Select(c => c.ConfigValue)
+        .FirstOrDefaultAsync() ?? "© 2026 管理中心";
+    var realName = User.FindFirst("RealName")?.Value ?? "";
+    var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
+    var isAdmin = role == "管理员";
+    var canViewGraduated = isAdmin || role == "教务主任" || role == "校长";
+    var canViewLogistics = isAdmin || role == "后勤主任";
+    var canSubmitRepair = !string.IsNullOrEmpty(role) && role != "后勤主任";
+    var canViewStudent = !string.IsNullOrEmpty(role) && role != "后勤主任";
+}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@siteName</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    @await RenderSectionAsync("Styles", required: false)
+</head>
+<body>
+    <!-- 顶部导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm">
+        <div class="container-fluid">
+            <a class="navbar-brand fw-bold" asp-controller="Home" asp-action="Index">
+                <i class="bi bi-mortarboard-fill me-2"></i>@siteName
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" asp-controller="Home" asp-action="Index">
+                            <i class="bi bi-house-door-fill me-1"></i>系统首页
+                        </a>
+                    </li>
+
+                    @if (canViewStudent)
+                    {
+                    <!-- 学生管理 -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-people-fill me-1"></i>学生管理
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" asp-controller="Student" asp-action="Index"><i class="bi bi-person-lines-fill me-2"></i>管理学生</a></li>
+                            @if (canViewGraduated)
+                            {
+                            <li><a class="dropdown-item" asp-controller="Student" asp-action="Index" asp-route-status="已毕业"><i class="bi bi-mortarboard me-2"></i>已毕业学生</a></li>
+                            }
+                            <li><a class="dropdown-item" asp-controller="Student" asp-action="Index" asp-route-status="已删除"><i class="bi bi-trash me-2"></i>已删除学生</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            @if (isAdmin)
+                            {
+                                <li><a class="dropdown-item" asp-controller="Grade" asp-action="Index"><i class="bi bi-diagram-3-fill me-2"></i>班级管理</a></li>
+                            }
+                        </ul>
+                    </li>
+                    }
+
+                    @if (isAdmin)
+                    {
+                        <!-- 教职工管理 -->
+                        <li class="nav-item">
+                            <a class="nav-link" asp-controller="Teacher" asp-action="Index">
+                                <i class="bi bi-person-badge-fill me-1"></i>教职工管理
+                            </a>
+                        </li>
+
+                        <!-- 问卷调查 -->
+                        <li class="nav-item">
+                            <a class="nav-link" asp-controller="Survey" asp-action="Index">
+                                <i class="bi bi-file-text-fill me-1"></i>问卷调查
+                            </a>
+                        </li>
+                    }
+
+                    <!-- 成绩管理（管理员） -->
+                    @if (isAdmin)
+                    {
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                                <i class="bi bi-bar-chart-line me-1"></i>成绩管理
+                            </a>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" asp-controller="Subject" asp-action="Index"><i class="bi bi-book me-2"></i>科目管理</a></li>
+                                <li><a class="dropdown-item" asp-controller="ExamSchedule" asp-action="Index"><i class="bi bi-calendar-event me-2"></i>考试安排</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" asp-controller="Score" asp-action="Entry"><i class="bi bi-pencil-square me-2"></i>成绩录入</a></li>
+                                <li><a class="dropdown-item" asp-controller="Score" asp-action="ScoreView"><i class="bi bi-search me-2"></i>成绩分析</a></li>
+                                <li><a class="dropdown-item" asp-controller="Score" asp-action="Import"><i class="bi bi-upload me-2"></i>批量导入</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="javascript:void(0)" id="aiSettingsMenuItem"><i class="bi bi-gear-wide-connected me-2"></i>AI设置</a></li>
+                            </ul>
+                        </li>
+                    }
+
+                    <!-- 后勤管理 -->
+                    @if (canViewLogistics || canSubmitRepair)
+                    {
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-tools me-1"></i>后勤管理
+                        </a>
+                        <ul class="dropdown-menu">
+                            @if (canSubmitRepair)
+                            {
+                                <li><a class="dropdown-item" asp-controller="Logistics" asp-action="Create"><i class="bi bi-plus-circle me-2"></i>申请维修</a></li>
+                                <li><a class="dropdown-item" asp-controller="Logistics" asp-action="MyRequests"><i class="bi bi-list-check me-2"></i>我的申报</a></li>
+                            }
+                            @if (canViewLogistics)
+                            {
+                                @if (canSubmitRepair) { <li><hr class="dropdown-divider"></li> }
+                                <li><a class="dropdown-item" asp-controller="Logistics" asp-action="Index"><i class="bi bi-card-checklist me-2"></i>维修清单</a></li>
+                            }
+                        </ul>
+                    </li>
+                    }
+
+                    <!-- 个人中心（所有登录用户可见） -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-person-circle me-1"></i>个人中心
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="javascript:void(0)" id="profileMenuLink"><i class="bi bi-person-vcard me-2"></i>个人信息</a></li>
+                            <li><a class="dropdown-item" href="javascript:void(0)" id="changePwdMenuLink"><i class="bi bi-key me-2"></i>修改密码</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            @if (isAdmin)
+                            {
+                                <li><a class="dropdown-item" asp-controller="AdminCenter" asp-action="Index"><i class="bi bi-gear-fill me-2"></i>管理员中心</a></li>
+                                <li><a class="dropdown-item" asp-controller="SiteSettings" asp-action="Index"><i class="bi bi-globe2 me-2"></i>网站管理</a></li>
+                                <li><a class="dropdown-item" asp-controller="Announce" asp-action="Index"><i class="bi bi-megaphone-fill me-2"></i>发布公告</a></li>
+                                <li><a class="dropdown-item" asp-action="OperationLogs" asp-controller="AdminCenter"><i class="bi bi-clock-history me-2"></i>操作日志</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" asp-controller="Semester" asp-action="Index"><i class="bi bi-calendar-range me-2"></i>学期/学年管理</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" asp-controller="Backup" asp-action="Index"><i class="bi bi-cloud-arrow-up me-2"></i>系统备份</a></li>
+                            }
+                        </ul>
+                    </li>
+                </ul>
+
+                <!-- 右侧：用户信息 -->
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <span class="nav-link text-light">
+                            <i class="bi bi-person-circle me-1"></i>@realName
+                            <span class="badge bg-secondary ms-1">@role</span>
+                        </span>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link text-danger" asp-controller="Account" asp-action="Logout">
+                            <i class="bi bi-box-arrow-right me-1"></i>退出
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主内容区域 -->
+    <div class="container-fluid p-4">
+        @if (TempData["Success"] != null)
+        {
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <i class="bi bi-check-circle-fill me-1"></i> @TempData["Success"]
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        }
+        @if (TempData["Error"] != null)
+        {
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <i class="bi bi-exclamation-triangle-fill me-1"></i> @TempData["Error"]
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        }
+
+        @RenderBody()
+    </div>
+
+    <!-- 页脚 -->
+    <footer class="border-top text-center text-muted py-3">
+        <small>@copyright</small>
+    </footer>
+
+    <!-- Hidden anti-forgery form for AJAX POST -->
+    <form id="antiforgery-form" method="post" style="display:none;">
+        @Html.AntiForgeryToken()
+    </form>
+
+    <!-- 全局确认弹窗 -->
+    <div class="modal fade" id="globalConfirmModal" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog modal-sm modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-body text-center py-4">
+                    <i class="bi bi-exclamation-triangle-fill text-warning fs-1 d-block mb-3"></i>
+                    <p class="fw-bold mb-0" id="globalConfirmMessage" style="font-size:1.05rem;"></p>
+                </div>
+                <div class="modal-footer border-0 justify-content-center pt-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-danger" id="globalConfirmBtn">确认</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 修改密码模态框 -->
+    <div class="modal fade" id="changePwdModal" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title"><i class="bi bi-key me-2"></i>修改密码</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">原密码 <span class="text-danger">*</span></label>
+                        <input type="password" id="cpOldPassword" class="form-control" placeholder="请输入当前密码" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">新密码 <span class="text-danger">*</span></label>
+                        <input type="password" id="cpNewPassword" class="form-control" placeholder="至少8位，包含字母和数字" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">确认新密码 <span class="text-danger">*</span></label>
+                        <input type="password" id="cpConfirmPassword" class="form-control" placeholder="再次输入新密码" />
+                    </div>
+                    <div id="cpError" class="alert alert-danger small py-1 mb-0" style="display:none;"></div>
+                    <div id="cpSuccess" class="alert alert-success small py-1 mb-0" style="display:none;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-warning" id="cpSaveBtn">
+                        <i class="bi bi-check-lg me-1"></i>确认修改
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="profileModal" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title"><i class="bi bi-person-vcard me-2"></i>个人信息</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="profileModalBody">
+                    <div class="text-center py-5">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <p class="mt-2 text-muted">加载中...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI设置模态框 -->
+    <div class="modal fade" id="aiSettingsModal" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title"><i class="bi bi-gear-wide-connected me-2"></i>AI成绩分析设置</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info small py-2 mb-3">
+                        <i class="bi bi-info-circle me-1"></i>配置云端AI服务后，可在成绩分析页面使用AI智能分析功能。
+                        <br>支持 OpenAI 兼容格式的 API（如 DeepSeek、通义千问、OpenAI 等）。
+                    </div>
+                    <form id="aiSettingsForm">
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">API接口地址 <span class="text-danger">*</span></label>
+                            <input type="url" class="form-control" id="aiApiUrl" placeholder="https://api.deepseek.com/v1" required />
+                            <div class="form-text">例如：https://api.deepseek.com/v1、https://api.openai.com/v1</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">API密钥 <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" id="aiApiKey" placeholder="sk-xxxxxxxxxxxxxxxx" />
+                                <button class="btn btn-outline-secondary" type="button" id="toggleApiKeyBtn">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">模型名称 <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="aiModelName" placeholder="deepseek-chat" required />
+                            <div class="form-text">DeepSeek: deepseek-chat / 通义千问: qwen-plus / OpenAI: gpt-4o-mini</div>
+                        </div>
+                        <div class="row g-3 mb-3">
+                            <div class="col-6">
+                                <label class="form-label small fw-bold">温度</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="aiTemperature" value="0.7" min="0" max="2" step="0.1" />
+                                    <span class="input-group-text">0~2</span>
+                                </div>
+                                <div class="form-text">越低越严谨，越高越有创造性</div>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small fw-bold">最大Token数</label>
+                                <input type="number" class="form-control" id="aiMaxTokens" value="2048" min="256" max="8192" step="1" />
+                                <div class="form-text">单次最多输出字符数</div>
+                            </div>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small fw-bold">超时时间（秒）</label>
+                            <input type="number" class="form-control" id="aiTimeout" value="60" min="10" max="300" step="1" />
+                        </div>
+                    </form>
+                    <!-- 测试结果 -->
+                    <div id="aiTestResult" class="mt-3 small" style="display:none;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-outline-info" id="aiSettingsTestBtn">
+                        <i class="bi bi-plug me-1"></i>测试连接
+                    </button>
+                    <button type="button" class="btn btn-primary" id="saveAiSettingsBtn">
+                        <i class="bi bi-check-lg me-1"></i>保存设置
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+
+    <!-- AI报告查看函数（全局可用） -->
+    <script>
+    function btnViewAiReport(studentId) {
+        var examId = document.getElementById('aiReportExamSelect');
+        if (!examId) return;
+        examId = examId.value;
+        if (!examId) { alert('请选择考试'); return; }
+        var empty = document.getElementById('aiReportEmpty');
+        var content = document.getElementById('aiReportContent');
+        var body = document.getElementById('aiReportBody');
+        var header = document.getElementById('aiReportHeader');
+        if (!body) return;
+        if (empty) empty.style.display = 'none';
+        if (content) content.style.display = 'none';
+        body.innerHTML = '<div class="text-center py-3"><div class="spinner-border text-success" role="status"></div><div class="mt-2 small text-muted">加载中...</div></div>';
+        if (content) content.style.display = 'block';
+        if (header) header.textContent = '';
+        var sp = new URLSearchParams();
+        sp.append('examScheduleId', examId);
+        sp.append('studentId', studentId);
+        fetch('@Url.Action("GetStudentAiReport", "Score")', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: sp
+        }).then(function (r) { return r.json(); }).then(function (res) {
+            if (!res.success || !res.exists) {
+                if (content) content.style.display = 'none';
+                var msg = res.message || '暂无AI分析报告';
+                if (res.debug) {
+                    msg += ' | 考试ID=' + res.debug.receivedExamScheduleId + ', 学生ID=' + res.debug.receivedStudentId;
+                    msg += ' | 该学生有 ' + res.debug.cachedReportCount + ' 份缓存: ';
+                    if (res.debug.cachedExams && res.debug.cachedExams.length > 0) {
+                        for (var i = 0; i < res.debug.cachedExams.length; i++) {
+                            msg += res.debug.cachedExams[i].examName + '(ID=' + res.debug.cachedExams[i].examId + ') ';
+                        }
+                    }
+                }
+                if (empty) { empty.textContent = msg; empty.style.display = 'block'; }
+                return;
+            }
+            if (header) header.textContent = '学生：' + res.studentName + ' | ' + (document.getElementById('aiReportExamSelect').options[document.getElementById('aiReportExamSelect').selectedIndex]?.text || '') + '（' + res.updatedAt + '生成）';
+            var html = (res.analysis || '')
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>')
+                .replace(/### (.*?)(?:<br>|$)/g, '<h6 class="mt-3 mb-2 text-primary">$1</h6>')
+                .replace(/## (.*?)(?:<br>|$)/g, '<h5 class="mt-3 mb-2 fw-bold">$1</h5>')
+                .replace(/- (.*?)(?:<br>|$)/g, '<li>$1</li>');
+            html = html.replace(/(<li>.*?<\/li>)/g, '<ul class="mb-2">$1</ul>');
+            html = html.replace(/<\/ul>\s*<ul class="mb-2">/g, '');
+            body.innerHTML = html;
+            if (content) content.style.display = 'block';
+        }).catch(function () {
+            body.innerHTML = '<div class="alert alert-danger mb-0">网络错误</div>';
+        });
+    }
+    </script>
+
+@if (User.Identity?.IsAuthenticated == true)
+{
+    <!-- 空闲超时自动退出：10分钟无操作自动登出 -->
+    <script>
+        (function() {
+            var IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10分钟
+            var idleTimer;
+
+            function resetIdleTimer() {
+                clearTimeout(idleTimer);
+                idleTimer = setTimeout(autoLogout, IDLE_TIMEOUT_MS);
+            }
+
+            function autoLogout() {
+                // 显示退出提示
+                var toast = document.createElement('div');
+                toast.style.cssText = 'position:fixed;top:20px;right:20px;z-index:9999;background:#fff3cd;color:#664d03;border:1px solid #ffecb5;border-radius:8px;padding:16px 24px;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.15);max-width:360px;';
+                toast.innerHTML = '<div style="font-weight:bold;margin-bottom:4px;">⏱️ 已超时自动退出</div>由于10分钟无操作，系统已自动安全退出。<br>正在跳转首页...';
+                document.body.appendChild(toast);
+
+                // 跳转到退出
+                setTimeout(function() {
+                    window.location.href = '@Url.Action("Logout", "Account")';
+                }, 1500);
+            }
+
+            // 初始化计时器
+            resetIdleTimer();
+
+            // 监听用户活动事件
+            var events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click', 'wheel'];
+            events.forEach(function(evt) {
+                document.addEventListener(evt, resetIdleTimer, { passive: true });
+            });
+        })();
+    </script>
+}
+
+<script>
+    // 个人信息 - 模态框加载
+    var profileModal = document.getElementById('profileModal');
+    if (profileModal) {
+        var profileModalObj = new bootstrap.Modal(profileModal);
+
+        document.getElementById('profileMenuLink')?.addEventListener('click', function() {
+            var body = document.getElementById('profileModalBody');
+            body.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary" role="status"></div><p class="mt-2 text-muted">加载中...</p></div>';
+            profileModalObj.show();
+
+            fetch('/AdminCenter/Profile', {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(function(r) { return r.text(); })
+            .then(function(html) {
+                body.innerHTML = html;
+                // 绑定表单提交
+                var form = document.getElementById('profileForm');
+                if (form) {
+                    form.addEventListener('submit', function(e) {
+                        e.preventDefault();
+                        var btn = form.querySelector('button[type="submit"]');
+                        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 保存中...'; }
+                        fetch(form.action, {
+                            method: 'POST',
+                            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                            body: new FormData(form)
+                        })
+                        .then(function(r) { return r.json(); })
+                        .then(function(res) {
+                            if (res.success) {
+                                alert('保存成功！');
+                                profileModalObj.hide();
+                            } else {
+                                alert(res.message || '保存失败，请重试');
+                                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>保存修改'; }
+                            }
+                        })
+                        .catch(function() {
+                            alert('网络错误，请重试');
+                            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>保存修改'; }
+                        });
+                    });
+                }
+            })
+            .catch(function() {
+                body.innerHTML = '<div class="text-center py-5 text-danger"><i class="bi bi-exclamation-triangle-fill fs-1 d-block mb-2"></i><p>加载失败</p></div>';
+            });
+        });
+    }
+</script>
+
+<script>
+    // 修改密码 - 模态框
+    var changePwdModal = document.getElementById('changePwdModal');
+    if (changePwdModal) {
+        var changePwdModalObj = new bootstrap.Modal(changePwdModal);
+
+        document.getElementById('changePwdMenuLink')?.addEventListener('click', function() {
+            $('#cpError, #cpSuccess').hide();
+            $('#cpOldPassword, #cpNewPassword, #cpConfirmPassword').val('');
+            changePwdModalObj.show();
+        });
+
+        document.getElementById('cpSaveBtn')?.addEventListener('click', function() {
+            var oldPwd = $('#cpOldPassword').val();
+            var newPwd = $('#cpNewPassword').val();
+            var confirmPwd = $('#cpConfirmPassword').val();
+            var $error = $('#cpError').hide();
+            var $success = $('#cpSuccess').hide();
+
+            if (!oldPwd) { $error.text('请输入原密码').show(); return; }
+            if (!newPwd || newPwd.length < 8) { $error.text('新密码至少8位，需包含字母和数字').show(); return; }
+            if (!/[a-zA-Z]/.test(newPwd)) { $error.text('新密码必须包含字母').show(); return; }
+            if (!/[0-9]/.test(newPwd)) { $error.text('新密码必须包含数字').show(); return; }
+            if (newPwd !== confirmPwd) { $error.text('两次密码输入不一致').show(); return; }
+
+            var btn = this;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 保存中...';
+
+            $.post('/AdminCenter/ChangePassword', {
+                oldPassword: oldPwd,
+                newPassword: newPwd,
+                __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').first().val()
+            }).done(function(res) {
+                if (res.success) {
+                    $('#cpOldPassword, #cpNewPassword, #cpConfirmPassword').val('');
+                    $success.text(res.message).show();
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>确认修改';
+                    setTimeout(function() { changePwdModalObj.hide(); }, 1500);
+                } else {
+                    $error.text(res.message).show();
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>确认修改';
+                }
+            }).fail(function() {
+                $error.text('请求失败，请重试').show();
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>确认修改';
+            });
+        });
+
+        // 关闭时重置
+        changePwdModal.addEventListener('hidden.bs.modal', function() {
+            $('#cpOldPassword, #cpNewPassword, #cpConfirmPassword').val('');
+            $('#cpError, #cpSuccess').hide();
+            var btn = document.getElementById('cpSaveBtn');
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>确认修改'; }
+        });
+    }
+</script>
+
+<!-- AI设置功能 -->
+<script>
+    (function() {
+        var aiModal = document.getElementById('aiSettingsModal');
+        if (!aiModal) return;
+        var aiModalObj = new bootstrap.Modal(aiModal);
+
+        // 菜单点击 → 加载设置 → 打开模态框
+        document.getElementById('aiSettingsMenuItem')?.addEventListener('click', function() {
+            // 先加载当前设置
+            fetch('/Score/GetAiSettings', {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(res) {
+                if (res.success) {
+                    document.getElementById('aiApiUrl').value = res.apiUrl || '';
+                    if (res.hasKey) {
+                        document.getElementById('aiApiKey').placeholder = '已配置（留空则不修改）';
+                        document.getElementById('aiApiKey').value = '';
+                        document.getElementById('aiSettingsTestBtn')?.setAttribute('data-haskey', '1');
+                        document.getElementById('saveAiSettingsBtn')?.setAttribute('data-haskey', '1');
+                    } else {
+                        document.getElementById('aiApiKey').placeholder = 'sk-xxxxxxxxxxxxxxxx';
+                        document.getElementById('aiApiKey').value = '';
+                        document.getElementById('aiSettingsTestBtn')?.removeAttribute('data-haskey');
+                        document.getElementById('saveAiSettingsBtn')?.removeAttribute('data-haskey');
+                    }
+                    document.getElementById('aiModelName').value = res.modelName || '';
+                    document.getElementById('aiTemperature').value = res.temperature || 0.7;
+                    document.getElementById('aiMaxTokens').value = res.maxTokens || 2048;
+                    document.getElementById('aiTimeout').value = res.timeout || 60;
+                }
+                aiModalObj.show();
+            })
+            .catch(function() {
+                aiModalObj.show();
+            });
+        });
+
+        // 切换API密钥显示/隐藏
+        document.getElementById('toggleApiKeyBtn')?.addEventListener('click', function() {
+            var input = document.getElementById('aiApiKey');
+            if (!input) return;
+            var icon = this.querySelector('i');
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.className = 'bi bi-eye-slash';
+            } else {
+                input.type = 'password';
+                icon.className = 'bi bi-eye';
+            }
+        });
+
+        // 测试连接
+        document.getElementById('aiSettingsTestBtn')?.addEventListener('click', function() {
+            var btn = this;
+            var apiUrl = document.getElementById('aiApiUrl').value.trim();
+            var apiKey = document.getElementById('aiApiKey').value.trim();
+            var modelName = document.getElementById('aiModelName').value.trim();
+            var temperature = document.getElementById('aiTemperature').value || '0.7';
+            var maxTokens = document.getElementById('aiMaxTokens').value || '2048';
+            var timeout = document.getElementById('aiTimeout').value || '60';
+
+            if (!apiUrl) { alert('请输入API接口地址'); return; }
+            if (!apiKey && !this.getAttribute('data-haskey')) { alert('请输入API密钥'); return; }
+            if (!modelName) { alert('请输入模型名称'); return; }
+
+            var resultEl = document.getElementById('aiTestResult');
+            resultEl.style.display = 'block';
+            resultEl.className = 'mt-3 small alert alert-info py-2';
+            resultEl.innerHTML = '<div class="spinner-border spinner-border-sm me-2"></div>正在测试连接...';
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>测试中...';
+
+            var formData = new FormData();
+            formData.append('apiUrl', apiUrl);
+            formData.append('apiKey', apiKey);
+            formData.append('modelName', modelName);
+            formData.append('temperature', temperature);
+            formData.append('maxTokens', maxTokens);
+            formData.append('timeout', timeout);
+
+            var tokenInput = document.querySelector('#antiforgery-form input[name="__RequestVerificationToken"]');
+            if (tokenInput) formData.append('__RequestVerificationToken', tokenInput.value);
+
+            fetch('/Score/TestAi', {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                body: formData
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(res) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-plug me-1"></i>测试连接';
+                if (res.success) {
+                    resultEl.className = 'mt-3 small alert alert-success py-2';
+                    resultEl.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i>' + (res.message || '连接成功');
+                } else {
+                    resultEl.className = 'mt-3 small alert alert-danger py-2';
+                    resultEl.innerHTML = '<i class="bi bi-x-circle-fill me-1"></i>' + (res.message || '连接失败');
+                }
+            })
+            .catch(function() {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-plug me-1"></i>测试连接';
+                resultEl.className = 'mt-3 small alert alert-danger py-2';
+                resultEl.innerHTML = '<i class="bi bi-x-circle-fill me-1"></i>网络错误，请求失败';
+            });
+        });
+
+        // 保存设置
+        document.getElementById('saveAiSettingsBtn')?.addEventListener('click', function() {
+            var btn = this;
+            var apiUrl = document.getElementById('aiApiUrl').value.trim();
+            var apiKey = document.getElementById('aiApiKey').value.trim();
+            var modelName = document.getElementById('aiModelName').value.trim();
+
+            if (!apiUrl) { alert('请输入API接口地址'); return; }
+            if (!modelName) { alert('请输入模型名称'); return; }
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>保存中...';
+
+            var formData = new FormData();
+            formData.append('apiUrl', apiUrl);
+            formData.append('apiKey', apiKey);
+            formData.append('modelName', modelName);
+            formData.append('temperature', document.getElementById('aiTemperature').value || '0.7');
+            formData.append('maxTokens', document.getElementById('aiMaxTokens').value || '2048');
+            formData.append('timeout', document.getElementById('aiTimeout').value || '60');
+
+            // 添加防伪令牌
+            var tokenInput = document.querySelector('#antiforgery-form input[name="__RequestVerificationToken"]');
+            if (tokenInput) formData.append('__RequestVerificationToken', tokenInput.value);
+
+            fetch('/Score/SaveAiSettings', {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                body: formData
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(res) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>保存设置';
+                if (res.success) {
+                    alert('AI设置保存成功！');
+                    aiModalObj.hide();
+                } else {
+                    alert(res.message || '保存失败，请重试');
+                }
+            })
+            .catch(function() {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>保存设置';
+                alert('网络错误，请重试');
+            });
+        });
+    })();
+</script>
+
+</body>
+</html>

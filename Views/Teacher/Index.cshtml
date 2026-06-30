@@ -1,0 +1,1110 @@
+@model IEnumerable<Admin>
+@{
+    ViewData["Title"] = "教职工管理";
+    var keyword = ViewBag.Keyword as string;
+    var page = ViewBag.CurrentPage as int? ?? 1;
+    var totalPages = ViewBag.TotalPages as int? ?? 1;
+    var total = ViewBag.Total as int? ?? 0;
+    var status = ViewBag.CurrentStatus as string ?? "正常";
+    var isDeletedView = status == "已删除";
+    var filterRole = ViewBag.FilterRole as string;
+}
+
+<style>
+    .col-hide { display: none; }
+    .bg-purple { background-color: #6f42c1 !important; color: #fff !important; }
+</style>
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <div class="d-flex align-items-center gap-2">
+        <h4 class="mb-0">
+            <i class="bi bi-person-badge-fill me-2"></i>教职工管理
+            @if (isDeletedView)
+            {
+                <span class="badge bg-danger ms-2">已删除</span>
+            }
+            <span class="badge bg-secondary ms-2">共 @total 人</span>
+        </h4>
+        @if (!isDeletedView)
+        {
+            <a href="javascript:void(0)" class="btn btn-primary btn-sm" id="btnAddTeacher">
+                <i class="bi bi-person-plus-fill me-1"></i> 添加教职工
+            </a>
+            <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#importTeacherModal">
+                <i class="bi bi-upload me-1"></i> 导入教职工
+            </button>
+            <a asp-action="Index" asp-controller="Subject" class="btn btn-outline-info btn-sm">
+                <i class="bi bi-book me-1"></i> 科目管理
+            </a>
+        }
+        <a asp-action="TeacherPermissions" asp-controller="AdminCenter" class="btn btn-outline-warning btn-sm">
+            <i class="bi bi-shield-lock me-1"></i> 权限管理
+        </a>
+    </div>
+</div>
+
+<!-- 状态切换 -->
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <a class="nav-link @(!isDeletedView ? "active" : "")" asp-action="Index" asp-route-status="">在职教职工</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link @(isDeletedView ? "active" : "")" asp-action="Index" asp-route-status="已删除">已删除教职工</a>
+    </li>
+</ul>
+
+<!-- 统计卡片 -->
+@if (!isDeletedView)
+{
+    <div class="row g-2 mb-3">
+        <div class="col-md-3 col-6">
+            <div class="card border-primary h-100 text-center py-2">
+                <div class="card-body p-2">
+                    <h5 class="mb-0 text-primary">@ViewBag.TotalTeachers</h5>
+                    <small class="text-muted">在职教职工</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card border-info h-100 text-center py-2">
+                <div class="card-body p-2">
+                    <h5 class="mb-0 text-info">@ViewBag.HeadCount</h5>
+                    <small class="text-muted"><i class="bi bi-person-check me-1"></i>班主任</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card border-success h-100 text-center py-2">
+                <div class="card-body p-2">
+                    <h5 class="mb-0 text-success">@ViewBag.SubjectCount</h5>
+                    <small class="text-muted"><i class="bi bi-person me-1"></i>科任教师</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card border-purple h-100 text-center py-2" style="border-color:#6f42c1;">
+                <div class="card-body p-2">
+                    <h5 class="mb-0" style="color:#6f42c1;">@ViewBag.GradeLeaderCount</h5>
+                    <small class="text-muted"><i class="bi bi-people me-1"></i>年级级长</small>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- 搜索 -->
+<form method="get" class="row g-2 mb-3">
+    <input type="hidden" name="status" value="@status" />
+    <div class="col-auto">
+        <input type="text" name="keyword" class="form-control form-control-sm" placeholder="搜索姓名/用户名/班级..." value="@keyword" />
+    </div>
+    @if (!isDeletedView)
+    {
+        <div class="col-auto">
+            <select name="role" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">全部角色</option>
+                <option value="班主任" selected="@(filterRole == "班主任")">班主任</option>
+                <option value="科任教师" selected="@(filterRole == "科任教师")">科任教师</option>
+                <option value="年级级长" selected="@(filterRole == "年级级长")">年级级长</option>
+                <option value="教务主任" selected="@(filterRole == "教务主任")">教务主任</option>
+                <option value="校长" selected="@(filterRole == "校长")">校长</option>
+                <option value="后勤主任" selected="@(filterRole == "后勤主任")">后勤主任</option>
+            </select>
+        </div>
+    }
+    <div class="col-auto">
+        <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-search me-1"></i>搜索</button>
+        @if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            <a asp-action="Index" asp-route-status="@status" class="btn btn-outline-secondary btn-sm"><i class="bi bi-x-lg me-1"></i>清除</a>
+        }
+    </div>
+</form>
+
+<!-- 批量操作工具栏 -->
+<div id="batchToolbar" class="mb-2 d-none">
+    <div class="d-flex align-items-center gap-2">
+        <span class="small text-muted" id="selectedCount">已选择 0 人</span>
+        @if (!isDeletedView)
+        {
+            <button type="button" class="btn btn-outline-danger btn-sm" id="btnBatchDelete"><i class="bi bi-trash me-1"></i>批量删除</button>
+        }
+        @if (isDeletedView)
+        {
+            <button type="button" class="btn btn-outline-success btn-sm" id="btnBatchRestore"><i class="bi bi-arrow-repeat me-1"></i>批量恢复</button>
+            <button type="button" class="btn btn-outline-danger btn-sm" id="btnBatchHardDelete"><i class="bi bi-trash3 me-1"></i>批量彻底删除</button>
+        }
+    </div>
+</div>
+
+<!-- 班主任列表 -->
+<div class="table-responsive">
+    <table class="table table-hover table-bordered align-middle" id="teacherTable">
+        <thead class="table-light">
+            <tr>
+                <th style="width:40px;"><input type="checkbox" id="selectAll" /></th>
+                <th>序号</th>
+                <th>用户名</th>
+                <th>姓名</th>
+                <th>性别</th>
+                <th class="col-hide">民族</th>
+                <th class="col-hide">出生日期</th>
+                <th class="col-hide">户口所在地</th>
+                <th class="col-hide">最高学历</th>
+                <th class="col-hide">教师资格证科目</th>
+                <th class="col-hide">教师资格证号</th>
+                <th class="col-hide">所属教育局</th>
+                <th>学段</th>
+                <th>任教科目</th>
+                <th>角色</th>
+                <th>电话</th>
+                <th>年级</th>
+                <th>班级</th>
+                <th>创建时间</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (Model != null && Model.Any())
+            {
+                int i = (page - 1) * 20 + 1;
+                foreach (var teacher in Model)
+                {
+                    <tr data-id="@teacher.AdminID">
+                        <td><input type="checkbox" class="teacher-checkbox" value="@teacher.AdminID" /></td>
+                        <td>@(i++)</td>
+                        <td>@teacher.Username</td>
+                        <td><strong>@teacher.RealName</strong></td>
+                        <td>@teacher.Gender</td>
+                        <td class="col-hide">@teacher.Nation</td>
+                        <td class="col-hide">@teacher.BirthDate?.ToString("yyyy-MM-dd")</td>
+                        <td class="col-hide">@teacher.RegisteredDomicile</td>
+                        <td class="col-hide">@teacher.HighestEducation</td>
+                        <td class="col-hide">@teacher.CertSubject</td>
+                        <td class="col-hide">@teacher.CertNumber</td>
+                        <td class="col-hide">@teacher.CertAuthority</td>
+                        <td>
+                            @if (teacher.SchoolType == "小学")
+                            {
+                                <span class="badge bg-info">小学</span>
+                            }
+                            else if (teacher.SchoolType == "初中")
+                            {
+                                <span class="badge bg-warning text-dark">初中</span>
+                            }
+                        </td>
+                        <td style="max-width:200px;white-space:normal;word-break:break-all;">
+                            @{
+                                var subjects = ViewBag.TeacherSubjects as Dictionary<int, string>;
+                                var subjStr = subjects?.ContainsKey(teacher.AdminID) == true ? subjects[teacher.AdminID] : "";
+                            }
+                            @if (!string.IsNullOrEmpty(subjStr))
+                            {
+                                <span class="small">@subjStr</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted small">未设置</span>
+                            }
+                        </td>
+                        <td>
+                            @{
+                                var roleList = teacher.RoleList;
+                                var roleBadgeMap = new Dictionary<string, string>
+                                {
+                                    {"班主任", "bg-primary"},
+                                    {"科任教师", "bg-success"},
+                                    {"年级级长", "bg-purple"},
+                                    {"教务主任", "bg-warning text-dark"},
+                                    {"校长", "bg-danger"},
+                                    {"后勤主任", "bg-secondary"}
+                                };
+                            }
+                            @foreach (var r in roleList)
+                            {
+                                var cls = roleBadgeMap.ContainsKey(r) ? roleBadgeMap[r] : "bg-secondary";
+                                <span class="badge @cls me-1">@r</span>
+                            }
+                        </td>
+                        <td>@teacher.Phone</td>
+                        <td>@teacher.Grade</td>
+                        <td>@teacher.ClassName</td>
+                        <td>@teacher.CreateTime?.ToString("yyyy-MM-dd HH:mm")</td>
+                    </tr>
+                }
+            }
+            else
+            {
+                <tr>
+                    <td colspan="18" class="text-center text-muted py-4">暂无教职工数据</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<!-- 分页 -->
+@if (totalPages > 1)
+{
+    <nav>
+        <ul class="pagination pagination-sm justify-content-center">
+            <li class="page-item @(page <= 1 ? "disabled" : "")">
+                <a class="page-link" asp-route-page="@(page - 1)" asp-route-keyword="@keyword" asp-route-status="@(isDeletedView ? "已删除" : null)">上一页</a>
+            </li>
+            @for (int p = 1; p <= totalPages; p++)
+            {
+                <li class="page-item @(p == page ? "active" : "")">
+                    <a class="page-link" asp-route-page="@p" asp-route-keyword="@keyword" asp-route-status="@(isDeletedView ? "已删除" : null)">@p</a>
+                </li>
+            }
+            <li class="page-item @(page >= totalPages ? "disabled" : "")">
+                <a class="page-link" asp-route-page="@(page + 1)" asp-route-keyword="@keyword" asp-route-status="@(isDeletedView ? "已删除" : null)">下一页</a>
+            </li>
+        </ul>
+    </nav>
+}
+
+<!-- 导入教职工 Modal -->
+@Html.AntiForgeryToken()
+<div class="modal fade" id="importTeacherModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-upload me-1"></i>导入教职工</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <a href="@Url.Action("DownloadTemplate", "Teacher")" class="btn btn-outline-success btn-sm">
+                        <i class="bi bi-file-earmark-excel me-1"></i>下载导入模板
+                    </a>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">选择 Excel 文件（.xlsx）</label>
+                    <input type="file" id="teacherFileInput" class="form-control" accept=".xlsx" />
+                </div>
+                <div class="alert alert-info small p-2 mb-2">
+                    <i class="bi bi-info-circle me-1"></i>第 1 行必须是表头，从第 2 行开始导入。用户名为空或已存在的行会自动跳过。
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-bordered table-sm small mb-0">
+                        <thead class="table-secondary">
+                            <tr><th>列</th><th>字段</th><th>说明</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>A</td><td>用户名</td><td>必填，登录账号</td></tr>
+                            <tr><td>B</td><td>密码</td><td>必填</td></tr>
+                            <tr><td>C</td><td>姓名</td><td>必填</td></tr>
+                            <tr><td>D</td><td>性别</td><td>男/女</td></tr>
+                            <tr><td>E</td><td>民族</td><td>如：汉族</td></tr>
+                            <tr><td>F</td><td>出生日期</td><td>格式：2025-01-01</td></tr>
+                            <tr><td>G</td><td>户口所在地</td><td></td></tr>
+                            <tr><td>H</td><td>最高学历</td><td>中专/大专/本科/硕士/博士</td></tr>
+                            <tr><td>I</td><td>教师资格证科目</td><td>如：小学语文</td></tr>
+                            <tr><td>J</td><td>教师资格证号</td><td></td></tr>
+                            <tr><td>K</td><td>教师资格所属教育局</td><td></td></tr>
+                            <tr><td>L</td><td>手机号</td><td></td></tr>
+                            <tr><td>M</td><td>学段</td><td>小学/初中</td></tr>
+                            <tr><td>N</td><td>角色</td><td>班主任/科任教师/年级级长/教务主任/校长</td></tr>
+                            <tr><td>O</td><td>年级</td><td>如：小学2026级（仅班主任填写）</td></tr>
+                            <tr><td>P</td><td>班级</td><td>如：1班（仅班主任填写）</td></tr>
+                            <tr><td>Q</td><td>职务</td><td>如：班主任</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div id="teacherImportProgress" class="mt-2" style="display:none;">
+                    <div class="progress">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" id="teacherProgressBar" style="width:0%"></div>
+                    </div>
+                    <div id="teacherImportResult" class="mt-2"></div>
+                </div>
+            </div>
+           <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-success" id="btnImportTeachers">开始导入</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 添加教职工 Modal -->
+<div class="modal fade" id="addModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-person-plus-fill me-2"></i>添加教职工</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="addModalBody">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2 text-muted">加载中...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑班主任 Modal -->
+<div class="modal fade" id="editModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-pencil me-2"></i>编辑教职工</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="editModalBody">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2 text-muted">加载中...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========== 右键菜单 ========== -->
+<div id="contextMenu" class="dropdown-menu" style="position:fixed;z-index:9999;display:none;min-width:150px;">
+    @if (isDeletedView)
+    {
+        <a class="dropdown-item" id="restoreMenuItem" href="#">
+            <i class="bi bi-arrow-counterclockwise me-1"></i>恢复
+        </a>
+        <div class="dropdown-divider"></div>
+        <a class="dropdown-item text-danger" id="permanentDeleteMenuItem" href="#">
+            <i class="bi bi-trash3-fill me-1"></i>彻底删除
+        </a>
+    }
+    else
+    {
+        <a class="dropdown-item" id="editMenuItem" href="#">
+            <i class="bi bi-pencil me-1"></i>编辑
+        </a>
+        <div class="dropdown-divider"></div>
+        <a class="dropdown-item" id="changePasswordMenuItem" href="#">
+            <i class="bi bi-key me-1"></i>修改密码
+        </a>
+        <div class="dropdown-divider"></div>
+        <a class="dropdown-item text-danger" id="deleteMenuItem" href="#">
+            <i class="bi bi-trash me-1"></i>删除
+        </a>
+    }
+</div>
+
+<!-- ========== 修改密码 Modal ========== -->
+<div class="modal fade" id="changePasswordModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-key me-2"></i>修改密码</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="changePasswordTeacherId" value="" />
+                <div class="mb-3">
+                    <label class="form-label fw-bold">教职工</label>
+                    <p class="form-control-plaintext" id="changePasswordTeacherName"></p>
+                </div>
+                <div class="mb-3">
+                    <label for="newPasswordInput" class="form-label fw-bold">新密码 <span class="text-danger">*</span></label>
+                    <input type="password" id="newPasswordInput" class="form-control" placeholder="至少8位，包含字母和数字" />
+                </div>
+                <div class="mb-3">
+                    <label for="confirmPasswordInput" class="form-label fw-bold">确认密码 <span class="text-danger">*</span></label>
+                    <input type="password" id="confirmPasswordInput" class="form-control" placeholder="再次输入新密码" />
+                </div>
+                <div id="changePasswordError" class="alert alert-danger small py-1 mb-0" style="display:none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="btnSavePassword">
+                    <i class="bi bi-check-lg me-1"></i>保存
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // 添加教职工
+        $('#btnAddTeacher').on('click', function () {
+            var modal = new bootstrap.Modal(document.getElementById('addModal'));
+            modal.show();
+
+            $.get('/Teacher/Add')
+                .done(function (html) {
+                    // 用临时 div 解析完整 HTML，提取表单
+                    var $wrapper = $('<div>').html(html);
+                    var form = $wrapper.find('form').first();
+                    if (form.length === 0) {
+                        $('#addModalBody').html('<div class="alert alert-danger">加载失败：未找到表单</div>');
+                        return;
+                    }
+                    // 直接用表单所在卡片体的内容
+                    var cardBody = form.closest('.card-body');
+                    if (cardBody.length > 0) {
+                        $('#addModalBody').html(cardBody.html());
+                    } else {
+                        $('#addModalBody').html(form);
+                    }
+
+                    // AJAX 提交
+                    $('#addModalBody form').off('submit').on('submit', function (e) {
+                        e.preventDefault();
+                        syncAddModalRole();
+                        if ($('#addModalBody .add-role-cb:checked').length === 0) {
+                            alert('请至少选择一个角色');
+                            return;
+                        }
+                        var btn = $(this).find('button[type="submit"]');
+                        btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> 提交中...');
+
+                        $.post('/Teacher/Add', $(this).serialize())
+                            .done(function (res) {
+                                if (res.success) {
+                                    // 保存所教科目
+                                    var subjectIds = [];
+                                    $('.add-subject-cb:checked').each(function() { subjectIds.push($(this).val()); });
+                                    if (subjectIds.length > 0) {
+                                        var token = $('input[name="__RequestVerificationToken"]').val();
+                                        var schoolType = $('#addModalBody select[name="SchoolType"]').val() || '';
+                                        $.ajax({
+                                            url: '/Teacher/SaveTeacherSubjects?adminId=' + res.adminId + '&schoolType=' + encodeURIComponent(schoolType),
+                                            method: 'POST',
+                                            contentType: 'application/json',
+                                            data: JSON.stringify(subjectIds),
+                                            headers: { 'RequestVerificationToken': token }
+                                        });
+                                    }
+                                    modal.hide();
+                                    location.reload();
+                                } else {
+                                    alert(res.message || '提交失败');
+                                    btn.prop('disabled', false).text('保存');
+                                }
+                            })
+                            .fail(function (xhr) {
+                                alert('提交失败，请重试');
+                                btn.prop('disabled', false).text('保存');
+                            });
+                    });
+
+                    // 初始化角色下拉多选联动
+                    function syncAddModalRole() {
+                        var checked = $('#addModalBody .add-role-cb:checked');
+                        var roles = checked.map(function() { return $(this).val(); }).get();
+                        $('#addModalBody #addRoleHidden').val(roles.join(','));
+                        if (roles.length > 0) {
+                            $('#addModalBody #addRoleDisplay').text('已选 ' + roles.length + ' 个角色').removeClass('text-muted');
+                        } else {
+                            $('#addModalBody #addRoleDisplay').text('请选择角色（可多选）').addClass('text-muted');
+                        }
+                        if (roles.indexOf('班主任') >= 0) {
+                            $('#addModalBody #addGradeGroup, #addModalBody #addClassGroup').show();
+                            loadAddClassData();
+                        } else {
+                            $('#addModalBody #addGradeGroup, #addModalBody #addClassGroup').hide();
+                        }
+                    }
+                    $('#addModalBody').on('change', '.add-role-cb', syncAddModalRole);
+                    syncAddModalRole();
+
+                    // 添加弹窗：学段联动年级 + 加载科目
+                    var $addSchoolType = $('#addModalBody select[name="SchoolType"]');
+                    $addSchoolType.on('change', function() {
+                        var type = $(this).val();
+                        var $gradeSel = $('#addModalBody #addGradeSelect');
+                        $gradeSel.val('');
+                        $gradeSel.find('option').each(function() {
+                            if (!$(this).val()) return;
+                            var st = $(this).data('schooltype');
+                            $(this).toggle(!type || st === type);
+                        });
+                        $('#addModalBody #addClassSelect').html('<option value="">-- 请先选择年级 --</option>');
+                        // 加载科目（带年级筛选）
+                        loadAddSubjects(type, '');
+                    });
+
+                    // 添加弹窗：年级联动班级 + 刷新科目
+                    $(document).on('change', '#addModalBody #addGradeSelect', function() {
+                        loadAddClassData();
+                        var grade = $(this).val();
+                        var type = $('#addModalBody select[name="SchoolType"]').val();
+                        if (type) loadAddSubjects(type, grade || '');
+                    });
+                    function loadAddClassData() {
+                        var gradeName = $('#addModalBody #addGradeSelect').val();
+                        var schoolType = $('#addModalBody select[name="SchoolType"]').val();
+                        var $sel = $('#addModalBody #addClassSelect');
+                        if (gradeName && schoolType) {
+                            $sel.html('<option value="">加载中...</option>');
+                            $.get('@Url.Action("GetClassesByGrade", "Teacher")', { schoolType: schoolType, gradeName: gradeName }, function(data) {
+                                var html = '<option value="">-- 请选择班级 --</option>';
+                                data.forEach(function(c) { html += '<option value="' + c.name + '">' + c.name + '</option>'; });
+                                $sel.html(html);
+                            });
+                        } else {
+                            $sel.html('<option value="">-- 请先选择年级 --</option>');
+                        }
+                    }
+                    // 添加弹窗：按学段+年级加载科目
+                    function loadAddSubjects(type, grade) {
+                        var $group = $('#addSubjectGroup');
+                        var $list = $('#addSubjectCheckList');
+                        if (!type) { $group.hide(); return; }
+                        $group.show();
+                        $list.html('<span class="text-muted small"><span class="spinner-border spinner-border-sm"></span> 加载科目...</span>');
+                        $.get('@Url.Action("GetSubjectsByType", "Teacher")', { type: type, grade: grade || '' }, function(data) {
+                            if (data.length === 0) {
+                                $list.html('<span class="text-muted small">暂无可用科目</span>');
+                                return;
+                            }
+                            var html = '';
+                            data.forEach(function(s) {
+                                html += '<label class="form-check-label me-1" style="cursor:pointer;background:#fff;padding:4px 12px;border:1px solid #dee2e6;border-radius:4px;">';
+                                html += '<input type="checkbox" class="form-check-input me-1 add-subject-cb" value="' + s.id + '" /> ' + s.name;
+                                html += '</label>';
+                            });
+                            $list.html(html);
+                        });
+                    }
+                })
+                .fail(function () {
+                    $('#addModalBody').html('<div class="alert alert-danger">加载失败，请刷新重试</div>');
+                });
+        });
+
+        // ========== 编辑教职工（通过右键菜单触发）==========
+        function openEditModal(id) {
+            var modal = new bootstrap.Modal(document.getElementById('editModal'));
+            modal.show();
+
+            $.get('/Teacher/Edit/' + id)
+                .done(function (html) {
+                    var $wrapper = $('<div>').html(html);
+                    var form = $wrapper.find('form').first();
+                    if (form.length === 0) {
+                        $('#editModalBody').html('<div class="alert alert-danger">加载失败：未找到表单</div>');
+                        return;
+                    }
+                    var cardBody = form.closest('.card-body');
+                    if (cardBody.length > 0) {
+                        $('#editModalBody').html(cardBody.html());
+                    } else {
+                        $('#editModalBody').html(form);
+                    }
+
+                    // AJAX 提交
+                    $('#editModalBody form').off('submit').on('submit', function (e) {
+                        e.preventDefault();
+                        // 收集所教科目ID
+                        var ids = $('#editModalBody .edit-subject-cb:checked').map(function() { return $(this).val(); }).get();
+                        $('#editModalBody input[name="subjectIds"]').remove();
+                        ids.forEach(function(sid) {
+                            $('<input>').attr({ type: 'hidden', name: 'subjectIds', value: sid }).appendTo('#editModalBody form');
+                        });
+
+                        var btn = $(this).find('button[type="submit"]');
+                        btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> 提交中...');
+
+                        $.post('/Teacher/Edit/' + id, $(this).serialize())
+                            .done(function (res) {
+                                if (res.success) {
+                                    modal.hide();
+                                    location.reload();
+                                } else {
+                                    alert(res.message || '提交失败');
+                                    btn.prop('disabled', false).text('保存');
+                                }
+                            })
+                            .fail(function (xhr) {
+                                alert('提交失败，请重试');
+                                btn.prop('disabled', false).text('保存');
+                            });
+                    });
+
+                    // 初始化角色下拉多选联动
+                    function syncEditModalRole() {
+                        var checked = $('#editModalBody .edit-role-cb:checked');
+                        var roles = checked.map(function() { return $(this).val(); }).get();
+                        $('#editModalBody #editRoleHidden').val(roles.join(','));
+                        if (roles.length > 0) {
+                            $('#editModalBody #editRoleDisplay').text('已选 ' + roles.length + ' 个角色').removeClass('text-muted');
+                        } else {
+                            $('#editModalBody #editRoleDisplay').text('请选择角色（可多选）').addClass('text-muted');
+                        }
+                        if (roles.indexOf('班主任') >= 0) {
+                            $('#editModalBody #editGradeGroup, #editModalBody #editClassGroup').show();
+                            loadEditClassData(false);
+                        } else {
+                            $('#editModalBody #editGradeGroup, #editModalBody #editClassGroup').hide();
+                        }
+                    }
+                    $('#editModalBody').on('change', '.edit-role-cb', syncEditModalRole);
+                    syncEditModalRole();
+
+                    // 编辑弹窗：学段联动年级 + 加载科目
+                    var $editSchoolType = $('#editModalBody select[name="SchoolType"]');
+                    $editSchoolType.on('change', function() {
+                        var type = $(this).val();
+                        var adminId = $('#editModalBody #AdminID').val();
+                        var $gradeSel = $('#editModalBody #editGradeSelect');
+                        $gradeSel.val('');
+                        $gradeSel.find('option').each(function() {
+                            if (!$(this).val()) return;
+                            var st = $(this).data('schooltype');
+                            $(this).toggle(!type || st === type);
+                        });
+                        $('#editModalBody #editClassSelect').html('<option value="">-- 请先选择年级 --</option>');
+                        // 加载科目（带年级筛选，编辑需勾选已有科目）
+                        loadEditSubjects(type, '', adminId);
+                    });
+
+                    // 编辑弹窗：年级联动班级 + 刷新科目
+                    $(document).on('change', '#editModalBody #editGradeSelect', function() {
+                        loadEditClassData(false);
+                        var grade = $(this).val();
+                        var type = $('#editModalBody select[name="SchoolType"]').val();
+                        var adminId = $('#editModalBody #AdminID').val();
+                        if (type) loadEditSubjects(type, grade || '', adminId);
+                    });
+                    function loadEditClassData(force) {
+                        var gradeName = $('#editModalBody #editGradeSelect').val();
+                        var schoolType = $('#editModalBody select[name="SchoolType"]').val();
+                        var $sel = $('#editModalBody #editClassSelect');
+                        var curVal = $sel.val();
+                        if (!curVal || curVal === '-- 请先选择年级 --') curVal = '';
+                        if (gradeName && schoolType) {
+                            $sel.html('<option value="">加载中...</option>');
+                            $.get('@Url.Action("GetClassesByGrade", "Teacher")', { schoolType: schoolType, gradeName: gradeName }, function(data) {
+                                var html = '<option value="">-- 请选择班级 --</option>';
+                                data.forEach(function(c) {
+                                    var sel = (c.name === curVal) ? ' selected' : '';
+                                    html += '<option value="' + c.name + '"' + sel + '>' + c.name + '</option>';
+                                });
+                                $sel.html(html);
+                            });
+                        } else {
+                            $sel.html('<option value="">-- 请先选择年级 --</option>');
+                        }
+                    }
+                    // 编辑弹窗：按学段+年级加载科目（编辑时勾选已有科目）
+                    function loadEditSubjects(type, grade, adminId) {
+                        var $group = $('#editSubjectGroup');
+                        var $list = $('#editSubjectCheckList');
+                        if (!type) { $group.hide(); return; }
+                        $group.show();
+                        $list.html('<span class="text-muted small"><span class="spinner-border spinner-border-sm"></span> 加载科目...</span>');
+                        $.get('@Url.Action("GetSubjectsByType", "Teacher")', { type: type, grade: grade || '' }, function(data) {
+                            if (data.length === 0) {
+                                $list.html('<span class="text-muted small">暂无可用科目</span>');
+                                return;
+                            }
+                            $.get('@Url.Action("GetTeacherSubjects", "Teacher")', { adminId: adminId }, function(checkedIds) {
+                                var html = '';
+                                data.forEach(function(s) {
+                                    var checked = checkedIds.indexOf(s.id) >= 0 ? ' checked' : '';
+                                    html += '<label class="form-check-label me-1" style="cursor:pointer;background:#fff;padding:4px 12px;border:1px solid #dee2e6;border-radius:4px;">';
+                                    html += '<input type="checkbox" class="form-check-input me-1 edit-subject-cb" value="' + s.id + '"' + checked + ' /> ' + s.name;
+                                    html += '</label>';
+                                });
+                                $list.html(html);
+                            });
+                        });
+                    }
+                })
+                .fail(function () {
+                    $('#editModalBody').html('<div class="alert alert-danger">加载失败，请刷新重试</div>');
+                });
+        }
+
+        // ========== 删除教职工（通过右键菜单触发）==========
+        function deleteTeacher(id, name) {
+            showConfirm('确定要删除教职工「' + name + '」吗？此操作不可恢复。', function() {
+
+            $.post('/Teacher/Delete', { id: id, __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val() })
+                .done(function (res) {
+                    if (res.success) {
+                        location.reload();
+                    } else {
+                        alert(res.message || '删除失败');
+                    }
+                })
+                .fail(function () {
+                    alert('删除失败，请重试');
+                });
+            });
+        }
+
+        // 全选功能
+        $('#selectAll').on('change', function() {
+            $('.teacher-checkbox').prop('checked', this.checked);
+            updateBatchToolbar();
+        });
+        $(document).on('change', '.teacher-checkbox', function() {
+            var all = $('.teacher-checkbox').length === $('.teacher-checkbox:checked').length;
+            $('#selectAll').prop('checked', all);
+            updateBatchToolbar();
+        });
+
+        function updateBatchToolbar() {
+            var ids = $('.teacher-checkbox:checked').map(function() { return $(this).val(); }).get();
+            if (ids.length > 0) {
+                $('#batchToolbar').removeClass('d-none');
+                $('#selectedCount').text('已选择 ' + ids.length + ' 人');
+            } else {
+                $('#batchToolbar').addClass('d-none');
+            }
+        }
+
+        // 批量删除
+        $('#btnBatchDelete').on('click', function() {
+            var ids = $('.teacher-checkbox:checked').map(function() { return $(this).val(); }).get();
+            if (ids.length === 0) return;
+            if (!confirm('确认删除所选 ' + ids.length + ' 名教职工？')) return;
+            $.post('@Url.Action("BatchDelete", "Teacher")', {
+                ids: ids.join(','),
+                __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').first().val()
+            }, function(res) {
+                if (res.success) {
+                    location.reload();
+                } else {
+                    alert(res.message || '删除失败');
+                }
+            });
+        });
+
+        // 批量恢复
+        $('#btnBatchRestore').on('click', function() {
+            var ids = $('.teacher-checkbox:checked').map(function() { return $(this).val(); }).get();
+            if (ids.length === 0) return;
+            if (!confirm('确认恢复所选 ' + ids.length + ' 名教职工？')) return;
+            $.post('@Url.Action("BatchRestore", "Teacher")', {
+                ids: ids.join(','),
+                __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').first().val()
+            }, function(res) {
+                if (res.success) {
+                    location.reload();
+                } else {
+                    alert(res.message || '恢复失败');
+                }
+            });
+        });
+
+        // 批量彻底删除
+        $('#btnBatchHardDelete').on('click', function() {
+            var ids = $('.teacher-checkbox:checked').map(function() { return $(this).val(); }).get();
+            if (ids.length === 0) return;
+            var code = prompt('请输入安全码以确认彻底删除（共 ' + ids.length + ' 人）：');
+            if (!code) return;
+            $.post('@Url.Action("BatchHardDelete", "Teacher")', {
+                ids: ids.join(','),
+                securityCode: code,
+                __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').first().val()
+            }, function(res) {
+                if (res.success) {
+                    location.reload();
+                } else {
+                    alert(res.message || '操作失败');
+                }
+            });
+        });
+
+        // 班主任导入
+        $(function () {
+            var $btn = $('#btnImportTeachers');
+            var $file = $('#teacherFileInput');
+            var $progress = $('#teacherImportProgress');
+            var $bar = $('#teacherProgressBar');
+            var $result = $('#teacherImportResult');
+
+            $btn.click(function () {
+                var file = $file[0].files[0];
+                if (!file) { alert('请先选择 Excel 文件'); return; }
+
+                var formData = new FormData();
+                formData.append('file', file);
+                formData.append('__RequestVerificationToken', $('input[name="__RequestVerificationToken"]').first().val());
+
+                $progress.hide();
+                $bar.css('width', '0%');
+                $result.html('');
+                $btn.prop('disabled', true);
+
+                $.ajax({
+                    url: '@Url.Action("ImportExcel", "Teacher")',
+                    type: 'POST',
+                    data: formData,
+                    contentType: false,
+                    processData: false,
+                    xhr: function () {
+                        var xhr = new XMLHttpRequest();
+                        xhr.upload.addEventListener('progress', function (e) {
+                            if (e.lengthComputable) {
+                                var pct = Math.round(e.loaded / e.total * 100);
+                                $bar.css('width', pct + '%');
+                            }
+                        });
+                        return xhr;
+                    }
+                }).done(function (res) {
+                    $progress.show();
+                    $bar.css('width', '100%');
+                    if (res.success) {
+                        $result.html('<div class="alert alert-success mb-0"><i class="bi bi-check-circle me-1"></i>' + res.message + '</div>');
+                        setTimeout(function () { location.reload(); }, 1500);
+                    } else {
+                        $result.html('<div class="alert alert-danger mb-0"><i class="bi bi-exclamation-triangle me-1"></i>' + res.message + '</div>');
+                    }
+                }).fail(function () {
+                    $progress.show();
+                    $result.html('<div class="alert alert-danger mb-0"><i class="bi bi-exclamation-triangle me-1"></i>导入失败，请检查文件格式</div>');
+                }).always(function () {
+                    $btn.prop('disabled', false);
+                });
+            });
+
+        // ========== 操作列按钮 ==========
+        $(document).on('click', '.edit-teacher-btn', function() {
+            var id = $(this).data('id');
+            var row = $('#teacherTable tr[data-id="' + id + '"]');
+            selectedTeacherId = id;
+            selectedTeacherName = row.find('td:eq(2)').text().trim(); // 姓名在第3列
+            $('#editMenuItem').trigger('click');
+        });
+
+        $(document).on('click', '.delete-teacher-btn', function() {
+            var id = $(this).data('id');
+            var name = $(this).data('name');
+            selectedTeacherId = id;
+            selectedTeacherName = name;
+            $('#deleteMenuItem').trigger('click');
+        });
+        });
+
+        // ========== 右键菜单：修改密码 ==========
+        var $contextMenu = $('#contextMenu');
+        var selectedTeacherId = null;
+        var selectedTeacherName = null;
+
+        // 显示右键菜单
+        $('#teacherTable tbody tr').on('contextmenu', function (e) {
+            e.preventDefault();
+            selectedTeacherId = $(this).data('id');
+            selectedTeacherName = $(this).find('td:eq(3)').text().trim(); // 姓名
+            var x = e.clientX, y = e.clientY;
+            // 确保不超出窗口
+            var menuW = $contextMenu.outerWidth() || 140;
+            var menuH = $contextMenu.outerHeight() || 80;
+            var winW = $(window).width();
+            var winH = $(window).height();
+            if (x + menuW > winW) x = winW - menuW - 5;
+            if (y + menuH > winH) y = winH - menuH - 5;
+            if (x < 0) x = 5;
+            if (y < 0) y = 5;
+            $contextMenu.css({ left: x + 'px', top: y + 'px' }).show();
+        });
+
+        // 隐藏右键菜单（点击别处）
+        $(document).on('click', function () {
+            $contextMenu.hide();
+        });
+
+        // 滚动时隐藏菜单
+        $(window).on('scroll', function () {
+            $contextMenu.hide();
+        });
+
+        // 修改密码菜单项点击
+        $('#changePasswordMenuItem').on('click', function (e) {
+            e.preventDefault();
+            $contextMenu.hide();
+            if (!selectedTeacherId) return;
+            $('#changePasswordTeacherId').val(selectedTeacherId);
+            $('#changePasswordTeacherName').text(selectedTeacherName || '教职工 #' + selectedTeacherId);
+            $('#newPasswordInput').val('');
+            $('#confirmPasswordInput').val('');
+            $('#changePasswordError').hide();
+            var modal = new bootstrap.Modal(document.getElementById('changePasswordModal'));
+            modal.show();
+        });
+
+        // 编辑菜单项点击
+        $('#editMenuItem').on('click', function (e) {
+            e.preventDefault();
+            $contextMenu.hide();
+            if (!selectedTeacherId) return;
+            openEditModal(selectedTeacherId);
+        });
+
+        // 删除菜单项点击
+        $('#deleteMenuItem').on('click', function (e) {
+            e.preventDefault();
+            $contextMenu.hide();
+            if (!selectedTeacherId) return;
+            deleteTeacher(selectedTeacherId, selectedTeacherName || '教职工 #' + selectedTeacherId);
+        });
+
+        // 恢复菜单项点击
+        $('#restoreMenuItem').on('click', function (e) {
+            e.preventDefault();
+            $contextMenu.hide();
+            if (!selectedTeacherId) return;
+            var name = selectedTeacherName || '教职工 #' + selectedTeacherId;
+            showConfirm('确定要恢复「' + name + '」吗？', function() {
+                $.post('/Teacher/Restore', {
+                    id: selectedTeacherId,
+                    __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+                }).done(function (res) {
+                    if (res.success) {
+                        location.reload();
+                    } else {
+                        alert(res.message || '恢复失败');
+                    }
+                }).fail(function () {
+                    alert('恢复失败，请重试');
+                });
+            });
+        });
+
+        // 彻底删除菜单项点击
+        $('#permanentDeleteMenuItem').on('click', function (e) {
+            e.preventDefault();
+            $contextMenu.hide();
+            if (!selectedTeacherId) return;
+            var name = selectedTeacherName || '教职工 #' + selectedTeacherId;
+            showConfirm('⚠ 彻底删除「' + name + '」将无法恢复！请输入安全码确认。', function() {
+                var code = prompt('请输入安全码以确认彻底删除：');
+                if (!code) return;
+                $.post('/Teacher/PermanentDelete', {
+                    id: selectedTeacherId,
+                    securityCode: code,
+                    __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+                }).done(function (res) {
+                    if (res.success) {
+                        location.reload();
+                    } else {
+                        alert(res.message || '删除失败');
+                    }
+                }).fail(function () {
+                    alert('删除失败，请重试');
+                });
+            });
+        });
+
+        // 保存密码
+        $('#btnSavePassword').on('click', function () {
+            var id = $('#changePasswordTeacherId').val();
+            var newPassword = $('#newPasswordInput').val();
+            var confirmPassword = $('#confirmPasswordInput').val();
+            var $error = $('#changePasswordError');
+
+            $error.hide();
+
+            if (!newPassword || newPassword.length < 8) {
+                $error.text('密码至少8位，需包含字母和数字').show();
+                return;
+            }
+            if (!/[a-zA-Z]/.test(newPassword)) {
+                $error.text('密码必须包含字母').show();
+                return;
+            }
+            if (!/[0-9]/.test(newPassword)) {
+                $error.text('密码必须包含数字').show();
+                return;
+            }
+            if (newPassword !== confirmPassword) {
+                $error.text('两次密码输入不一致').show();
+                return;
+            }
+
+            var btn = $(this);
+            btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> 保存中...');
+
+            $.ajax({
+                url: '/Teacher/ChangePassword',
+                type: 'POST',
+                data: {
+                    id: id,
+                    newPassword: newPassword,
+                    __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+                },
+                dataType: 'json'
+            }).done(function (res) {
+                if (res.success) {
+                    // 关闭 modal，显示成功提示
+                    var modal = bootstrap.Modal.getInstance(document.getElementById('changePasswordModal'));
+                    modal.hide();
+                    // 刷新页面以同步全局
+                    location.reload();
+                } else {
+                    $error.text(res.message || '修改失败').show();
+                    btn.prop('disabled', false).html('<i class="bi bi-check-lg me-1"></i>保存');
+                }
+            }).fail(function (xhr) {
+                var msg = '请求失败';
+                try {
+                    var r = JSON.parse(xhr.responseText);
+                    msg = r.message || msg;
+                } catch (e) { }
+                $error.text(msg).show();
+                btn.prop('disabled', false).html('<i class="bi bi-check-lg me-1"></i>保存');
+            });
+        });
+
+        // modal 关闭时重置按钮
+        $('#changePasswordModal').on('hidden.bs.modal', function () {
+            $('#btnSavePassword').prop('disabled', false).html('<i class="bi bi-check-lg me-1"></i>保存');
+            $('#changePasswordError').hide();
+        });
+
+        // ========== 编辑弹窗加载完成后，自动触发学段联动和班级数据 ==========
+        $(document).on('shown.bs.modal', '#editModal', function() {
+            setTimeout(function() {
+                var $st = $('#editModalBody select[name="SchoolType"]');
+                var $gradeSel = $('#editModalBody #editGradeSelect');
+                var $classSel = $('#editModalBody #editClassSelect');
+                var adminId = $('#editModalBody #AdminID').val();
+                // 保存当前年级和班级值（trigger change 会重置它们）
+                var origGrade = $gradeSel.val();
+                var curClass = $classSel.data('currentclass') || '';
+                var stVal = $st.val();
+                if (stVal) {
+                    $st.trigger('change'); // 过滤年级 + 加载科目（无年级）
+                }
+                // 恢复年级值并加载班级 + 按年级刷新科目
+                if (stVal && origGrade) {
+                    $gradeSel.val(origGrade);
+                    doLoadEditClasses(stVal, origGrade, curClass);
+                    loadEditSubjects(stVal, origGrade, adminId);
+                }
+                syncEditModalRole();
+            }, 100);
+        });
+
+        function doLoadEditClasses(schoolType, gradeName, currentClassName) {
+            var $sel = $('#editModalBody #editClassSelect');
+            if (!schoolType || !gradeName) {
+                $sel.html('<option value="">-- 请先选择年级 --</option>');
+                return;
+            }
+            $sel.html('<option value="">加载中...</option>');
+            $.get('@Url.Action("GetClassesByGrade", "Teacher")', { schoolType: schoolType, gradeName: gradeName }, function(data) {
+                var html = '<option value="">-- 请选择班级 --</option>';
+                data.forEach(function(c) {
+                    var sel = (c.name === currentClassName) ? ' selected' : '';
+                    html += '<option value="' + c.name + '"' + sel + '>' + c.name + '</option>';
+                });
+                $sel.html(html);
+            });
+        }
+
+        // 添加弹窗加载完成后，初化学段联动
+        $(document).on('shown.bs.modal', '#addModal', function() {
+            var val = $('#addModalBody select[name="SchoolType"]').val();
+            if (val) {
+                $('#addModalBody select[name="SchoolType"]').trigger('change');
+            }
+        });
+    </script>
+}

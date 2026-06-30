@@ -1,0 +1,178 @@
+@model List<StudentManagerCore.Models.ExamRoom>
+@{
+    var schedule = ViewBag.Schedule as StudentManagerCore.Models.ExamSchedule;
+    var grades = ViewBag.Grades as List<StudentManagerCore.Models.GradeLevel> ?? new();
+    var arrangedGrades = ViewBag.ArrangedGrades as List<string> ?? new();
+    ViewBag.Title = "考场安排 - " + schedule?.Name;
+}
+
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a asp-controller="ExamSchedule" asp-action="Index">考试安排</a></li>
+            <li class="breadcrumb-item active">考场安排</li>
+        </ol>
+    </nav>
+
+    <h4 class="mb-3">
+        <i class="bi bi-building me-2"></i>考场安排
+        <small class="text-muted fs-6">— @schedule?.Name (@schedule?.ExamDate.ToString("yyyy-MM-dd"))</small>
+    </h4>
+
+    <!-- 生成安排 -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-plus-circle me-2"></i>生成考场安排</h5>
+        </div>
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label">选择年级</label>
+                    <select id="selGrade" class="form-select">
+                        <option value="">-- 请选择 --</option>
+                        @foreach (var g in grades)
+                        {
+                            var gradeVal = g.CurrentGradeName;
+                            <option value="@gradeVal">@g.CurrentGradeName</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">安排模式</label>
+                    <select id="selMode" class="form-select">
+                        <option value="Shuffle">🔀 全年级打乱</option>
+                        <option value="InClass">🏫 按原班级</option>
+                    </select>
+                </div>
+                <div class="col-md-2" id="perRoomGroup">
+                    <label class="form-label">每考场人数</label>
+                    <input type="number" id="txtPerRoom" class="form-control" value="30" min="1" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">&nbsp;</label>
+                    <button type="button" class="btn btn-primary w-100" onclick="generate()">
+                        <i class="bi bi-gear-fill me-1"></i>生成安排
+                    </button>
+                </div>
+            </div>
+            <div id="genStatus" class="mt-2"></div>
+        </div>
+    </div>
+
+    <!-- 考场列表 -->
+    @if (Model.Count > 0)
+    {
+        var byGrade = Model.GroupBy(r => r.Grade);
+        foreach (var gradeGroup in byGrade)
+        {
+            var firstRoom = gradeGroup.First();
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center bg-light">
+                    <h5 class="mb-0">
+                        @if (firstRoom.ArrangeMode == "Shuffle") { <span>🔀</span> }
+                        else { <span>🏫</span> }
+                        @gradeGroup.Key — 共 @gradeGroup.Sum(r => r.SeatCount) 人，
+                        @gradeGroup.Count() 个考场
+                    </h5>
+                    <div>
+                        <a asp-action="Print" asp-route-examScheduleId="@schedule?.Id" asp-route-grade="@gradeGroup.Key"
+                           class="btn btn-outline-success btn-sm" target="_blank">
+                            <i class="bi bi-printer me-1"></i>打印
+                        </a>
+                        <button type="button" class="btn btn-outline-danger btn-sm" onclick="clearGrade(@schedule?.Id, '@gradeGroup.Key')">
+                            <i class="bi bi-trash me-1"></i>清除
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="row g-0">
+                        @foreach (var room in gradeGroup.OrderBy(r => r.RoomName))
+                        {
+                            <div class="col-lg-4 col-md-6 p-2">
+                                <div class="border rounded p-2 h-100">
+                                    <div class="fw-bold small text-primary mb-1">@room.RoomName（@room.SeatCount 座）</div>
+                                    <div class="small" style="max-height:200px;overflow-y:auto;">
+                                        <table class="table table-sm mb-0">
+                                            <thead>
+                                                <tr><th>座位号</th><th>姓名</th><th>班级</th></tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var rs in (room.Students?.OrderBy(s => s.SeatNumber) ?? Enumerable.Empty<ExamRoomStudent>()))
+                                                {
+                                                    <tr>
+                                                        <td class="text-muted">@rs.SeatNumber</td>
+                                                        <td>@rs.Student?.Name</td>
+                                                        <td class="text-muted">@rs.Student?.ClassName</td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle me-1"></i> 尚未生成考场安排，请在上方选择年级和模式后点击"生成安排"。
+        </div>
+    }
+</div>
+
+<input type="hidden" id="examScheduleId" value="@schedule?.Id" />
+
+@section Scripts {
+    <script>
+        var token = $('input[name="__RequestVerificationToken"]').first().val();
+
+        // 模式切换：打乱模式显示每考场人数，原班模式隐藏
+        $('#selMode').change(function () {
+            $('#perRoomGroup').toggle($(this).val() === 'Shuffle');
+        }).trigger('change');
+
+        function generate() {
+            var examScheduleId = $('#examScheduleId').val();
+            var grade = $('#selGrade').val();
+            var mode = $('#selMode').val();
+            var studentsPerRoom = $('#txtPerRoom').val() || 30;
+
+            if (!grade) { alert('请选择年级'); return; }
+
+            var btn = $(this).prop('disabled', true);
+            $('#genStatus').html('<span class="text-info"><i class="bi bi-hourglass-split me-1"></i>生成中...</span>');
+
+            $.post('@Url.Action("Generate")', {
+                examScheduleId: examScheduleId,
+                grade: grade,
+                mode: mode,
+                studentsPerRoom: studentsPerRoom,
+                __RequestVerificationToken: token
+            }, function (res) {
+                if (res.success) {
+                    location.reload();
+                } else {
+                    $('#genStatus').html('<span class="text-danger"><i class="bi bi-exclamation-circle me-1"></i>' + res.message + '</span>');
+                }
+            }).fail(function () {
+                $('#genStatus').html('<span class="text-danger"><i class="bi bi-exclamation-circle me-1"></i>请求失败</span>');
+            });
+        }
+
+        function clearGrade(examScheduleId, grade) {
+            if (!confirm('确定要清除 ' + grade + ' 的考场安排吗？')) return;
+            $.post('@Url.Action("Clear")', {
+                examScheduleId: examScheduleId,
+                grade: grade,
+                __RequestVerificationToken: token
+            }, function (res) {
+                if (res.success) location.reload();
+                else alert(res.message || '操作失败');
+            });
+        }
+    </script>
+}

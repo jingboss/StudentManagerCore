@@ -1,0 +1,410 @@
+@{
+    Layout = null;
+    var defaultConnStr = ViewBag.DefaultConnStr as string ?? "";
+}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>系统安装向导</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+            padding: 20px;
+        }
+        .install-card {
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 640px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 36px 40px;
+        }
+        .step-indicator {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 28px;
+            position: relative;
+        }
+        .step-indicator::before {
+            content: '';
+            position: absolute;
+            top: 18px;
+            left: 30px;
+            right: 30px;
+            height: 3px;
+            background: #e9ecef;
+            z-index: 0;
+        }
+        .step-dot { position: relative; z-index: 1; text-align: center; flex: 1; }
+        .step-dot .dot {
+            width: 38px; height: 38px; border-radius: 50%; background: #e9ecef;
+            display: inline-flex; align-items: center; justify-content: center;
+            font-weight: bold; color: #999; margin-bottom: 6px; transition: all 0.3s;
+        }
+        .step-dot.active .dot { background: #667eea; color: #fff; box-shadow: 0 2px 12px rgba(102,126,234,0.4); }
+        .step-dot.completed .dot { background: #28a745; color: #fff; }
+        .step-dot .label { font-size: 12px; color: #999; }
+        .step-dot.active .label { color: #667eea; font-weight: bold; }
+        .step-dot.completed .label { color: #28a745; }
+        .step-panel { display: none; animation: fadeIn 0.35s ease; }
+        .step-panel.active { display: block; }
+        @@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .password-group { position: relative; }
+        .password-group .toggle-btn {
+            position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+            border: none; background: transparent; cursor: pointer; color: #999; font-size: 0.85rem;
+        }
+        .password-group .toggle-btn:hover { color: #667eea; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="install-card">
+            <div class="text-center mb-4">
+                <i class="bi bi-gear-wide-connected fs-1 text-primary"></i>
+                <h4 class="mt-2 fw-bold">系统安装向导</h4>
+                <p class="text-muted small mb-0">请按步骤完成系统初始化配置</p>
+            </div>
+
+            <!-- 步骤指示器 -->
+            <div class="step-indicator" id="stepIndicator">
+                <div class="step-dot active" data-step="1">
+                    <div class="dot">1</div>
+                    <div class="label">数据库配置</div>
+                </div>
+                <div class="step-dot" data-step="2">
+                    <div class="dot">2</div>
+                    <div class="label">创建数据表</div>
+                </div>
+                <div class="step-dot" data-step="3">
+                    <div class="dot">3</div>
+                    <div class="label">管理员账号</div>
+                </div>
+                <div class="step-dot" data-step="4">
+                    <div class="dot">4</div>
+                    <div class="label">网站信息</div>
+                </div>
+            </div>
+
+            <!-- 全局消息 -->
+            <div id="globalMessage" class="d-none"></div>
+
+            <!-- 步骤1: 数据库配置 -->
+            <div class="step-panel active" data-step="1">
+                <h5 class="mb-3"><i class="bi bi-database me-2"></i>配置 MySQL 数据库</h5>
+                <div class="mb-3">
+                    <label class="form-label small fw-medium">服务器地址</label>
+                    <input type="text" class="form-control" id="dbServer" value="localhost" />
+                </div>
+                <div class="row g-2 mb-3">
+                    <div class="col-4">
+                        <label class="form-label small fw-medium">端口</label>
+                        <input type="number" class="form-control" id="dbPort" value="3306" />
+                    </div>
+                    <div class="col-8">
+                        <label class="form-label small fw-medium">数据库名</label>
+                        <input type="text" class="form-control" id="dbName" value="StudentManagerDB" />
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-medium">用户名</label>
+                    <input type="text" class="form-control" id="dbUser" value="root" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-medium">密码</label>
+                    <div class="password-group">
+                        <input type="password" class="form-control" id="dbPassword" />
+                        <button type="button" class="toggle-btn" onclick="togglePwd('dbPassword',this)">显示</button>
+                    </div>
+                </div>
+                <div id="step1Msg" class="mb-3 small"></div>
+                <button type="button" class="btn btn-primary w-100" onclick="step1Test()">
+                    <i class="bi bi-plug me-1"></i>测试连接
+                </button>
+            </div>
+
+            <!-- 步骤2: 创建数据表 -->
+            <div class="step-panel" data-step="2">
+                <h5 class="mb-3"><i class="bi bi-table me-2"></i>创建数据表结构</h5>
+                <div class="alert alert-info py-2 small">
+                    <i class="bi bi-info-circle me-1"></i>系统将自动执行建表脚本，创建所有业务数据表。
+                </div>
+                <div id="step2Msg" class="mb-3 small"></div>
+                <button type="button" class="btn btn-primary w-100" onclick="step2Create()">
+                    <i class="bi bi-play me-1"></i>开始创建数据表
+                </button>
+            </div>
+
+            <!-- 步骤3: 管理员账号 -->
+            <div class="step-panel" data-step="3">
+                <h5 class="mb-3"><i class="bi bi-shield-lock me-2"></i>创建超级管理员</h5>
+                <div class="mb-3">
+                    <label class="form-label small fw-medium">用户名</label>
+                    <input type="text" class="form-control" id="adminUser" value="admin" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-medium">姓名</label>
+                    <input type="text" class="form-control" id="adminName" value="系统管理员" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-medium">密码</label>
+                    <div class="password-group">
+                        <input type="password" class="form-control" id="adminPwd" />
+                        <button type="button" class="toggle-btn" onclick="togglePwd('adminPwd',this)">显示</button>
+                    </div>
+                    <div class="form-text small">至少8位，包含字母和数字</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-medium">确认密码</label>
+                    <div class="password-group">
+                        <input type="password" class="form-control" id="adminPwdConfirm" />
+                        <button type="button" class="toggle-btn" onclick="togglePwd('adminPwdConfirm',this)">显示</button>
+                    </div>
+                </div>
+                <div id="step3Msg" class="mb-3 small"></div>
+                <button type="button" class="btn btn-primary w-100" onclick="step3Create()">
+                    <i class="bi bi-person-plus me-1"></i>创建管理员
+                </button>
+            </div>
+
+            <!-- 步骤4: 网站信息 -->
+            <div class="step-panel" data-step="4">
+                <h5 class="mb-3"><i class="bi bi-globe me-2"></i>配置网站信息</h5>
+                <div class="mb-3">
+                    <label class="form-label small fw-medium">网站名称</label>
+                    <input type="text" class="form-control" id="siteName" value="学生信息管理系统" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-medium">版权信息</label>
+                    <input type="text" class="form-control" id="copyright" value="© 2026 学生信息管理中心" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-medium">JWT密钥 <span class="text-danger">*</span></label>
+                    <div class="input-group">
+                        <input type="password" class="form-control" id="jwtSecret" placeholder="点击右侧按钮生成32位密钥" readonly />
+                        <button type="button" class="btn btn-outline-secondary" onclick="toggleJwtVisibility()" title="显示/隐藏">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="generateJwt()">
+                            <i class="bi bi-shuffle me-1"></i>随机生成
+                        </button>
+                    </div>
+                    <div class="form-text small">至少32位字符，用于用户登录令牌加密，请妥善保管</div>
+                </div>
+                <div class="alert alert-warning py-2 small">
+                    <i class="bi bi-exclamation-triangle me-1"></i>安装完成后系统将自动重启，请耐心等待。
+                </div>
+                <div id="step4Msg" class="mb-3 small"></div>
+                <button type="button" class="btn btn-success w-100 btn-lg" onclick="step4Complete()">
+                    <i class="bi bi-check-circle me-1"></i>完成安装
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /* ===== 工具函数 ===== */
+        function togglePwd(id, btn) {
+            var el = document.getElementById(id);
+            if (el.type === 'password') { el.type = 'text'; btn.textContent = '隐藏'; }
+            else { el.type = 'password'; btn.textContent = '显示'; }
+        }
+
+        function generateJwt() {
+            var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!\x40#$%^&*()';
+            var key = '';
+            for (var i = 0; i < 32; i++) {
+                key += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            var el = document.getElementById('jwtSecret');
+            el.value = key;
+            el.type = 'password';
+            var toggleIcon = document.querySelector('[onclick^="toggleJwtVisibility"] i');
+            if (toggleIcon) toggleIcon.className = 'bi bi-eye';
+        }
+
+        function toggleJwtVisibility() {
+            var el = document.getElementById('jwtSecret');
+            var icon = document.querySelector('[onclick^="toggleJwtVisibility"] i');
+            if (el.type === 'password') {
+                el.type = 'text';
+                if (icon) icon.className = 'bi bi-eye-slash';
+            } else {
+                el.type = 'password';
+                if (icon) icon.className = 'bi bi-eye';
+            }
+        }
+        // 页面加载时自动生成默认密钥
+        document.addEventListener('DOMContentLoaded', function() {
+            if (!document.getElementById('jwtSecret').value) {
+                generateJwt();
+            }
+        });
+
+        function getConnStr() {
+            var srv = document.getElementById('dbServer').value.trim() || 'localhost';
+            var port = document.getElementById('dbPort').value.trim() || '3306';
+            var db = document.getElementById('dbName').value.trim() || 'StudentManagerDB';
+            var user = document.getElementById('dbUser').value.trim() || 'root';
+            var pwd = document.getElementById('dbPassword').value;
+            return 'Server=' + srv + ';Port=' + port + ';Database=' + db + ';User Id=' + user + ';Password=' + pwd + ';';
+        }
+
+        function showMsg(elId, type, text) {
+            var el = document.getElementById(elId);
+            var icon = type === 'success' ? 'check-circle' : 'exclamation-circle';
+            el.className = 'mb-3 small alert alert-' + type;
+            el.innerHTML = '<i class="bi bi-' + icon + ' me-1"></i>' + text;
+            el.classList.remove('d-none');
+        }
+
+        function showGlobal(type, text) {
+            var el = document.getElementById('globalMessage');
+            var icon = type === 'success' ? 'check-circle-fill' : (type === 'danger' ? 'exclamation-circle-fill' : 'info-circle-fill');
+            el.className = 'alert alert-' + type + ' alert-dismissible fade show py-2 small d-flex align-items-center';
+            el.innerHTML = '<i class="bi bi-' + icon + ' me-2"></i>' + text +
+                '<button type="button" class="btn-close ms-auto" data-bs-dismiss="alert"></button>';
+        }
+
+        function goToStep(step) {
+            document.querySelectorAll('.step-panel').forEach(function(p) {
+                p.classList.toggle('active', parseInt(p.dataset.step) === step);
+            });
+            document.querySelectorAll('.step-dot').forEach(function(d) {
+                var s = parseInt(d.dataset.step);
+                d.classList.toggle('active', s === step);
+                d.classList.toggle('completed', s < step);
+            });
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function setBtnLoading(btn, loading, text) {
+            if (loading) {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' + text;
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = text;
+            }
+        }
+
+        /* ===== 步骤1: 测试连接 ===== */
+        async function step1Test() {
+            var btn = event.target;
+            setBtnLoading(btn, true, '测试中...');
+            var connStr = getConnStr();
+            var fd = new FormData();
+            fd.append('connectionString', connStr);
+            try {
+                var res = await fetch('/Install/TestConnection', { method: 'POST', body: fd });
+                var data = await res.json();
+                showMsg('step1Msg', data.success ? 'success' : 'danger', data.message);
+                if (data.success) {
+                    showGlobal('success', '数据库连接成功！即将进入下一步...');
+                    setTimeout(function() { goToStep(2); }, 1000);
+                }
+            } catch (e) {
+                showMsg('step1Msg', 'danger', '网络错误：' + e.message);
+            } finally {
+                setBtnLoading(btn, false, '<i class="bi bi-plug me-1"></i>测试连接');
+            }
+        }
+
+        /* ===== 步骤2: 建表 ===== */
+        async function step2Create() {
+            var btn = event.target;
+            setBtnLoading(btn, true, '创建中...');
+            var connStr = getConnStr();
+            var fd = new FormData();
+            fd.append('connectionString', connStr);
+            try {
+                var res = await fetch('/Install/CreateTables', { method: 'POST', body: fd });
+                var data = await res.json();
+                showMsg('step2Msg', data.success ? 'success' : 'danger', data.message);
+                if (data.success) {
+                    showGlobal('success', '数据表创建成功！');
+                    setTimeout(function() { goToStep(3); }, 1000);
+                }
+            } catch (e) {
+                showMsg('step2Msg', 'danger', '网络错误：' + e.message);
+            } finally {
+                setBtnLoading(btn, false, '<i class="bi bi-play me-1"></i>开始创建数据表');
+            }
+        }
+
+        /* ===== 步骤3: 创建管理员 ===== */
+        async function step3Create() {
+            var pwd = document.getElementById('adminPwd').value;
+            var confirm = document.getElementById('adminPwdConfirm').value;
+            if (!pwd || pwd.length < 8) { showMsg('step3Msg', 'danger', '密码至少8位'); return; }
+            if (pwd !== confirm) { showMsg('step3Msg', 'danger', '两次输入的密码不一致'); return; }
+            if (!/[a-zA-Z]/.test(pwd) || !/[0-9]/.test(pwd)) { showMsg('step3Msg', 'danger', '密码必须包含字母和数字'); return; }
+
+            var btn = event.target;
+            setBtnLoading(btn, true, '创建中...');
+            var connStr = getConnStr();
+            var fd = new FormData();
+            fd.append('connectionString', connStr);
+            fd.append('username', document.getElementById('adminUser').value.trim() || 'admin');
+            fd.append('password', pwd);
+            fd.append('realName', document.getElementById('adminName').value.trim() || '系统管理员');
+            try {
+                var res = await fetch('/Install/CreateAdmin', { method: 'POST', body: fd });
+                var data = await res.json();
+                showMsg('step3Msg', data.success ? 'success' : 'danger', data.message);
+                if (data.success) {
+                    showGlobal('success', '管理员账号创建成功！');
+                    setTimeout(function() { goToStep(4); }, 1000);
+                }
+            } catch (e) {
+                showMsg('step3Msg', 'danger', '网络错误：' + e.message);
+            } finally {
+                setBtnLoading(btn, false, '<i class="bi bi-person-plus me-1"></i>创建管理员');
+            }
+        }
+
+        /* ===== 步骤4: 完成安装 ===== */
+        async function step4Complete() {
+            var btn = event.target;
+            var jwtSecret = document.getElementById('jwtSecret').value.trim();
+            if (!jwtSecret || jwtSecret.length < 32) {
+                showMsg('step4Msg', 'danger', '请先生成JWT密钥（至少32位）');
+                return;
+            }
+            setBtnLoading(btn, true, '安装中...');
+            var connStr = getConnStr();
+            var fd = new FormData();
+            fd.append('connectionString', connStr);
+            fd.append('siteName', document.getElementById('siteName').value.trim() || '学生信息管理系统');
+            fd.append('copyright', document.getElementById('copyright').value.trim() || '© 2026 信息管理中心');
+            fd.append('jwtSecret', jwtSecret);
+            try {
+                var res = await fetch('/Install/CompleteInstall', { method: 'POST', body: fd });
+                var data = await res.json();
+                if (data.success) {
+                    showMsg('step4Msg', 'success', '✅ ' + data.message);
+                    showGlobal('success', '安装完成！系统正在自动重启...');
+                    setBtnLoading(btn, false, '<i class="bi bi-check-circle me-1"></i>完成安装');
+                    // 等待应用重启完成后跳转
+                    setTimeout(function() { window.location.href = '/Account/Login'; }, 5000);
+                } else {
+                    showMsg('step4Msg', 'danger', data.message);
+                    setBtnLoading(btn, false, '<i class="bi bi-check-circle me-1"></i>完成安装');
+                }
+            } catch (e) {
+                showMsg('step4Msg', 'danger', '网络错误：' + e.message);
+                setBtnLoading(btn, false, '<i class="bi bi-check-circle me-1"></i>完成安装');
+            }
+        }
+    </script>
+</body>
+</html>

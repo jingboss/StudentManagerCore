@@ -1,0 +1,158 @@
+@model IEnumerable<StudentManagerCore.Models.Announcement>
+@{
+    ViewData["Title"] = "公告管理";
+    var readCounts = ViewBag.ReadCounts as Dictionary<int, int> ?? new Dictionary<int, int>();
+    var totalTeachers = ViewBag.TotalTeachers as int? ?? 0;
+}
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="mb-0"><i class="bi bi-megaphone-fill me-2"></i>公告管理</h4>
+        <div>
+            <span class="badge bg-info me-2">教职工总人数: @totalTeachers</span>
+            <a asp-action="Create" class="btn btn-primary btn-sm">
+                <i class="bi bi-plus-lg me-1"></i>发布公告
+            </a>
+        </div>
+    </div>
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show">@TempData["Success"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    @if (!Model.Any())
+    {
+        <div class="text-center text-muted py-5">
+            <i class="bi bi-megaphone fs-1 d-block mb-2"></i>
+            暂无公告
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover align-middle" id="announceTable">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:50px">ID</th>
+                        <th>标题</th>
+                        <th style="width:100px">目标角色</th>
+                        <th>内容</th>
+                        <th style="width:80px">已读/总数</th>
+                        <th style="width:100px">发布人</th>
+                        <th style="width:150px">发布时间</th>
+                        <th style="width:100px">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in Model)
+                    {
+                        var readCount = readCounts.ContainsKey(item.Id) ? readCounts[item.Id] : 0;
+                        var unreadCount = Math.Max(0, totalTeachers - readCount);
+                        <tr>
+                            <td>@item.Id</td>
+                            <td>
+                                <a href="javascript:void(0)" class="fw-bold text-decoration-none ann-title" data-id="@item.Id" data-content="@item.Content">
+                                    @item.Title
+                                </a>
+                            </td>
+                            <td>
+                                <span class="badge bg-@(item.TargetRole switch {
+                                    "全员" => "info",
+                                    "班主任" => "primary",
+                                    "科任老师" => "success",
+                                    "年级级长" => "warning",
+                                    "教务主任" => "danger",
+                                    "校长" => "dark",
+                                    "后勤主任" => "secondary",
+                                    _ => "secondary"
+                                })">@item.TargetRole</span>
+                            </td>
+                            <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                                <span class="ann-content-preview">@item.Content</span>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-success me-1" title="已读">@readCount</span>
+                                @if (unreadCount > 0)
+                                {
+                                    <span class="badge bg-secondary" title="未读">@unreadCount</span>
+                                }
+                            </td>
+                            <td>
+                                <small class="text-muted">@(item.CreatedBy ?? "-")</small>
+                            </td>
+                            <td>
+                                <small>@item.CreateTime.ToString("yyyy-MM-dd HH:mm")</small>
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a asp-action="Edit" asp-route-id="@item.Id" class="btn btn-outline-primary" title="编辑">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    <form asp-action="Delete" asp-route-id="@item.Id" method="post" style="display:inline">
+                                        @Html.AntiForgeryToken()
+                                        <button type="button" class="btn btn-outline-danger" title="删除" onclick="confirmDeleteAnnounce(this)">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<!-- 公告详情 Modal -->
+<div class="modal fade" id="annDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="annDetailTitle">
+                    <i class="bi bi-megaphone-fill me-2 text-warning"></i><span id="annDetailTitleText"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="annDetailContent" class="p-2" style="white-space:pre-wrap;line-height:1.8;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function confirmDeleteAnnounce(btn) {
+            var form = $(btn).closest('form');
+            showConfirm('确定要删除此公告吗？已读记录也将一并清除。', function() {
+                form.submit();
+            });
+        }
+
+        $(function() {
+            // 点击标题展开详情
+            $('.ann-title').on('click', function() {
+                var title = $(this).text().trim();
+                var content = $(this).data('content');
+                $('#annDetailTitleText').text(title);
+                $('#annDetailContent').text(content);
+                new bootstrap.Modal(document.getElementById('annDetailModal')).show();
+            });
+
+            // 内容悬停预览
+            $('.ann-content-preview').each(function() {
+                var text = $(this).text().trim();
+                if (text.length > 80) {
+                    $(this).text(text.substring(0, 80) + '...');
+                }
+            });
+        });
+    </script>
+}

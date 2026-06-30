@@ -1,0 +1,379 @@
+@{
+    Layout = null;
+    var siteName = ViewBag.SiteName ?? "华强学校信息管理中心";
+    var copyright = ViewBag.Copyright ?? "© 2025 华强学校信息管理中心";
+    var logo = ViewBag.Logo ?? "";
+    var timeSyncError = ViewBag.TimeSyncError as string ?? "";
+    var bgImage = ViewBag.BackgroundImage ?? "/uploads/imge/login_bg.jpg";
+    var siteClosed = ViewBag.SiteClosed ?? false;
+}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>登录 - @siteName</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; }
+
+        body {
+            font-family: 'Inter', 'Microsoft YaHei', 'PingFang SC', sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow-x: hidden;
+            padding: 16px;
+        }
+
+        /* ===== 全屏背景图 ===== */
+        .bg-layer {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            background: linear-gradient(135deg, #1a2a4a 0%, #2d4a7a 50%, #4a6a9a 100%);
+            background: url('@bgImage') no-repeat center center, linear-gradient(135deg, #1a2a4a 0%, #2d4a7a 50%, #4a6a9a 100%);
+            background-size: cover;
+        }
+
+        /* ===== 白色登录卡片 ===== */
+        .login-wrapper {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            max-width: 420px;
+            margin: 0 auto;
+            animation: fadeUp 0.8s ease both;
+        }
+        @@keyframes fadeUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .login-card {
+            background: rgba(255,255,255,0.95);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 20px;
+            padding: 40px 32px 32px;
+            box-shadow:
+                0 8px 32px rgba(0,0,0,0.1),
+                0 2px 8px rgba(0,0,0,0.06);
+            transition: all 0.3s;
+        }
+
+        /* ===== Logo & 标题 ===== */
+        .header-area {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+        .header-area .logo-wrap {
+            text-align: center;
+            margin-bottom: 16px;
+        }
+        .header-area .logo-wrap img {
+            max-width: 96px;
+            max-height: 96px;
+            object-fit: contain;
+        }
+        .header-area .logo-wrap .logo-icon {
+            font-size: 3rem;
+            color: #667eea;
+        }
+        .header-area .site-name {
+            font-family: 'Noto Serif SC', serif;
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: #1a2a4a;
+            letter-spacing: 3px;
+            margin-bottom: 4px;
+        }
+        .header-area .site-sub {
+            font-size: 0.78rem;
+            color: #8e9db3;
+            letter-spacing: 2px;
+        }
+
+        /* ===== 输入框 ===== */
+        .input-group-custom {
+            margin-bottom: 18px;
+        }
+        .input-group-custom .form-label {
+            color: #5a6a7e;
+            font-size: 0.78rem;
+            font-weight: 500;
+            margin-bottom: 6px;
+            letter-spacing: 1px;
+        }
+        .login-input {
+            width: 100%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            border: 1px solid #e2e6ed;
+            background: #f5f7fa;
+            color: #2d3a4a;
+            font-size: 0.88rem;
+            transition: all 0.3s ease;
+            outline: none;
+        }
+        .login-input::placeholder {
+            color: #b0bccf;
+        }
+        .login-input:focus {
+            border-color: #667eea;
+            background: #fff;
+            box-shadow: 0 0 0 4px rgba(102,126,234,0.1);
+        }
+        .login-input:-webkit-autofill,
+        .login-input:-webkit-autofill:hover,
+        .login-input:-webkit-autofill:focus {
+            -webkit-text-fill-color: #2d3a4a;
+            -webkit-box-shadow: 0 0 0 30px #fff inset !important;
+            transition: background-color 5000s ease-in-out 0s;
+        }
+
+        /* ===== 验证码 ===== */
+        .captcha-img {
+            height: 42px;
+            border-radius: 10px;
+            cursor: pointer;
+            border: 1px solid #e2e6ed;
+            transition: border-color 0.3s;
+        }
+        .captcha-img:hover {
+            border-color: rgba(102,126,234,0.4);
+        }
+
+        /* ===== 记住我 ===== */
+        .form-check-label {
+            color: #8e9db3 !important;
+            font-size: 0.82rem !important;
+            user-select: none;
+        }
+        .form-check-input {
+            background-color: #f5f7fa;
+            border-color: #d0d5e0;
+        }
+        .form-check-input:checked {
+            background-color: #667eea;
+            border-color: #667eea;
+        }
+        .form-check-input:focus {
+            box-shadow: 0 0 0 3px rgba(102,126,234,0.15);
+            border-color: #667eea;
+        }
+
+        /* ===== 登录按钮 ===== */
+        .btn-login {
+            border-radius: 12px;
+            padding: 12px;
+            font-weight: 500;
+            font-size: 0.9rem;
+            letter-spacing: 4px;
+            border: none;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            cursor: pointer;
+        }
+        .btn-login:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 28px rgba(102,126,234,0.25);
+        }
+        .btn-login:active {
+            transform: translateY(0);
+        }
+        .btn-login:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        /* ===== 底部版权 ===== */
+        .footer-text {
+            text-align: center;
+            color: rgba(0,0,0,0.25);
+            font-size: 0.7rem;
+            margin-top: 24px;
+            letter-spacing: 2px;
+        }
+
+        /* ===== 错误提示 ===== */
+        .alert-custom {
+            border-radius: 12px;
+            padding: 10px 14px;
+            font-size: 0.82rem;
+            animation: shakeX 0.4s ease;
+            margin-bottom: 18px;
+            border: 1px solid transparent;
+        }
+        .alert-danger.alert-custom {
+            background: #fff0f0;
+            border-color: #ffd4d4;
+            color: #c0392b;
+        }
+        .alert-warning.alert-custom {
+            background: #fff8e6;
+            border-color: #ffe58f;
+            color: #8d7400;
+        }
+        @@keyframes shakeX {
+            0%, 100% { transform: translateX(0); }
+            20% { transform: translateX(-5px); }
+            40% { transform: translateX(5px); }
+            60% { transform: translateX(-3px); }
+            80% { transform: translateX(3px); }
+        }
+
+        /* ===== 站点关闭提示 ===== */
+        .site-closed-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            justify-content: center;
+            background: #fff8e6;
+            border: 1px solid #ffe58f;
+            border-radius: 10px;
+            padding: 8px 12px;
+            margin-bottom: 18px;
+            color: #8d7400;
+            font-size: 0.8rem;
+        }
+
+        /* ===== 响应式 ===== */
+        @@media (max-width: 480px) {
+            body { padding: 12px; }
+            .login-card { padding: 28px 20px 24px; border-radius: 16px; }
+            .header-area .site-name { font-size: 1rem; }
+            .header-area .logo-wrap { margin-bottom: 12px; }
+            .header-area .logo-wrap .logo-icon { font-size: 1.5rem; }
+            .login-input { padding: 11px 14px; font-size: 0.85rem; }
+            .btn-login { padding: 11px; }
+        }
+
+        @@media (max-width: 380px) {
+            .login-card { padding: 24px 16px 20px; }
+            .header-area { margin-bottom: 24px; }
+            .captcha-img { height: 38px; }
+        }
+
+        /* 暗色滚动条 */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+    </style>
+</head>
+<body>
+    <div class="bg-layer"></div>
+
+    <div class="login-wrapper">
+        <div class="login-card">
+
+            <!-- 顶部品牌区 -->
+            <div class="header-area">
+                <div class="logo-wrap">
+                    @if (!string.IsNullOrEmpty(logo))
+                    {
+                        <img src="@logo" alt="校徽" />
+                    }
+                    else
+                    {
+                        <i class="bi bi-mortarboard-fill logo-icon"></i>
+                    }
+                </div>
+                <div class="site-name">@siteName</div>
+                <div class="site-sub">智慧校园综合管理平台</div>
+            </div>
+
+            <!-- 站点关闭提示 -->
+            @if (siteClosed)
+            {
+                <div class="site-closed-badge">
+                    <i class="bi bi-shield-exclamation"></i>
+                    <span>网站已关闭，仅管理员可登录</span>
+                </div>
+            }
+
+            <!-- 错误提示 -->
+            @if (!ViewData.ModelState.IsValid)
+            {
+                <div class="alert alert-danger alert-custom">
+                    <i class="bi bi-exclamation-circle me-1"></i>
+                    @foreach (var error in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+                    {
+                        <span>@error.ErrorMessage</span>
+                    }
+                </div>
+            }
+
+            @if (!string.IsNullOrEmpty(timeSyncError))
+            {
+                <div class="alert alert-warning alert-custom">
+                    <i class="bi bi-exclamation-triangle me-1"></i> @timeSyncError
+                </div>
+            }
+
+            <!-- 登录表单 -->
+            <form method="post" asp-action="Login" id="loginForm">
+                @Html.AntiForgeryToken()
+
+                <div class="input-group-custom">
+                    <label class="form-label"><i class="bi bi-person me-1"></i>用户名</label>
+                    <input type="text" name="Username" class="login-input" placeholder="请输入用户名" required autocomplete="username" />
+                </div>
+
+                <div class="input-group-custom">
+                    <label class="form-label"><i class="bi bi-lock me-1"></i>密码</label>
+                    <input type="password" name="Password" class="login-input" placeholder="请输入密码" required autocomplete="current-password" />
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div class="form-check">
+                        <input type="checkbox" name="RememberMe" class="form-check-input" id="RememberMe" />
+                        <label class="form-check-label" for="RememberMe">记住我</label>
+                    </div>
+                </div>
+
+                <div class="input-group-custom">
+                    <label class="form-label"><i class="bi bi-shield me-1"></i>验证码</label>
+                    <div class="d-flex gap-2 align-items-center">
+                        <input type="text" name="CaptchaCode" class="login-input" placeholder="输入验证码" maxlength="4" autocomplete="off" required style="padding-left:14px; flex:1;" />
+                        <a href="javascript:void(0)" onclick="refreshCaptcha()" title="点击刷新" class="flex-shrink-0">
+                            <img id="captchaImg" src="@Url.Action("Index", "Captcha")" alt="验证码" class="captcha-img" />
+                        </a>
+                    </div>
+                    <div class="mt-1">
+                        <a href="javascript:void(0)" onclick="refreshCaptcha()" style="color:#b0bccf; text-decoration:none; font-size:0.75rem;">
+                            <i class="bi bi-arrow-repeat me-1"></i>看不清？点击刷新
+                        </a>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100 btn-login mt-2" id="loginBtn">
+                    <i class="bi bi-box-arrow-in-right me-1"></i> 登 录
+                </button>
+            </form>
+
+            <div class="footer-text">@copyright</div>
+        </div>
+    </div>
+
+    <script>
+        function refreshCaptcha() {
+            var img = document.getElementById('captchaImg');
+            img.src = '@Url.Action("Index", "Captcha")?_=' + new Date().getTime();
+        }
+        document.getElementById('captchaImg').addEventListener('click', refreshCaptcha);
+
+        // 按钮防重复点击
+        document.getElementById('loginForm').addEventListener('submit', function() {
+            document.getElementById('loginBtn').disabled = true;
+        });
+    </script>
+</body>
+</html>

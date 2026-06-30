@@ -1,0 +1,1139 @@
+@model IEnumerable<StudentManagerCore.Models.Student>
+@{
+    ViewData["Title"] = "学生管理";
+    var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
+    var isAdmin = role == "管理员";
+    var isBanZhuren = ViewBag.IsTeacher as bool? ?? false;
+    var isRestricted = ViewBag.IsRestrictedView as bool? ?? false;
+    var status = ViewBag.Status as string;
+    var isDeletedView = status == "已删除";
+    var isGraduatedView = status == "已毕业";
+    var isNormalView = string.IsNullOrEmpty(status);
+    var perms = (ViewBag.Permissions as string ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries);
+    bool hasPerm(string p) => perms.Contains(p);
+    var canEdit = isAdmin || hasPerm("student_edit") || isBanZhuren;
+    var canDelete = isAdmin || hasPerm("student_delete") || isBanZhuren;
+    var canAdd = isAdmin || hasPerm("student_add") || isBanZhuren;
+    var activeTab = ViewBag.ActiveTab as string ?? "student";
+    var _gradeMap = ViewBag.GradeDisplayMap as Dictionary<string, string>;
+    Func<string?, string> gradeDisplay = (g) => g != null && _gradeMap?.ContainsKey(g) == true ? _gradeMap[g] : (g ?? "");
+}
+@functions {
+    string MaskIdCard(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return "";
+        if (value.Length <= 8) return value;
+        return value.Substring(0, value.Length - 8) + "********";
+    }
+    string MaskPhone(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return "";
+        if (value.Length <= 4) return value;
+        return value.Substring(0, value.Length - 4) + "****";
+    }
+}
+
+<div class="d-flex align-items-center mb-3">
+    <h4 class="mb-0">
+        <i class="bi bi-people-fill me-2"></i>学生管理
+        @if (isAdmin)
+        {
+            <span class="badge bg-primary ms-2">管理员</span>
+        }
+        else if (isBanZhuren)
+        {
+            <span class="badge bg-info ms-2">班主任</span>
+        }
+        else
+        {
+            <span class="badge bg-secondary ms-2">@role</span>
+        }
+        @if (isDeletedView)
+        {
+            <span class="badge bg-danger ms-2">已删除</span>
+        }
+        else if (isGraduatedView)
+        {
+            <span class="badge bg-secondary ms-2">已毕业</span>
+        }
+        @if (isNormalView && canAdd && !isRestricted && activeTab != "grade")
+        {
+            <button type="button" class="btn btn-primary btn-sm ms-3" id="btnAddStudent">
+                <i class="bi bi-person-plus-fill me-1"></i> 添加学生
+            </button>
+        }
+        @if (isNormalView && canAdd && !isBanZhuren && !isRestricted && activeTab != "grade")
+        {
+            <button type="button" class="btn btn-success btn-sm ms-2" id="btnImport">
+                <i class="bi bi-upload me-1"></i> 导入
+            </button>
+        }
+        @if (isNormalView && !isRestricted && activeTab != "grade")
+        {
+            <a asp-action="Export" asp-route-keyword="@ViewBag.Keyword" asp-route-status="@ViewBag.Status" asp-route-gender="@ViewBag.Gender" asp-route-grade="@ViewBag.Grade" asp-route-className="@ViewBag.ClassName" asp-route-isNonLocal="@ViewBag.IsNonLocal" class="btn btn-outline-success btn-sm ms-2">
+                <i class="bi bi-download me-1"></i> 导出
+            </a>
+        }
+        @if (isAdmin && isNormalView)
+        {
+            <a asp-action="StudentPermissions" asp-controller="AdminCenter" class="btn btn-outline-warning btn-sm ms-2">
+                <i class="bi bi-shield-lock me-1"></i> 权限管理
+            </a>
+        }
+    </h4>
+</div>
+
+<!-- ========== 角色 Tab 导航 ========== -->
+@{ var tabs = ViewBag.AvailableTabs as List<string> ?? new List<string> { "student" }; }
+@{ var tabNames = new Dictionary<string, string> { ["student"] = "学生管理", ["grade"] = "管理年级", ["teaching"] = "所教班级" }; }
+@{ var tabIcons = new Dictionary<string, string> { ["student"] = "bi-people-fill", ["grade"] = "bi-layers-fill", ["teaching"] = "bi-journal-bookmark-fill" }; }
+
+<ul class="nav nav-tabs mb-3">
+    @foreach (var t in tabs)
+    {
+        var isActive = t == activeTab;
+        var url = Url.Action("Index", new { tab = t, status = ViewBag.Status });
+        <li class="nav-item">
+            <a class="nav-link @(isActive ? "active" : "")" href="@url">
+                <i class="bi @tabIcons[t] me-1"></i>@tabNames[t]
+            </a>
+        </li>
+    }
+</ul>
+
+@if (activeTab == "teaching")
+{
+    // ========== 所教班级 Tab（成绩视图） ==========
+    var teachingData = ViewBag.TeachingData as IEnumerable<dynamic> ?? new List<dynamic>();
+    var subjects = ViewBag.TeachingSubjects as List<StudentManagerCore.Models.Subject> ?? new List<StudentManagerCore.Models.Subject>();
+    var exams = ViewBag.TeachingExams as List<StudentManagerCore.Models.ExamSchedule> ?? new List<StudentManagerCore.Models.ExamSchedule>();
+    var allTeachingExams = ViewBag.AllTeachingExams as List<StudentManagerCore.Models.ExamSchedule> ?? new List<StudentManagerCore.Models.ExamSchedule>();
+    var selectedExamIds = ViewBag.SelectedExamIds as List<int> ?? new List<int>();
+    var displayExams = selectedExamIds.Count > 0
+        ? allTeachingExams.Where(e => selectedExamIds.Contains(e.Id)).OrderBy(e => e.ExamDate).ToList()
+        : exams.OrderBy(e => e.ExamDate).ToList();
+    var multiExam = displayExams.Count > 1;
+    <div class="alert alert-info py-2 mb-3">
+        <i class="bi bi-info-circle me-2"></i>
+        您共任教 <strong>@subjects.Count</strong> 个科目，涉及 <strong>@teachingData.Count()</strong> 名学生
+        @foreach (var s in subjects) { <span class="badge bg-primary ms-2">@s.Name</span> }
+    </div>
+
+    <!-- 考试选择器 -->
+    <form method="get" class="mb-3">
+        <input type="hidden" name="tab" value="teaching" />
+        <div class="d-flex align-items-center flex-wrap gap-2">
+            <span class="fw-bold me-1"><i class="bi bi-calendar-check"></i> 选择考试对比：</span>
+            @foreach (var ex in allTeachingExams)
+            {
+                var isChecked = selectedExamIds.Contains(ex.Id) ? "checked" : "";
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input exam-check" type="checkbox" name="examIds" value="@ex.Id" id="exam_@ex.Id" @isChecked>
+                    <label class="form-check-label" for="exam_@ex.Id">@ex.Name</label>
+                </div>
+            }
+            <button type="submit" class="btn btn-sm btn-outline-primary"><i class="bi bi-arrow-repeat"></i> 对比</button>
+            @if (selectedExamIds.Count > 0)
+            {
+                <a asp-action="Index" asp-route-tab="teaching" class="btn btn-sm btn-outline-secondary">清除筛选</a>
+            }
+        </div>
+    </form>
+
+    <div class="table-responsive">
+        <table class="table table-bordered table-hover align-middle" style="font-size:0.85rem;">
+            <thead class="table-dark">
+                <tr>
+                    <th rowspan="2" style="vertical-align:middle">序号</th>
+                    <th rowspan="2" style="vertical-align:middle">年级</th>
+                    <th rowspan="2" style="vertical-align:middle">班级</th>
+                    <th rowspan="2" style="vertical-align:middle">姓名</th>
+                    <th rowspan="2" style="vertical-align:middle">性别</th>
+                    @foreach (var subj in subjects)
+                    {
+                        if (multiExam)
+                        {
+                            <th colspan="@displayExams.Count" style="text-align:center;border-left:2px solid #555">
+                                @subj.Name<br /><small class="fw-normal">满分@(subj.FullScore)</small>
+                            </th>
+                        }
+                        else
+                        {
+                            <th rowspan="2" style="vertical-align:middle">
+                                @subj.Name<br /><small class="fw-normal">满分@(subj.FullScore)</small>
+                            </th>
+                        }
+                    }
+                </tr>
+                @if (multiExam)
+                {
+                    <tr>
+                        <th style="display:none"></th>
+                        <th style="display:none"></th>
+                        <th style="display:none"></th>
+                        <th style="display:none"></th>
+                        <th style="display:none"></th>
+                        @foreach (var subj in subjects)
+                        {
+                            foreach (var ex in displayExams)
+                            {
+                                <td class="text-center small" style="border-left:2px solid #555;min-width:70px;background:#2c3e50;color:#ecf0f1">@ex.Name</td>
+                            }
+                        }
+                    </tr>
+                }
+            </thead>
+            <tbody>
+                @if (!teachingData.Any())
+                {
+                    <tr><td colspan="@(4 + subjects.Count * (multiExam ? displayExams.Count : 1))" class="text-center text-muted py-4">暂无数据</td></tr>
+                }
+                @{ int tIndex = 0; }
+                @foreach (var item in teachingData)
+                {
+                    tIndex++;
+                    <tr>
+                        <td>@tIndex</td>
+                        <td>@gradeDisplay(item.Student.Grade)</td>
+                        <td>@item.Student.ClassName</td>
+                        <td>
+                            <a href="@Url.Action("StudentTrends", "Score", new { studentId = item.Student.StudentID })"
+                               class="text-decoration-none" target="_blank" title="查看成绩趋势">
+                                <strong>@item.Student.Name</strong>
+                                <i class="bi bi-graph-up-arrow small text-muted ms-1"></i>
+                            </a>
+                        </td>
+                        <td>@item.Student.Gender</td>
+                        @if (multiExam)
+                        {
+                            foreach (var subj in subjects)
+                            {
+                                foreach (var ex in displayExams)
+                                {
+                                    var score = item.Scores != null
+                                        ? ((IEnumerable<dynamic>)item.Scores).FirstOrDefault(s => s.SubjectId == subj.Id && s.ExamScheduleId == ex.Id)
+                                        : null;
+                                    if (score != null)
+                                    {
+                                        var val = (decimal?)score.ScoreValue;
+                                        <td style="border-left:2px solid #dee2e6" class="@(val >= subj.FullScore * 0.9m ? "text-success fw-bold" : val < subj.FullScore * 0.6m ? "text-danger" : "")">@val?.ToString("0.0")</td>
+                                    }
+                                    else
+                                    {
+                                        <td style="border-left:2px solid #dee2e6" class="text-muted">—</td>
+                                    }
+                                }
+                            }
+                        }
+                        else
+                        {
+                            foreach (var subj in subjects)
+                            {
+                                var score = item.Scores != null ? ((IEnumerable<dynamic>)item.Scores).FirstOrDefault(s => s.SubjectId == subj.Id) : null;
+                                if (score != null)
+                                {
+                                    var val = (decimal?)score.ScoreValue;
+                                    <td class="@(val >= subj.FullScore * 0.9m ? "text-success fw-bold" : val < subj.FullScore * 0.6m ? "text-danger" : "")">@val?.ToString("0.0")</td>
+                                }
+                                else
+                                {
+                                    <td class="text-muted">—</td>
+                                }
+                            }
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+else
+{
+
+<!-- Search -->
+<form method="get" class="mb-3">
+    <input type="hidden" name="tab" value="@activeTab" />
+    <input type="hidden" name="status" value="@ViewBag.Status" />
+    <div class="row g-2 align-items-end">
+        <div class="col-md-4">
+            <div class="input-group">
+                <input type="text" name="keyword" class="form-control" placeholder="@(isRestricted ? "搜索姓名/年级/班级..." : "搜索姓名/学号/班级/年级...")" value="@ViewBag.Keyword" />
+                <button type="submit" class="btn btn-outline-primary">
+                    <i class="bi bi-search me-1"></i>搜索
+                </button>
+                @if (!string.IsNullOrEmpty(ViewBag.Keyword) || ViewBag.Gender == "男" || ViewBag.Gender == "女" || !string.IsNullOrEmpty(ViewBag.Grade) && ViewBag.Grade != "全部" || !string.IsNullOrEmpty(ViewBag.ClassName) && ViewBag.ClassName != "全部" || !string.IsNullOrEmpty(ViewBag.IsNonLocal) && ViewBag.IsNonLocal != "全部")
+                {
+                    <a asp-action="Index" asp-route-tab="@activeTab" asp-route-status="@ViewBag.Status" class="btn btn-outline-secondary">清除</a>
+                }
+            </div>
+        </div>
+        <div class="col-md-auto">
+            @if (!ViewBag.IsTeacher)
+            {
+            <a class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" href="#advancedFilter" role="button">
+                <i class="bi bi-funnel me-1"></i>高级筛选
+            </a>
+            }
+        </div>
+    </div>
+    @if (!ViewBag.IsTeacher)
+    {
+    <div class="collapse @(ViewBag.Gender == "男" || ViewBag.Gender == "女" || !string.IsNullOrEmpty(ViewBag.Grade) && ViewBag.Grade != "全部" || !string.IsNullOrEmpty(ViewBag.ClassName) && ViewBag.ClassName != "全部" || !string.IsNullOrEmpty(ViewBag.IsNonLocal) && ViewBag.IsNonLocal != "全部" ? "show" : "")" id="advancedFilter">
+        <div class="card card-body mt-2 p-3">
+            <div class="row g-3">
+                <div class="col-auto">
+                    <label class="form-label small mb-1">年级</label>
+                    <select name="grade" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="">全部</option>
+                        @foreach (dynamic g in ViewBag.GradeList ?? new List<dynamic>())
+                        {
+                            <option value="@g.Value" selected="@(ViewBag.Grade == g.Value)">@g.Text</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <label class="form-label small mb-1">班级</label>
+                    <select name="className" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="">全部</option>
+                        @foreach (var c in ViewBag.ClassList != null ? ((IEnumerable<dynamic>)ViewBag.ClassList) : new List<dynamic>())
+                        {
+                            var display = c.GradeDisplay + "·" + c.ClassName;
+                            <option value="@c.ClassName" selected="@(ViewBag.ClassName == c.ClassName)">@display</option>
+                        }
+                    </select>
+                </div>
+                @if (!isRestricted)
+                {
+                <div class="col-auto">
+                    <label class="form-label small mb-1">性别</label>
+                    <select name="gender" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="">全部</option>
+                        <option value="男" selected="@(ViewBag.Gender == "男")">男</option>
+                        <option value="女" selected="@(ViewBag.Gender == "女")">女</option>
+                    </select>
+                </div>
+                }
+                @if (!isRestricted)
+                {
+                <div class="col-auto">
+                    <label class="form-label small mb-1">是否非本地户籍</label>
+                    <select name="isNonLocal" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="">全部</option>
+                        <option value="本地户籍" selected="@(ViewBag.IsNonLocal == "本地户籍")">本地户籍</option>
+                        <option value="省内非本地户籍" selected="@(ViewBag.IsNonLocal == "省内非本地户籍")">省内非本地户籍</option>
+                        <option value="省外非本地户籍" selected="@(ViewBag.IsNonLocal == "省外非本地户籍")">省外非本地户籍</option>
+                    </select>
+                </div>
+                }
+            </div>
+        </div>
+    </div>
+    }
+</form>
+
+@if (!string.IsNullOrEmpty(ViewBag.Status))
+{
+    <div class="mb-2">
+        <a asp-action="Index" asp-route-tab="@activeTab" class="btn btn-outline-info btn-sm">
+            <i class="bi bi-arrow-left me-1"></i>返回全部学生
+        </a>
+    </div>
+}
+
+<!-- 批量操作工具栏 -->
+@if (!isRestricted)
+{
+<div id="batchToolbar" class="mb-2 d-none">
+    <div class="d-flex align-items-center gap-2">
+        <span class="small text-muted" id="selectedCount">已选择 0 人</span>
+        @if (isDeletedView)
+        {
+            <button type="button" class="btn btn-outline-success btn-sm" id="btnBatchRestore"><i class="bi bi-arrow-repeat me-1"></i>批量恢复</button>
+        }
+        @if (!isDeletedView)
+        {
+            var btnClass = isBanZhuren ? "d-none" : "";
+            <button type="button" class="btn btn-outline-info btn-sm @btnClass" id="btnBatchTransfer"><i class="bi bi-arrows-move me-1"></i>批量转班</button>
+            @if (ViewBag.CanGraduate as bool? ?? false)
+            {
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="btnBatchGraduate"><i class="bi bi-mortarboard me-1"></i>批量毕业</button>
+            }
+            @if (isAdmin)
+            {
+            <button type="button" class="btn btn-outline-danger btn-sm" id="btnBatchDelete"><i class="bi bi-trash me-1"></i>批量删除</button>
+            }
+        }
+    </div>
+</div>
+}
+
+<div class="text-muted small mb-2">
+    共 <strong>@ViewBag.Total</strong> 条记录
+    @if (ViewBag.TotalPages > 1)
+    {
+        <span>，第 @ViewBag.CurrentPage / @ViewBag.TotalPages 页</span>
+    }
+</div>
+
+<div class="table-responsive" style="overflow-x: auto;">
+    <table class="table table-bordered table-hover table-striped align-middle" style="font-size: 0.85rem; white-space: nowrap;">
+        <thead class="table-dark">
+            <tr>
+                @if (!isRestricted)
+                {
+                <th style="width:40px;"><input type="checkbox" id="selectAll" /></th>
+                }
+                <th>序号</th>
+                @if (!isRestricted)
+                {
+                <th>学号</th>
+                }
+                <th>年级</th>
+                <th>班级</th>
+                <th>姓名</th>
+                <th>性别</th>
+                @if (!isRestricted)
+                {
+                <th>身份证号</th>
+                <th>民族</th>
+                <th>户口性质</th>
+                <th>户口所在地</th>
+                <th>父亲姓名</th>
+                <th>父亲电话</th>
+                <th>母亲姓名</th>
+                <th>母亲电话</th>
+                <th>状态</th>
+                <th>备注</th>
+                <th>创建时间</th>
+                }
+            </tr>
+        </thead>
+        <tbody>
+            @if (!Model.Any())
+            {
+                <tr>
+                    <td colspan="@(isRestricted ? 5 : 17)" class="text-center text-muted py-4">
+                        <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+                        @if (isDeletedView)
+                        {
+                            <span>暂无已删除的学生</span>
+                        }
+                        else if (isGraduatedView)
+                        {
+                            <span>暂无已毕业的学生</span>
+                        }
+                        else
+                        {
+                            <span>暂无数据</span>
+                        }
+                    </td>
+                </tr>
+            }
+            @{
+                int rowIndex = 0;
+            }
+            @foreach (var student in Model)
+            {
+                rowIndex++;
+                var seq = rowIndex;
+                <tr data-id="@student.StudentID" class="context-row">
+                    @if (!isRestricted)
+                    {
+                    <td><input type="checkbox" class="student-checkbox" value="@student.StudentID" /></td>
+                    }
+                    <td>@seq</td>
+                    @if (!isRestricted)
+                    {
+                    <td>@student.StudentNo</td>
+                    }
+                    <td>@gradeDisplay(student.Grade)</td>
+                    <td>@student.ClassName</td>
+                    <td><strong>@student.Name</strong></td>
+                    <td>@student.Gender</td>
+                    @if (!isRestricted)
+                    {
+                    <td>@MaskIdCard(student.IDCardNumber)</td>
+                    <td>@student.Nation</td>
+                    <td>@student.HouseholdType</td>
+                    <td>@student.HouseholdCity</td>
+                    <td>@student.FatherName</td>
+                    <td>@MaskPhone(student.FatherPhone)</td>
+                    <td>@student.MotherName</td>
+                    <td>@MaskPhone(student.MotherPhone)</td>
+                    <td>
+                        @if (student.Status == "在读" || student.Status == "正常" || student.Status == "Active")
+                        {
+                            <span class="badge bg-success">@(student.Status == "Active" ? "正常" : student.Status)</span>
+                        }
+                        else if (student.Status == "毕业" || student.Status == "已毕业")
+                        {
+                            <span class="badge bg-secondary">已毕业</span>
+                        }
+                        else if (student.Status == "休学")
+                        {
+                            <span class="badge bg-warning text-dark">休学</span>
+                        }
+                        else if (student.Status == "已删除")
+                        {
+                            <span class="badge bg-danger">已删除</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-info">@student.Status</span>
+                        }
+                    </td>
+                    <td>@student.Remark</td>
+                    <td>@(student.CreateTime?.ToString("yyyy-MM-dd HH:mm") ?? "")</td>
+                    }
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+var statusParam = !string.IsNullOrEmpty(ViewBag.Status) ? "&status=" + ViewBag.Status : "";
+var tabParam = "&tab=" + activeTab;
+var genderParam = ViewBag.Gender == "男" || ViewBag.Gender == "女" ? "&gender=" + ViewBag.Gender : "";
+var gradeParam = !string.IsNullOrEmpty(ViewBag.Grade) && ViewBag.Grade != "全部" ? "&grade=" + ViewBag.Grade : "";
+var classParam = !string.IsNullOrEmpty(ViewBag.ClassName) && ViewBag.ClassName != "全部" ? "&className=" + ViewBag.ClassName : "";
+var nonLocalParam = !string.IsNullOrEmpty(ViewBag.IsNonLocal) && ViewBag.IsNonLocal != "全部" ? "&isNonLocal=" + ViewBag.IsNonLocal : "";
+var filterParams = tabParam + statusParam + genderParam + gradeParam + classParam + nonLocalParam;
+@if (ViewBag.TotalPages > 1)
+{
+    <nav>
+        <ul class="pagination pagination-sm justify-content-center">
+            <li class="page-item @(ViewBag.CurrentPage <= 1 ? "disabled" : "")">
+                <a class="page-link" href="?page=@(ViewBag.CurrentPage - 1)&keyword=@ViewBag.Keyword@filterParams">上一页</a>
+            </li>
+            @{
+                var totalPages = (int)ViewBag.TotalPages;
+                var curPage = (int)ViewBag.CurrentPage;
+                var startPage = Math.Max(1, curPage - 2);
+                var endPage = Math.Min(totalPages, curPage + 2);
+
+                // 第一页
+                if (startPage > 1)
+                {
+                    <li class="page-item"><a class="page-link" href="?page=1&keyword=@ViewBag.Keyword@filterParams">1</a></li>
+                    if (startPage > 2)
+                    {
+                        <li class="page-item disabled"><span class="page-link">…</span></li>
+                    }
+                }
+
+                for (int i = startPage; i <= endPage; i++)
+                {
+                    <li class="page-item @(i == curPage ? "active" : "")">
+                        <a class="page-link" href="?page=@i&keyword=@ViewBag.Keyword@filterParams">@i</a>
+                    </li>
+                }
+
+                // 最后一页
+                if (endPage < totalPages)
+                {
+                    if (endPage < totalPages - 1)
+                    {
+                        <li class="page-item disabled"><span class="page-link">…</span></li>
+                    }
+                    <li class="page-item"><a class="page-link" href="?page=@totalPages&keyword=@ViewBag.Keyword@filterParams">@totalPages</a></li>
+                }
+            }
+            <li class="page-item @(ViewBag.CurrentPage >= ViewBag.TotalPages ? "disabled" : "")">
+                <a class="page-link" href="?page=@(ViewBag.CurrentPage + 1)&keyword=@ViewBag.Keyword@filterParams">下一页</a>
+            </li>
+        </ul>
+    </nav>
+}
+
+<!-- 导入Modal -->
+<div class="modal fade" id="importModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-upload me-2"></i>导入学生</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">选择 Excel 文件</label>
+                    <input type="file" id="importFile" class="form-control" accept=".xlsx,.xls" />
+                </div>
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div class="small text-muted">
+                        <i class="bi bi-info-circle me-1"></i>Excel 列顺序（从A列开始）：
+                    </div>
+                    <a href="/Student/DownloadTemplate" class="btn btn-outline-success btn-sm">
+                        <i class="bi bi-download me-1"></i>下载模板
+                    </a>
+                </div>
+                <table class="table table-sm table-bordered small mb-3">
+                    <tr><td>A</td><td>学号*</td><td>B</td><td>姓名*</td><td>C</td><td>性别</td></tr>
+                    <tr><td>D</td><td>民族</td><td>E</td><td>身份证号</td><td>F</td><td>年级</td></tr>
+                    <tr><td>G</td><td>班级</td><td>H</td><td>就读状态</td><td>I</td><td>户口性质</td></tr>
+                    <tr><td>J</td><td>户口所在地</td><td>K</td><td>户口簿地址</td><td>L</td><td>是否非本地户籍</td></tr>
+                    <tr><td>M</td><td>是否随迁子女</td><td>N</td><td>是否进城务工子女</td><td>O</td><td>现居住地址</td></tr>
+                    <tr><td>P</td><td>父亲姓名</td><td>Q</td><td>父亲电话</td><td>R</td><td>母亲姓名</td></tr>
+                    <tr><td>S</td><td>母亲电话</td><td>T</td><td>备注</td><td></td><td></td></tr>
+                </table>
+                <div class="progress d-none" id="importProgress">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" style="width:100%">导入中...</div>
+                </div>
+                <div id="importResult" class="d-none"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="btnImportSubmit">
+                    <i class="bi bi-cloud-upload me-1"></i>开始导入
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 批量转班 Modal -->
+<div class="modal fade" id="batchTransferModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-arrows-move me-2"></i>批量转班</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="batchTransferIds" />
+                <p class="mb-3">共选择 <strong id="batchTransferCount">0</strong> 名学生，请选择目标班级：</p>
+                <div class="mb-3">
+                    <label class="form-label">目标年级</label>
+                    <select id="batchTargetGrade" class="form-select">
+                        <option value="">-- 请选择年级 --</option>
+                        @foreach (dynamic g in ViewBag.GradeList ?? new List<dynamic>())
+                        {
+                            <option value="@g.Value">@g.Text</option>
+                        }
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">目标班级</label>
+                    <select id="batchTargetClass" class="form-select" disabled>
+                        <option value="">-- 请先选择年级 --</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="btnBatchTransferSubmit">
+                    <i class="bi bi-arrows-move me-1"></i>确认转班
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <!-- 右键菜单 -->
+    <div id="contextMenu" class="dropdown-menu shadow" style="position:fixed;display:none;z-index:9999;min-width:140px;">
+        @if (isNormalView)
+        {
+            <a class="dropdown-item" href="#" id="ctxView"><i class="bi bi-eye me-2"></i>查看</a>
+            @* 管理年级 tab 只能查看，不能编辑删除 *@
+            if (canEdit && activeTab != "grade")
+            {
+                <a class="dropdown-item" href="#" id="ctxEdit"><i class="bi bi-pencil-square me-2"></i>编辑</a>
+            }
+            if (canDelete && activeTab != "grade")
+            {
+                <div class="dropdown-divider"></div>
+                <a class="dropdown-item text-danger" href="#" id="ctxDelete"><i class="bi bi-trash me-2"></i>删除</a>
+            }
+        }
+        @if (isDeletedView)
+        {
+            <a class="dropdown-item" href="#" id="ctxView"><i class="bi bi-eye me-2"></i>查看</a>
+            <div class="dropdown-divider"></div>
+            <a class="dropdown-item text-success" href="#" id="ctxRestore"><i class="bi bi-arrow-repeat me-2"></i>恢复</a>
+            if (isAdmin)
+            {
+                <div class="dropdown-divider"></div>
+                <a class="dropdown-item text-danger" href="#" id="ctxHardDelete"><i class="bi bi-trash3 me-2"></i>彻底删除</a>
+            }
+        }
+    </div>
+
+    <!-- 编辑Modal -->
+    <div class="modal fade" id="editModal" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>编辑学生</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="editModalBody">
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <p class="mt-2 text-muted">加载中...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加学生Modal -->
+    <div class="modal fade" id="addModal" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-person-plus-fill me-2"></i>添加学生</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="addModalBody">
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <p class="mt-2 text-muted">加载中...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 查看Modal -->
+    <div class="modal fade" id="viewModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-eye me-2"></i>学生详情</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="viewModalBody">
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <p class="mt-2 text-muted">加载中...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var contextStudentId = null;
+        // 查看详情中的掩码切换
+        function toggleMask(btn) {
+            var span = btn.closest("td").querySelector(".masked-value");
+            if (!span) return;
+            var icon = btn.querySelector("i");
+            if (span.dataset.fullVisible === "1") {
+                span.textContent = span.dataset.masked;
+                icon.className = "bi bi-eye";
+                span.dataset.fullVisible = "0";
+            } else {
+                span.dataset.masked = span.textContent;
+                span.textContent = span.dataset.full;
+                icon.className = "bi bi-eye-slash";
+                span.dataset.fullVisible = "1";
+            }
+        }
+
+$(document).on('contextmenu', '.context-row', function(e) {
+            e.preventDefault();
+            contextStudentId = $(this).data('id');
+            var menu = $('#contextMenu');
+            var top = e.clientY, left = e.clientX;
+            menu.css({ left: left + 'px', top: top + 'px' }).show();
+            // 如果菜单超出底部，向上弹出
+            var menuH = menu.outerHeight();
+            var winH = $(window).height();
+            if (top + menuH > winH) {
+                menu.css('top', Math.max(0, top - menuH) + 'px');
+            }
+            // 如果菜单超出右侧，向左弹出
+            var menuW = menu.outerWidth();
+            var winW = $(window).width();
+            if (left + menuW > winW) {
+                menu.css('left', Math.max(0, left - menuW) + 'px');
+            }
+        });
+
+        $(document).click(function() { $('#contextMenu').hide(); });
+
+        $('#ctxEdit').click(function(e) {
+            e.preventDefault();
+            $('#contextMenu').hide();
+            if (!contextStudentId) return;
+            $('#editModalBody').html('<div class="text-center py-4"><div class="spinner-border text-primary" role="status"></div><p class="mt-2 text-muted">加载中...</p></div>');
+            $('#editModal').modal('show');
+            $.get('/Student/Edit/' + contextStudentId, function(html) {
+                var formHtml = $(html).find('#editStudentForm').first();
+                if (formHtml.length === 0) { formHtml = $('<div>').html(html).find('#editStudentForm'); }
+                if (formHtml.length > 0) {
+                    formHtml.find('button[type="submit"]').prop('disabled', false).text('保存');
+                    $('#editModalBody').html(formHtml);
+                    // 初始化级联下拉（班级管理数据在 hidden input 中）
+                    initClassCascade($('#editModalBody'));
+                    if ($('#editModalBody input[name="__RequestVerificationToken"]').length === 0) {
+                        var token = $('[name="__RequestVerificationToken"]').first().val();
+                        if (token) { $('#editModalBody form').prepend('<input name="__RequestVerificationToken" type="hidden" value="' + token + '" />'); }
+                    }
+                    $('#editModalBody form').on('submit', function(e) {
+                        e.preventDefault();
+                        var form = $(this);
+                        var btn = form.find('button[type="submit"]');
+                        btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>保存中...');
+                        $.post(form.attr('action'), form.serialize())
+                            .done(function(r) {
+                                if (r.success) { $('#editModal').modal('hide'); location.reload(); }
+                                else { alert(r.message || '保存失败'); btn.prop('disabled', false).text('保存'); }
+                            }).fail(function() { alert('网络错误，请重试'); btn.prop('disabled', false).text('保存'); });
+                    });
+                } else { $('#editModalBody').html('<div class="alert alert-danger">无法加载编辑表单</div>'); }
+            }).fail(function() { $('#editModalBody').html('<div class="alert alert-danger">加载失败</div>'); });
+        });
+
+        $('#ctxView').click(function(e) {
+            e.preventDefault();
+            $('#contextMenu').hide();
+            if (!contextStudentId) return;
+            $('#viewModalBody').html('<div class="text-center py-4"><div class="spinner-border text-primary" role="status"></div><p class="mt-2 text-muted">加载中...</p></div>');
+            $('#viewModal').modal('show');
+            $.get('/Student/Details/' + contextStudentId, function(html) {
+                var $html = $('<div>').html(html);
+                var content = $html.find('main').html() || $html.find('.container').html() || $html.find('.card').html() || html;
+                $('#viewModalBody').html(content);
+            }).fail(function() { $('#viewModalBody').html('<div class="alert alert-danger">加载失败</div>'); });
+        });
+
+        $('#ctxDelete').click(function(e) {
+            e.preventDefault(); $('#contextMenu').hide();
+            if (!contextStudentId) return;
+            showConfirm('确认将该学生移入已删除？', function() {
+                $.post('@Url.Action("Delete")', { id: contextStudentId, __RequestVerificationToken: $('[name="__RequestVerificationToken"]').first().val() })
+                    .done(function(res) { if (res.success) location.reload(); else alert(res.message); });
+            });
+        });
+
+        // 行内按钮操作
+        window.editStudent = function(id) {
+            contextStudentId = id;
+            $('#ctxEdit').trigger('click');
+        };
+
+        window.deleteStudent = function(id) {
+            contextStudentId = id;
+            $('#ctxDelete').trigger('click');
+        };
+
+        $('#ctxRestore').click(function(e) {
+            e.preventDefault(); $('#contextMenu').hide();
+            if (!contextStudentId) return;
+            showConfirm('确认恢复该学生？', function() {
+                $.post('@Url.Action("Restore")', { id: contextStudentId, __RequestVerificationToken: $('[name="__RequestVerificationToken"]').first().val() })
+                    .done(function(res) { if (res.success) location.reload(); else alert(res.message); });
+            });
+        });
+
+        $('#ctxHardDelete').click(function(e) {
+            e.preventDefault(); $('#contextMenu').hide();
+            if (!contextStudentId) return;
+            var code = prompt('请输入安全码以确认彻底删除：');
+            if (!code) return;
+            $.post('@Url.Action("HardDelete")', { id: contextStudentId, securityCode: code, __RequestVerificationToken: $('[name="__RequestVerificationToken"]').first().val() })
+                .done(function(res) { if (res.success) location.reload(); else alert(res.message); });
+        });
+
+        // 级联下拉：年级 → 班级（供右键编辑弹窗使用）
+        function initClassCascade(container) {
+            var allClassesData = container.find('#allClassesData').val();
+            if (!allClassesData) return;
+            var allClasses;
+            try { allClasses = JSON.parse(allClassesData); } catch(e) { return; }
+            var gradeSelect = container.find('#gradeSelect');
+            var classSelect = container.find('#classSelect');
+            if (!gradeSelect.length || !classSelect.length) return;
+
+            gradeSelect.off('change').on('change', function () {
+                var gradeId = $(this).find('option:selected').data('gradeid');
+                classSelect.empty();
+                if (!gradeId) { classSelect.append('<option value="">-- 请先选择年级 --</option>'); return; }
+                var f = allClasses.filter(function (c) { return c.gradeLevelID === gradeId; });
+                if (f.length > 0) {
+                    classSelect.append('<option value="">-- 请选择班级 --</option>');
+                    $.each(f, function (i, c) {
+                        var cn = c.className || '';
+                        var displayName = (c.gradeDisplayName || '') + cn;
+                        var cur = classSelect.data('current') || '';
+                        var s = (cn === cur) ? ' selected' : '';
+                        classSelect.append('<option value="' + cn + '"' + s + '>' + displayName + '</option>');
+                    });
+                } else { classSelect.append('<option value="">-- 暂无班级 --</option>'); }
+            });
+
+            // 按 GradeLevelID 预选年级（不再依赖静态 Grade 名称）
+            var studentGradeLevelId = container.find('#studentGradeLevelId').val();
+            if (studentGradeLevelId) {
+                gradeSelect.find('option').each(function() {
+                    if ($(this).data('gradeid') == studentGradeLevelId) {
+                        $(this).prop('selected', true);
+                        return false;
+                    }
+                });
+            }
+
+            // 如果有选中的年级，触发加载
+            if (gradeSelect.val()) gradeSelect.trigger('change');
+        }
+
+        // 添加学生按钮 - 弹出模态框
+        $('#btnAddStudent').on('click', function () {
+            var modal = new bootstrap.Modal(document.getElementById('addModal'));
+            modal.show();
+
+            $.get('/Student/Add')
+                .done(function (html) {
+                    var form = $(html).find('#addStudentForm');
+                    if (form.length === 0) {
+                        $('#addModalBody').html('<div class="alert alert-danger">加载失败，请刷新页面重试</div>');
+                        return;
+                    }
+                    $('#addModalBody').html(form);
+
+                    // 初始化级联下拉框
+                    initClassCascade($('#addModalBody'));
+
+                    // 替换提交为AJAX
+                    $('#addModalBody form').off('submit').on('submit', function (e) {
+                        e.preventDefault();
+                        var btn = $(this).find('button[type="submit"]');
+                        btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> 提交中...');
+
+                        $.post('/Student/Add', $(this).serialize())
+                            .done(function (res) {
+                                if (res.success) {
+                                    modal.hide();
+                                    location.reload();
+                                } else {
+                                    alert(res.message || '提交失败');
+                                    btn.prop('disabled', false).text('保存');
+                                }
+                            })
+                            .fail(function (xhr) {
+                                var msg = '提交失败';
+                                try { msg = JSON.parse(xhr.responseText).message || msg; } catch (ex) { }
+                                alert(msg);
+                                btn.prop('disabled', false).text('保存');
+                            });
+                    });
+                })
+                .fail(function () {
+                    $('#addModalBody').html('<div class="alert alert-danger">加载失败，请刷新页面重试</div>');
+                });
+        });
+
+        // 导入按钮
+        $('#btnImport').on('click', function () {
+            $('#importFile').val('');
+            $('#importResult').addClass('d-none').html('');
+            $('#importProgress').addClass('d-none');
+            var modal = new bootstrap.Modal(document.getElementById('importModal'));
+            modal.show();
+        });
+
+        $('#btnImportSubmit').on('click', function () {
+            var file = $('#importFile')[0].files[0];
+            if (!file) { alert('请选择文件'); return; }
+
+            var btn = $(this);
+            btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> 导入中...');
+            $('#importProgress').removeClass('d-none');
+            $('#importResult').addClass('d-none');
+
+            var formData = new FormData();
+            formData.append('file', file);
+            formData.append('__RequestVerificationToken', $('input[name="__RequestVerificationToken"]').val());
+
+            $.ajax({
+                url: '/Student/Import',
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false
+            }).done(function (res) {
+                $('#importProgress').addClass('d-none');
+                var cls = res.success ? 'alert-success' : 'alert-danger';
+                $('#importResult').removeClass('d-none').addClass('alert ' + cls).html(res.message);
+                if (res.success && res.imported > 0) {
+                    setTimeout(function () { location.reload(); }, 1500);
+                }
+            }).fail(function (xhr) {
+                $('#importProgress').addClass('d-none');
+                var msg = '导入失败';
+                try { msg = JSON.parse(xhr.responseText).message || msg; } catch (ex) { }
+                $('#importResult').removeClass('d-none').addClass('alert alert-danger').html(msg);
+            }).always(function () {
+                btn.prop('disabled', false).html('<i class="bi bi-cloud-upload me-1"></i>开始导入');
+            });
+        });
+
+        // ========== 批量操作：全选 / 取消全选 ==========
+        $(document).on('change', '#selectAll', function () {
+            $('.student-checkbox').prop('checked', $(this).is(':checked'));
+            updateBatchToolbar();
+        });
+
+        $(document).on('change', '.student-checkbox', function () {
+            updateBatchToolbar();
+            var allChecked = $('.student-checkbox:checked').length === $('.student-checkbox').length;
+            $('#selectAll').prop('checked', allChecked);
+        });
+
+        function getSelectedIds() {
+            var ids = [];
+            $('.student-checkbox:checked').each(function () { ids.push($(this).val()); });
+            return ids;
+        }
+
+        function updateBatchToolbar() {
+            var count = $('.student-checkbox:checked').length;
+            $('#selectedCount').text('已选择 ' + count + ' 人');
+            $('#batchToolbar').toggleClass('d-none', count === 0);
+        }
+
+        // ========== 批量毕业 ==========
+        $('#btnBatchGraduate').on('click', function () {
+            var ids = getSelectedIds();
+            if (ids.length === 0) { alert('请先选择学生'); return; }
+            showConfirm('确定将所选 ' + ids.length + ' 名学生标记为已毕业？', function () {
+                $.post('@Url.Action("BatchGraduate")', {
+                    ids: ids,
+                    __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+                }).done(function (res) {
+                    if (res.success) { location.reload(); } else { alert(res.message); }
+                }).fail(function () { alert('操作失败'); });
+            });
+        });
+
+        // ========== 批量删除 ==========
+        $('#btnBatchDelete').on('click', function () {
+            var ids = getSelectedIds();
+            if (ids.length === 0) { alert('请先选择学生'); return; }
+            showConfirm('确定将所选 ' + ids.length + ' 名学生移入已删除？', function () {
+                $.post('@Url.Action("BatchDelete")', {
+                    ids: ids,
+                    __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+                }).done(function (res) {
+                    if (res.success) { location.reload(); } else { alert(res.message); }
+                }).fail(function () { alert('操作失败'); });
+            });
+        });
+
+        // ========== 批量恢复 ==========
+        $('#btnBatchRestore').on('click', function () {
+            var ids = getSelectedIds();
+            if (ids.length === 0) { alert('请先选择学生'); return; }
+            showConfirm('确定恢复所选 ' + ids.length + ' 名学生在读？', function () {
+                $.post('@Url.Action("BatchRestore")', {
+                    ids: ids,
+                    __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+                }).done(function (res) {
+                    if (res.success) { location.reload(); } else { alert(res.message); }
+                }).fail(function () { alert('操作失败'); });
+            });
+        });
+
+        // ========== 批量转班：弹出 Modal 选择目标班级 ==========
+        $('#btnBatchTransfer').on('click', function () {
+            var ids = getSelectedIds();
+            if (ids.length === 0) { alert('请先选择学生'); return; }
+            $('#batchTransferIds').val(JSON.stringify(ids));
+            $('#batchTransferCount').text(ids.length);
+            new bootstrap.Modal(document.getElementById('batchTransferModal')).show();
+        });
+
+        // 批量转班级联下拉：年级 → 班级（AJAX 加载）
+        $('#batchTargetGrade').on('change', function () {
+            var grade = $(this).val();
+            var classSelect = $('#batchTargetClass');
+            classSelect.empty().append('<option value="">-- 加载中... --</option>').prop('disabled', true);
+            if (!grade) {
+                classSelect.empty().append('<option value="">-- 请先选择年级 --</option>').prop('disabled', true);
+                return;
+            }
+            $.get('@Url.Action("GetClassesByGradeName")', { gradeName: grade })
+                .done(function (classes) {
+                    classSelect.empty().append('<option value="">-- 请选择班级 --</option>');
+                    $.each(classes, function (i, c) {
+                        classSelect.append('<option value="' + $('<div>').text(c.className).html() + '">' + $('<div>').text(c.className).html() + '</option>');
+                    });
+                    classSelect.prop('disabled', false);
+                }).fail(function () {
+                    classSelect.empty().append('<option value="">-- 加载失败 --</option>');
+                });
+        });
+
+        $('#btnBatchTransferSubmit').on('click', function () {
+            var targetGrade = $('#batchTargetGrade').val();
+            var targetClass = $('#batchTargetClass').val();
+            if (!targetGrade || !targetClass) { alert('请选择目标年级和班级'); return; }
+            var ids = JSON.parse($('#batchTransferIds').val() || '[]');
+            if (ids.length === 0) { alert('没有待转班的学生'); return; }
+
+            $(this).prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>转班中...');
+            $.post('@Url.Action("BatchTransfer")', {
+                ids: ids,
+                targetGrade: targetGrade,
+                targetClass: targetClass,
+                __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+            }).done(function (res) {
+                if (res.success) { location.reload(); } else { alert(res.message); }
+            }).fail(function () { alert('操作失败'); }).always(function () {
+                $('#btnBatchTransferSubmit').prop('disabled', false).html('<i class="bi bi-arrows-move me-1"></i>确认转班');
+            });
+        });
+
+        // ========== AI报告查看（在详情弹窗中使用） ==========
+        function btnViewAiReport(studentId) {
+            var examId = document.getElementById('aiReportExamSelect').value;
+            if (!examId) { alert('请选择考试'); return; }
+            document.getElementById('aiReportEmpty').style.display = 'none';
+            document.getElementById('aiReportContent').style.display = 'none';
+            document.getElementById('aiReportBody').innerHTML = '<div class="text-center py-3"><div class="spinner-border text-success" role="status"></div><div class="mt-2 small text-muted">加载中...</div></div>';
+            document.getElementById('aiReportContent').style.display = 'block';
+            document.getElementById('aiReportHeader').textContent = '';
+            var sp = new URLSearchParams();
+            sp.append('examScheduleId', examId);
+            sp.append('studentId', studentId);
+            fetch('@Url.Action("GetStudentAiReport", "Score")', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: sp
+            }).then(function (r) { return r.json(); }).then(function (res) {
+                if (!res.success || !res.exists) {
+                    document.getElementById('aiReportContent').style.display = 'none';
+                    var msg = res.message || '暂无AI分析报告';
+                    if (res.debug) {
+                        msg += ' | 考试ID=' + res.debug.receivedExamScheduleId + ', 学生ID=' + res.debug.receivedStudentId;
+                        msg += ' | 该学生有 ' + res.debug.cachedReportCount + ' 份缓存: ';
+                        if (res.debug.cachedExams && res.debug.cachedExams.length > 0) {
+                            for (var i = 0; i < res.debug.cachedExams.length; i++) {
+                                msg += res.debug.cachedExams[i].examName + '(ID=' + res.debug.cachedExams[i].examId + ') ';
+                            }
+                        }
+                    }
+                    document.getElementById('aiReportEmpty').textContent = msg;
+                    document.getElementById('aiReportEmpty').style.display = 'block';
+                    return;
+                }
+                document.getElementById('aiReportHeader').textContent = '学生：' + res.studentName + ' | ' + document.getElementById('aiReportExamSelect').options[document.getElementById('aiReportExamSelect').selectedIndex].text + '（' + res.updatedAt + '生成）';
+                var html = (res.analysis || '')
+                    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>')
+                    .replace(/### (.*?)(?:<br>|$)/g, '<h6 class="mt-3 mb-2 text-primary">$1</h6>')
+                    .replace(/## (.*?)(?:<br>|$)/g, '<h5 class="mt-3 mb-2 fw-bold">$1</h5>')
+                    .replace(/- (.*?)(?:<br>|$)/g, '<li>$1</li>');
+                html = html.replace(/(<li>.*?<\/li>)/g, '<ul class="mb-2">$1</ul>');
+                html = html.replace(/<\/ul>\s*<ul class="mb-2">/g, '');
+                document.getElementById('aiReportBody').innerHTML = html;
+                document.getElementById('aiReportContent').style.display = 'block';
+            }).catch(function () {
+                document.getElementById('aiReportBody').innerHTML = '<div class="alert alert-danger mb-0">网络错误</div>';
+            });
+        }
+    </script>
+}
+}

@@ -1,0 +1,145 @@
+@model List<Admin>
+@{
+    ViewData["Title"] = "批量权限管理";
+    var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
+    var isAdmin = role.Trim() == "管理员";
+}
+
+@if (!isAdmin)
+{
+    <div class="alert alert-danger">您没有权限访问此页面</div>
+    return;
+}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h4 class="mb-0">
+        <i class="bi bi-shield-lock-fill me-2"></i>批量权限管理
+        <span class="badge bg-secondary ms-2">共 @Model.Count 人</span>
+    </h4>
+    <button type="button" class="btn btn-success" id="btnSaveAll">
+        <i class="bi bi-check2-all me-1"></i> 保存全部修改
+    </button>
+</div>
+
+<div class="alert alert-info d-flex align-items-center">
+    <i class="bi bi-info-circle-fill me-2"></i>
+    勾选表示允许该操作。管理员账号拥有所有权限，不在此页面显示。
+</div>
+
+<div class="table-responsive" style="overflow-x: auto;">
+    <table class="table table-bordered table-hover align-middle text-center" id="permTable" style="font-size: 0.85rem; white-space: nowrap;">
+        <thead class="table-dark">
+            <tr>
+                <th style="min-width:80px;">姓名</th>
+                <th style="min-width:60px;">
+                    编辑学生<br/>
+                    <input type="checkbox" class="master-check" data-col="1" title="全选/取消" />
+                </th>
+                <th style="min-width:60px;">
+                    删除学生<br/>
+                    <input type="checkbox" class="master-check" data-col="2" title="全选/取消" />
+                </th>
+                <th style="min-width:60px;">
+                    添加学生<br/>
+                    <input type="checkbox" class="master-check" data-col="3" title="全选/取消" />
+                </th>
+                <th style="min-width:60px;">
+                    修改基本信息<br/>
+                    <input type="checkbox" class="master-check" data-col="4" title="全选/取消" />
+                </th>
+                <th style="min-width:60px;">
+                    修改手机号<br/>
+                    <input type="checkbox" class="master-check" data-col="5" title="全选/取消" />
+                </th>
+                <th style="min-width:60px;">
+                    修改身份证<br/>
+                    <input type="checkbox" class="master-check" data-col="6" title="全选/取消" />
+                </th>
+                <th style="min-width:60px;">
+                    修改证书<br/>
+                    <input type="checkbox" class="master-check" data-col="7" title="全选/取消" />
+                </th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (Model.Count == 0)
+            {
+                <tr>
+                    <td colspan="8" class="text-center text-muted py-4">暂无班主任/教师用户</td>
+                </tr>
+            }
+            @foreach (var teacher in Model)
+            {
+                var perms = (teacher.Permissions ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries);
+                <tr data-id="@teacher.AdminID">
+                    <td class="text-start fw-bold">@teacher.RealName</td>
+                    <td><input type="checkbox" class="perm-check" data-perm="edit_student" @(perms.Contains("edit_student") ? "checked" : "") /></td>
+                    <td><input type="checkbox" class="perm-check" data-perm="delete_student" @(perms.Contains("delete_student") ? "checked" : "") /></td>
+                    <td><input type="checkbox" class="perm-check" data-perm="add_student" @(perms.Contains("add_student") ? "checked" : "") /></td>
+                    <td><input type="checkbox" class="perm-check" data-perm="edit_basic" @(perms.Contains("edit_basic") ? "checked" : "") /></td>
+                    <td><input type="checkbox" class="perm-check" data-perm="edit_phone" @(perms.Contains("edit_phone") ? "checked" : "") /></td>
+                    <td><input type="checkbox" class="perm-check" data-perm="edit_idcard" @(perms.Contains("edit_idcard") ? "checked" : "") /></td>
+                    <td><input type="checkbox" class="perm-check" data-perm="edit_cert" @(perms.Contains("edit_cert") ? "checked" : "") /></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@section Scripts {
+    <script>
+        // 列全选/取消
+        $(document).on('change', '.master-check', function () {
+            var colIndex = parseInt($(this).data('col'));
+            var isChecked = $(this).prop('checked');
+            $('#permTable tbody tr').each(function () {
+                $(this).find('td:eq(' + colIndex + ') input.perm-check').prop('checked', isChecked);
+            });
+        });
+
+        // 保存全部修改
+        $('#btnSaveAll').on('click', function () {
+            var btn = $(this);
+            btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>保存中...');
+
+            var updates = [];
+            $('#permTable tbody tr').each(function () {
+                var id = parseInt($(this).data('id'));
+                if (!id) return;
+                var cells = $(this).find('td');
+                updates.push({
+                    id: id,
+                    editStudent: $(cells[1]).find('input').prop('checked'),
+                    deleteStudent: $(cells[2]).find('input').prop('checked'),
+                    addStudent: $(cells[3]).find('input').prop('checked'),
+                    editBasic: $(cells[4]).find('input').prop('checked'),
+                    editPhone: $(cells[5]).find('input').prop('checked'),
+                    editIdCard: $(cells[6]).find('input').prop('checked'),
+                    editCert: $(cells[7]).find('input').prop('checked')
+                });
+            });
+
+            $.ajax({
+                url: '@Url.Action("BatchUpdatePermissions")',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(updates),
+                headers: {
+                    'RequestVerificationToken': $('input[name="__RequestVerificationToken"]').val()
+                },
+                success: function (res) {
+                    if (res.success) {
+                        alert('✅ ' + res.message);
+                    } else {
+                        alert('❌ ' + (res.message || '保存失败'));
+                    }
+                    btn.prop('disabled', false).html('<i class="bi bi-check2-all me-1"></i> 保存全部修改');
+                },
+                error: function () {
+                    alert('网络错误，请重试');
+                    btn.prop('disabled', false).html('<i class="bi bi-check2-all me-1"></i> 保存全部修改');
+                }
+            });
+        });
+    </script>
+}
