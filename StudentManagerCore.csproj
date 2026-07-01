@@ -4,7 +4,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <DefaultItemExcludes>$(DefaultItemExcludes);check_data\**\*;check_db\**\*;check_exam_subject\**\*;check_user\**\*;DataMigrator\**\*;fix_enc\**\*;hash_pwd\**\*</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);check_data\**\*;check_db\**\*;check_exam_subject\**\*;check_user\**\*;DataMigrator\**\*;fix_enc\**\*;hash_pwd\**\*;StudentManagerCore\**\*</DefaultItemExcludes>
     <RazorCompileOnPublish>false</RazorCompileOnPublish>
     <RazorCompileOnBuild>true</RazorCompileOnBuild>
   </PropertyGroup>

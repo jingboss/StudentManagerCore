@@ -807,9 +807,15 @@
                     // 按学段过滤
                     var filtered = allSubjects;
                     if (schoolType === 'primary') {
-                        filtered = allSubjects.filter(function (s) { return s.grade && s.grade.indexOf('小') >= 0; });
+                        var pGrades = ['一年级','二年级','三年级','四年级','五年级','六年级'];
+                        filtered = allSubjects.filter(function(s) {
+                            return !s.grade || s.grade.indexOf('小') >= 0 || pGrades.indexOf(s.grade) >= 0;
+                        });
                     } else if (schoolType === 'middle') {
-                        filtered = allSubjects.filter(function (s) { return s.grade && s.grade.indexOf('初') >= 0; });
+                        var mGrades = ['七年级','八年级','九年级'];
+                        filtered = allSubjects.filter(function(s) {
+                            return !s.grade || s.grade.indexOf('初') >= 0 || mGrades.indexOf(s.grade) >= 0;
+                        });
                     }
 
                     $.get('@Url.Action("GetExamSubjects")', { examScheduleId: examId }, function (examSubjects) {
