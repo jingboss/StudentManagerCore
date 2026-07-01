@@ -827,13 +827,31 @@
                         if (filtered.length === 0) {
                             html = '<div class="text-muted text-center py-3">暂无可选科目</div>';
                         } else if (schoolType === 'primary') {
-                            // 小学 - 平铺显示，每行带满分
+                            // 小学 - 合并同名同分科目（小学各年级科目/总分一致，合并避免重复）
+                            var mergeOrder = [];
+                            var mergeMap = {};
                             filtered.forEach(function (subj) {
-                                var isChecked = checkedIds.indexOf(subj.id) >= 0;
-                                var fs = fullScoreMap[subj.id] || subj.fullScore || 100;
+                                var key = subj.name + '|' + (subj.fullScore || 100);
+                                if (!mergeMap[key]) {
+                                    mergeMap[key] = { name: subj.name, fullScore: subj.fullScore || 100, ids: [], grades: [] };
+                                    mergeOrder.push(key);
+                                }
+                                mergeMap[key].ids.push(subj.id);
+                                if (subj.grade) mergeMap[key].grades.push(subj.grade);
+                            });
+
+                            mergeOrder.forEach(function (key) {
+                                var m = mergeMap[key];
+                                // 合并组内所有 subjectId 都已分配才算 checked
+                                var allChecked = m.ids.every(function (id) { return checkedIds.indexOf(id) >= 0; });
+                                // 优先取已保存的满分，否则用合并组的公共满分
+                                var fs = m.fullScore;
+                                for (var i = 0; i < m.ids.length; i++) {
+                                    if (fullScoreMap[m.ids[i]]) { fs = fullScoreMap[m.ids[i]]; break; }
+                                }
                                 html += '<div class="form-check form-check-inline mb-1" style="min-width:170px;">';
-                                html += '    <input class="form-check-input exam-subject-check" type="checkbox" value="' + subj.id + '"' + (isChecked ? ' checked' : '') + ' />';
-                                html += '    <label class="form-check-label me-1">' + htmlEncode(subj.name) + '</label>';
+                                html += '    <input class="form-check-input exam-subject-check" type="checkbox" value="' + m.ids.join(',') + '" data-merged="1"' + (allChecked ? ' checked' : '') + ' />';
+                                html += '    <label class="form-check-label me-1">' + htmlEncode(m.name) + '</label>';
                                 html += '    <input type="number" class="form-control form-control-sm exam-subject-fullscore d-inline-block" style="width:58px;display:inline!important;" value="' + fs + '" min="1" />';
                                 html += '    <small class="text-muted">分</small>';
                                 html += '</div>';
@@ -892,10 +910,17 @@
                     var container = ck.closest('.form-check');
                     var fsInput = container.find('.exam-subject-fullscore');
                     var fs = fsInput.length ? parseInt(fsInput.val()) || null : null;
-                    subjects.push({
-                        subjectId: parseInt(ck.val()),
-                        fullScore: fs
-                    });
+                    var val = ck.val();
+                    var isMerged = ck.data('merged') === 1;
+                    if (isMerged) {
+                        // 合并科目：展开为多条记录
+                        var ids = val.split(',').map(function (s) { return parseInt(s); }).filter(function (n) { return !isNaN(n); });
+                        ids.forEach(function (id) {
+                            subjects.push({ subjectId: id, fullScore: fs });
+                        });
+                    } else {
+                        subjects.push({ subjectId: parseInt(val), fullScore: fs });
+                    }
                 });
 
                 $.ajax({
