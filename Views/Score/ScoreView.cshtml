@@ -333,6 +333,21 @@
 
                 // 填充班级下拉
                 renderClassList(allClasses);
+
+                // 班主任自动选中其年级和班级
+                var teacherGradeLevelId = '@ViewBag.TeacherGradeLevelId';
+                var teacherClassInfoId = '@ViewBag.TeacherClassInfoId';
+                if (teacherGradeLevelId) {
+                    setTimeout(function() {
+                        $('#gradeSelect').val(teacherGradeLevelId).trigger('change');
+                        if (teacherClassInfoId) {
+                            setTimeout(function() {
+                                $('#classSelect').val(teacherClassInfoId).trigger('change');
+                            }, 300);
+                        }
+                    }, 100);
+                }
+
                 // 隐藏数据，等待用户选年级/班级
                 $('#viewContainer').hide();
                 // 清空top10缓存

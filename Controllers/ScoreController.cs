@@ -191,15 +191,73 @@ public class ScoreController : Controller
     {
         var exams = await _db.ExamSchedules
             .OrderByDescending(e => e.ExamDate)
-            .Select(e => new { e.Id, e.Name, e.ExamType, e.ExamDate, e.Status })
+            .Select(e => new { e.Id, e.Name, e.ExamType, e.ExamDate, e.Status, e.Grades })
             .ToListAsync();
         ViewBag.ExamSchedules = exams;
+
+        // 获取当前登录老师的信息，供前端默认筛选
+        var adminId = GetAdminId();
+        ViewBag.TeacherGrade = "";
+        ViewBag.TeacherClassName = "";
+        ViewBag.TeacherGradeLevelId = "";
+        ViewBag.TeacherClassInfoId = "";
+        string? teacherGradeDisplayName = null;
+        if (adminId.HasValue)
+        {
+            var admin = await _db.Admins.FindAsync(adminId.Value);
+            if (admin != null && !IsAdmin())
+            {
+                ViewBag.TeacherGrade = admin.Grade ?? "";
+                ViewBag.TeacherClassName = admin.ClassName ?? "";
+                if (admin.ClassID.HasValue)
+                    ViewBag.TeacherClassInfoId = admin.ClassID.Value.ToString();
+                // 根据年级名查找 GradeLevelId 和 DisplayName
+                var grades = await _db.GradeLevels.ToListAsync();
+                var matchedGl = grades.FirstOrDefault(g => g.CurrentGradeName == admin.Grade);
+                if (matchedGl != null)
+                {
+                    ViewBag.TeacherGradeLevelId = matchedGl.GradeLevelID.ToString();
+                    teacherGradeDisplayName = matchedGl.DisplayName; // 如 "小学2025级"
+                }
+
+                // 班主任只能看到与自己年级匹配的考试
+                if (!string.IsNullOrEmpty(teacherGradeDisplayName))
+                {
+                    exams = exams.Where(e => e.Grades != null && e.Grades.Contains(teacherGradeDisplayName)).ToList();
+                }
+                else
+                {
+                    exams = exams.Where(e => false).ToList(); // 没有匹配年级，看不到任何考试
+                }
+                ViewBag.ExamSchedules = exams;
+            }
+        }
+
         return View();
     }
 
     [HttpPost]
     public async Task<IActionResult> GetViewData(int examScheduleId, int? gradeLevelId, int? classInfoId)
     {
+        // 非管理员用户，自动默认筛选到其管理的班级
+        var adminId = GetAdminId();
+        if (!IsAdmin() && adminId.HasValue)
+        {
+            var admin = await _db.Admins.FindAsync(adminId.Value);
+            if (admin != null)
+            {
+                if (!gradeLevelId.HasValue && !string.IsNullOrEmpty(admin.Grade))
+                {
+                    var allGl = await _db.GradeLevels.ToListAsync();
+                    var matched = allGl.FirstOrDefault(g => g.CurrentGradeName == admin.Grade);
+                    if (matched != null) gradeLevelId = matched.GradeLevelID;
+                }
+                if (!classInfoId.HasValue && admin.ClassID.HasValue)
+                {
+                    classInfoId = admin.ClassID.Value;
+                }
+            }
+        }
         var exam = await _db.ExamSchedules.FindAsync(examScheduleId);
         if (exam == null)
             return Json(new { success = false, message = "考试安排不存在" });
