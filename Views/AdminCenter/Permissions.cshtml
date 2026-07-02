@@ -8,16 +8,12 @@
     <button class="btn btn-primary" id="btnSaveAll"><i class="bi bi-floppy me-1"></i>保存全部</button>
 </div>
 
-<div class="alert alert-info py-2 small">
-    <i class="bi bi-info-circle me-1"></i>按角色设置权限，系统将自动同步应用到所有拥有该角色的用户。
-</div>
-
 <div class="table-responsive">
     <table class="table table-bordered table-hover align-middle" id="permTable">
         <thead class="table-dark">
             <tr>
                 <th class="text-center" style="width:60px">序号</th>
-                <th style="width:120px">角色</th>
+                <th style="width:140px">角色</th>
                 <th>权限设置</th>
             </tr>
         </thead>
@@ -28,46 +24,23 @@
             @foreach (var rp in Model)
             {
                 var perms = (rp.Permissions ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries).Select(p => p.Trim()).ToHashSet();
-                <tr data-role="@rp.Role">
+                <tr data-role="@rp.Role" data-perms="@rp.Permissions">
                     <td class="text-center">@(i++)</td>
+                    <td><strong>@rp.Role</strong></td>
                     <td>
-                        <strong>@rp.Role</strong>
-                    </td>
-                    <td>
-                        <div class="d-flex flex-wrap gap-3">
-                            <label class="form-check-label me-2" style="min-width:130px">
-                                <input type="checkbox" class="form-check-input perm-cb" data-perm="student_view" checked disabled />
-                                <span class="text-muted">查看学生</span>
-                            </label>
-                            <label class="form-check-label me-2" style="min-width:130px">
-                                <input type="checkbox" class="form-check-input perm-cb" data-perm="student_add" @(perms.Contains("student_add") ? "checked" : "") />
-                                新增学生
-                            </label>
-                            <label class="form-check-label me-2" style="min-width:130px">
-                                <input type="checkbox" class="form-check-input perm-cb" data-perm="student_edit" @(perms.Contains("student_edit") ? "checked" : "") />
-                                编辑学生
-                            </label>
-                            <label class="form-check-label me-2" style="min-width:150px">
-                                <input type="checkbox" class="form-check-input perm-cb" data-perm="student_delete" @(perms.Contains("student_delete") ? "checked" : "") />
-                                删除/转出学生
-                            </label>
-                            <label class="form-check-label me-2" style="min-width:130px">
-                                <input type="checkbox" class="form-check-input perm-cb" data-perm="teacher_view" checked disabled />
-                                <span class="text-muted">查看教职工</span>
-                            </label>
-                            <label class="form-check-label me-2" style="min-width:130px">
-                                <input type="checkbox" class="form-check-input perm-cb" data-perm="teacher_add" @(perms.Contains("teacher_add") ? "checked" : "") />
-                                新增教职工
-                            </label>
-                            <label class="form-check-label me-2" style="min-width:130px">
-                                <input type="checkbox" class="form-check-input perm-cb" data-perm="teacher_edit" @(perms.Contains("teacher_edit") ? "checked" : "") />
-                                编辑教职工
-                            </label>
-                            <label class="form-check-label me-2" style="min-width:130px">
-                                <input type="checkbox" class="form-check-input perm-cb" data-perm="teacher_delete" @(perms.Contains("teacher_delete") ? "checked" : "") />
-                                删除教职工
-                            </label>
-                        </div>
+                        <button type="button" class="btn btn-outline-primary btn-sm btn-set-perms">
+                            <i class="bi bi-gear me-1"></i>权限
+                        </button>
+                        <span class="text-muted small ms-2 perm-summary">
+                            @{
+                                var labels = new List<string>();
+                                if (perms.Contains("student_add") || perms.Contains("student_edit") || perms.Contains("student_delete")) labels.Add("学生");
+                                if (perms.Contains("teacher_add") || perms.Contains("teacher_edit") || perms.Contains("teacher_delete")) labels.Add("教职工");
+                                if (perms.Contains("exam_add") || perms.Contains("exam_edit") || perms.Contains("exam_delete") || perms.Contains("score_input") || perms.Contains("score_view")) labels.Add("成绩");
+                                if (perms.Contains("grade_add") || perms.Contains("grade_edit") || perms.Contains("grade_delete") || perms.Contains("grade_set_teacher")) labels.Add("班级");
+                                if (labels.Count == 0) { <span>无权限</span> } else { <span>@string.Join("、", labels)</span> }
+                            }
+                        </span>
                     </td>
                 </tr>
             }
@@ -75,22 +48,245 @@
     </table>
 </div>
 
+<!-- 权限设置对话框 -->
+<div class="modal fade" id="permModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-gear me-2"></i><span id="permModalRole"></span> - 权限设置</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="currentRole" />
+
+                <div class="mb-3">
+                    <h6 class="border-bottom pb-2 text-primary"><i class="bi bi-people me-1"></i>学生管理</h6>
+                    <div class="row">
+                        <div class="col-md-4 mb-1">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input perm-cb" data-perm="student_view" id="perm_student_view" />
+                                <label class="form-check-label" for="perm_student_view">查看学生</label>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-1">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input perm-cb" data-perm="student_add" id="perm_student_add" />
+                                <label class="form-check-label" for="perm_student_add">新增学生</label>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-1">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input perm-cb" data-perm="student_edit" id="perm_student_edit" />
+                                <label class="form-check-label" for="perm_student_edit">编辑学生</label>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-1">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input perm-cb" data-perm="student_delete" id="perm_student_delete" />
+                                <label class="form-check-label" for="perm_student_delete">删除/转出学生</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <h6 class="border-bottom pb-2 text-success"><i class="bi bi-person-badge me-1"></i>教职工管理</h6>
+                    <div class="row">
+                        <div class="col-md-4 mb-1">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input perm-cb" data-perm="teacher_view" id="perm_teacher_view" />
+                                <label class="form-check-label" for="perm_teacher_view">查看教职工</label>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-1">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input perm-cb" data-perm="teacher_add" id="perm_teacher_add" />
+                                <label class="form-check-label" for="perm_teacher_add">新增教职工</label>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-1">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input perm-cb" data-perm="teacher_edit" id="perm_teacher_edit" />
+                                <label class="form-check-label" for="perm_teacher_edit">编辑教职工</label>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-1">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input perm-cb" data-perm="teacher_delete" id="perm_teacher_delete" />
+                                <label class="form-check-label" for="perm_teacher_delete">删除教职工</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <h6 class="border-bottom pb-2 text-warning"><i class="bi bi-file-earmark-text me-1"></i>成绩管理</h6>
+                    <div class="row">
+                        <div class="col-md-6 mb-1">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input perm-cb" data-perm="subject_manage" id="perm_subject_manage" />
+                                <label class="form-check-label" for="perm_subject_manage">📋 科目管理</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-1">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input perm-cb" data-perm="exam_add" id="perm_exam_add" />
+                                <label class="form-check-label" for="perm_exam_add">📋 考试安排 - 新增</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-1 ps-5">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input perm-cb" data-perm="exam_edit" id="perm_exam_edit" />
+                                <label class="form-check-label" for="perm_exam_edit">考试安排 - 编辑</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-1 ps-5">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input perm-cb" data-perm="exam_delete" id="perm_exam_delete" />
+                                <label class="form-check-label" for="perm_exam_delete">考试安排 - 删除</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-1">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input perm-cb" data-perm="score_input" id="perm_score_input" />
+                                <label class="form-check-label" for="perm_score_input">📋 成绩录入</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-1">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input perm-cb" data-perm="score_view" id="perm_score_view" />
+                                <label class="form-check-label" for="perm_score_view">📋 成绩分析</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-1">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input perm-cb" data-perm="score_import" id="perm_score_import" />
+                                <label class="form-check-label" for="perm_score_import">📋 批量导入</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-1">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input perm-cb" data-perm="ai_settings" id="perm_ai_settings" />
+                                <label class="form-check-label" for="perm_ai_settings">📋 AI设置</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <h6 class="border-bottom pb-2 text-info"><i class="bi bi-building me-1"></i>班级管理</h6>
+                    <div class="row">
+                        <div class="col-md-4 mb-1">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input perm-cb" data-perm="grade_add" id="perm_grade_add" />
+                                <label class="form-check-label" for="perm_grade_add">新增年级/班级</label>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-1">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input perm-cb" data-perm="grade_edit" id="perm_grade_edit" />
+                                <label class="form-check-label" for="perm_grade_edit">编辑班级</label>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-1">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input perm-cb" data-perm="grade_delete" id="perm_grade_delete" />
+                                <label class="form-check-label" for="perm_grade_delete">删除年级/班级</label>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-1">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input perm-cb" data-perm="grade_set_teacher" id="perm_grade_set_teacher" />
+                                <label class="form-check-label" for="perm_grade_set_teacher">设置班主任</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="btnSaveRole"><i class="bi bi-check-lg me-1"></i>确定</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <script>
+        // 点击"权限"按钮，弹出对话框
+        $(document).on('click', '.btn-set-perms', function () {
+            var $tr = $(this).closest('tr');
+            var role = $tr.data('role');
+            var permsStr = $tr.data('perms') || '';
+
+            $('#currentRole').val(role);
+            $('#permModalRole').text(role);
+
+            // 解析已有权限并勾选
+            var perms = permsStr.split(',').map(function (p) { return p.trim(); });
+            $('#permModal .perm-cb').each(function () {
+                var p = $(this).data('perm');
+                $(this).prop('checked', perms.indexOf(p) >= 0);
+            });
+
+            new bootstrap.Modal(document.getElementById('permModal')).show();
+        });
+
+        // 对话框"确定"按钮 - 保存当前角色的权限到表格行
+        $('#btnSaveRole').click(function () {
+            var role = $('#currentRole').val();
+            var $tr = $('#permTable tbody tr[data-role="' + role + '"]');
+
+            // 收集勾选的权限
+            var checkedPerms = [];
+            $('#permModal .perm-cb:checked').each(function () {
+                checkedPerms.push($(this).data('perm'));
+            });
+            var permStr = checkedPerms.join(',');
+
+            // 更新表格行
+            $tr.data('perms', permStr);
+            var summary = '';
+            if (checkedPerms.some(function (p) { return ['student_view','student_add','student_edit','student_delete'].indexOf(p) >= 0; })) summary += '学生、';
+            if (checkedPerms.some(function (p) { return ['teacher_view','teacher_add','teacher_edit','teacher_delete'].indexOf(p) >= 0; })) summary += '教职工、';
+            if (checkedPerms.some(function (p) { return ['exam_add','exam_edit','exam_delete','score_input','score_view','score_import','ai_settings','subject_manage'].indexOf(p) >= 0; })) summary += '成绩、';
+            if (checkedPerms.some(function (p) { return ['grade_add','grade_edit','grade_delete','grade_set_teacher'].indexOf(p) >= 0; })) summary += '班级、';
+            summary = summary.replace(/、$/, '');
+            $tr.find('.perm-summary').text(summary || '无权限');
+
+            bootstrap.Modal.getInstance(document.getElementById('permModal')).hide();
+        });
+
+        // 保存全部
         $('#btnSaveAll').click(function () {
             var roles = [];
             $('#permTable tbody tr').each(function () {
-                var role = $(this).data('role');
-                var permData = {
-                    role: role,
-                    studentAdd: $(this).find('.perm-cb[data-perm="student_add"]').prop('checked'),
-                    studentEdit: $(this).find('.perm-cb[data-perm="student_edit"]').prop('checked'),
-                    studentDelete: $(this).find('.perm-cb[data-perm="student_delete"]').prop('checked'),
-                    teacherAdd: $(this).find('.perm-cb[data-perm="teacher_add"]').prop('checked'),
-                    teacherEdit: $(this).find('.perm-cb[data-perm="teacher_edit"]').prop('checked'),
-                    teacherDelete: $(this).find('.perm-cb[data-perm="teacher_delete"]').prop('checked')
-                };
-                roles.push(permData);
+                var permStr = $(this).data('perms') || '';
+                var perms = permStr.split(',').filter(function (p) { return p; });
+                roles.push({
+                    role: $(this).data('role'),
+                    studentView: perms.indexOf('student_view') >= 0,
+                    studentAdd: perms.indexOf('student_add') >= 0,
+                    studentEdit: perms.indexOf('student_edit') >= 0,
+                    studentDelete: perms.indexOf('student_delete') >= 0,
+                    teacherView: perms.indexOf('teacher_view') >= 0,
+                    teacherAdd: perms.indexOf('teacher_add') >= 0,
+                    teacherEdit: perms.indexOf('teacher_edit') >= 0,
+                    teacherDelete: perms.indexOf('teacher_delete') >= 0,
+                    examAdd: perms.indexOf('exam_add') >= 0,
+                    examEdit: perms.indexOf('exam_edit') >= 0,
+                    examDelete: perms.indexOf('exam_delete') >= 0,
+                    scoreInput: perms.indexOf('score_input') >= 0,
+                    scoreView: perms.indexOf('score_view') >= 0,
+                    scoreImport: perms.indexOf('score_import') >= 0,
+                    aiSettings: perms.indexOf('ai_settings') >= 0,
+                    subjectManage: perms.indexOf('subject_manage') >= 0,
+                    gradeAdd: perms.indexOf('grade_add') >= 0,
+                    gradeEdit: perms.indexOf('grade_edit') >= 0,
+                    gradeDelete: perms.indexOf('grade_delete') >= 0,
+                    gradeSetTeacher: perms.indexOf('grade_set_teacher') >= 0
+                });
             });
 
             var btn = $(this);

@@ -680,12 +680,26 @@ public class RolePermission
 public class RolePermissionUpdate
 {
     public string Role { get; set; } = "";
+    public bool StudentView { get; set; }
     public bool StudentAdd { get; set; }
     public bool StudentEdit { get; set; }
     public bool StudentDelete { get; set; }
+    public bool TeacherView { get; set; }
     public bool TeacherAdd { get; set; }
     public bool TeacherEdit { get; set; }
     public bool TeacherDelete { get; set; }
+    public bool SubjectManage { get; set; }
+    public bool ExamAdd { get; set; }
+    public bool ExamEdit { get; set; }
+    public bool ExamDelete { get; set; }
+    public bool ScoreInput { get; set; }
+    public bool ScoreView { get; set; }
+    public bool ScoreImport { get; set; }
+    public bool AiSettings { get; set; }
+    public bool GradeAdd { get; set; }
+    public bool GradeEdit { get; set; }
+    public bool GradeDelete { get; set; }
+    public bool GradeSetTeacher { get; set; }
 }
 /// <summary>角色权限视图模型</summary>
 public class RolePermissionViewModel

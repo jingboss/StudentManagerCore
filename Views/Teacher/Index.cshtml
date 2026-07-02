@@ -8,7 +8,8 @@
     var status = ViewBag.CurrentStatus as string ?? "正常";
     var isDeletedView = status == "已删除";
     var filterRole = ViewBag.FilterRole as string;
-}
+    var isAdmin = User.IsInRole("管理员");
+    var currentUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";}
 
 <style>
     .col-hide { display: none; }
@@ -27,12 +28,15 @@
         </h4>
         @if (!isDeletedView)
         {
+            @if (isAdmin)
+            {
             <a href="javascript:void(0)" class="btn btn-primary btn-sm" id="btnAddTeacher">
                 <i class="bi bi-person-plus-fill me-1"></i> 添加教职工
             </a>
             <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#importTeacherModal">
                 <i class="bi bi-upload me-1"></i> 导入教职工
             </button>
+            }
             <a asp-action="Index" asp-controller="Subject" class="btn btn-outline-info btn-sm">
                 <i class="bi bi-book me-1"></i> 科目管理
             </a>

@@ -442,12 +442,26 @@ public class AdminCenterController : Controller
 
             // 构建权限字符串
             var perms = new List<string>();
+            if (update.StudentView) perms.Add("student_view");
             if (update.StudentAdd) perms.Add("student_add");
             if (update.StudentEdit) perms.Add("student_edit");
             if (update.StudentDelete) perms.Add("student_delete");
+            if (update.TeacherView) perms.Add("teacher_view");
             if (update.TeacherAdd) perms.Add("teacher_add");
             if (update.TeacherEdit) perms.Add("teacher_edit");
             if (update.TeacherDelete) perms.Add("teacher_delete");
+            if (update.ExamAdd) perms.Add("exam_add");
+            if (update.ExamEdit) perms.Add("exam_edit");
+            if (update.ExamDelete) perms.Add("exam_delete");
+            if (update.ScoreInput) perms.Add("score_input");
+            if (update.ScoreView) perms.Add("score_view");
+            if (update.ScoreImport) perms.Add("score_import");
+            if (update.AiSettings) perms.Add("ai_settings");
+            if (update.SubjectManage) perms.Add("subject_manage");
+            if (update.GradeAdd) perms.Add("grade_add");
+            if (update.GradeEdit) perms.Add("grade_edit");
+            if (update.GradeDelete) perms.Add("grade_delete");
+            if (update.GradeSetTeacher) perms.Add("grade_set_teacher");
             var permStr = string.Join(",", perms);
 
             // 保存/更新角色权限配置

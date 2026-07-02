@@ -9,7 +9,7 @@ using System.Security.Claims;
 
 namespace StudentManagerCore.Controllers;
 
-[Authorize(Roles = "管理员")]
+[Authorize]
 public class TeacherController : Controller
 {
     private readonly AppDbContext _db;
@@ -24,7 +24,20 @@ public class TeacherController : Controller
     public async Task<IActionResult> Index(string? keyword, int page = 1, string? status = null, string? role = null)
     {
         int pageSize = 20;
+        var currentUserRole = User.FindFirst(ClaimTypes.Role)?.Value?.Trim() ?? "";
+        var isAdmin = currentUserRole == "管理员";
+
         var query = _db.Admins.Where(a => a.Role != null && !a.Role.Contains("管理员"));
+
+        // 非管理员只能看到自己
+        if (!isAdmin)
+        {
+            var userIdStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (int.TryParse(userIdStr, out var userId))
+                query = query.Where(a => a.AdminID == userId);
+            else
+                return Forbid();
+        }
 
         if (status == "已删除")
             query = query.Where(a => a.Status == "已删除");
@@ -93,8 +106,8 @@ public class TeacherController : Controller
         return View(teachers);
     }
 
-    public IActionResult Add()
-    {
+    [Authorize(Roles = "管理员")]
+    public IActionResult Add()    {
         ViewBag.GradeList = _db.GradeLevels.ToList()
             .Where(g => {
                 var name = g.CurrentGradeName;
@@ -111,6 +124,7 @@ public class TeacherController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [Authorize(Roles = "管理员")]
     public async Task<IActionResult> Add(Models.Admin admin)
     {
         if (string.IsNullOrWhiteSpace(admin.RealName))
@@ -183,6 +197,17 @@ public class TeacherController : Controller
 
     public async Task<IActionResult> Edit(int id)
     {
+        var currentUserRole = User.FindFirst(ClaimTypes.Role)?.Value?.Trim() ?? "";
+        var isAdmin = currentUserRole == "管理员";
+
+        // 非管理员只能编辑自己的信息
+        if (!isAdmin)
+        {
+            var userIdStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!int.TryParse(userIdStr, out var userId) || userId != id)
+                return Forbid();
+        }
+
         var admin = await _db.Admins.FindAsync(id);
         if (admin == null)
             return NotFound();
@@ -208,6 +233,16 @@ public class TeacherController : Controller
         {
             if (IsAjaxRequest()) return Json(new { success = false, message = "参数错误" });
             return NotFound();
+        }
+
+        // 非管理员只能编辑自己的信息
+        var currentUserRole = User.FindFirst(ClaimTypes.Role)?.Value?.Trim() ?? "";
+        var isAdmin = currentUserRole == "管理员";
+        if (!isAdmin)
+        {
+            var userIdStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!int.TryParse(userIdStr, out var userId) || userId != id)
+                return Forbid();
         }
 
         if (string.IsNullOrWhiteSpace(admin.RealName))
@@ -335,8 +370,8 @@ public class TeacherController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Delete(int id)
-    {
+    [Authorize(Roles = "管理员")]
+    public async Task<IActionResult> Delete(int id)    {
         var admin = await _db.Admins.FindAsync(id);
         if (admin == null)
             return Json(new { success = false, message = "用户不存在" });
@@ -349,6 +384,7 @@ public class TeacherController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [Authorize(Roles = "管理员")]
     public async Task<IActionResult> BatchDelete(string ids)
     {
         if (string.IsNullOrWhiteSpace(ids))
@@ -367,6 +403,7 @@ public class TeacherController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [Authorize(Roles = "管理员")]
     public async Task<IActionResult> BatchRestore(string ids)
     {
         if (string.IsNullOrWhiteSpace(ids))
