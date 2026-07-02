@@ -114,38 +114,17 @@
                                     var teacherInfo = new List<string>();
                                     if (examTeachers.Any())
                                     {
-                                        // 按科目名分组（因合并扩展后同一科目名可能对应多个 SubjectId）
-                                        var groupedByName = examTeachers
-                                            .GroupBy(et =>
-                                            {
-                                                var subj = s.ExamSubjects?.FirstOrDefault(es => es.SubjectId == et.SubjectId)?.Subject;
-                                                return subj?.Name ?? "科目" + et.SubjectId;
-                                            })
+                                        // 负责人是考试级别，直接显示去重后的人名
+                                        teacherInfo = examTeachers
+                                            .Where(et => et.Admin != null)
+                                            .Select(et => et.Admin!.RealName)
+                                            .Distinct()
                                             .ToList();
-                                        foreach (var nameGroup in groupedByName)
-                                        {
-                                            var subjName = nameGroup.Key;
-                                            // 在该组内按班级分组
-                                            var byClass = nameGroup.GroupBy(et => et.ClassInfo?.ClassName ?? "未知");
-                                            var parts = new List<string>();
-                                            foreach (var clsGroup in byClass)
-                                            {
-                                                var teacherNames = clsGroup.Where(et => et.Admin != null).Select(et => et.Admin!.RealName).Distinct();
-                                                parts.Add($"{clsGroup.Key}:{string.Join(",", teacherNames)}");
-                                            }
-                                            if (parts.Count > 0)
-                                                teacherInfo.Add($"{subjName}[{string.Join(";", parts)}]");
-                                        }
                                     }
                                 }
                                 @if (teacherInfo.Any())
                                 {
-                                    <span class="small">
-                                        @foreach (var t in teacherInfo)
-                                        {
-                                            @t<br />
-                                        }
-                                    </span>
+                                    <span class="small">@string.Join("、", teacherInfo)</span>
                                 }
                                 else
                                 {
