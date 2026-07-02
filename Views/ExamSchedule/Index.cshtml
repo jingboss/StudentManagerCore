@@ -77,7 +77,7 @@
                     }
                     @foreach (var s in schedules)
                     {
-                        var subjectNames = s.ExamSubjects?.Where(es => es.Subject != null).Select(es => es.Subject!.Name).ToList() ?? new();
+                        var subjectNames = s.ExamSubjects?.Where(es => es.Subject != null).Select(es => es.Subject!.Name).Distinct().ToList() ?? new();
                         var subjectIds = s.ExamSubjects?.Select(es => es.SubjectId).ToList() ?? new();
                         var effectiveEndDate = s.EndDate ?? s.ExamDate;
                         var isDatePast = effectiveEndDate.Date < DateTime.Now.Date;
@@ -114,18 +114,27 @@
                                     var teacherInfo = new List<string>();
                                     if (examTeachers.Any())
                                     {
-                                        var bySubject = examTeachers.GroupBy(et => et.SubjectId);
-                                        foreach (var subjGroup in bySubject)
+                                        // 按科目名分组（因合并扩展后同一科目名可能对应多个 SubjectId）
+                                        var groupedByName = examTeachers
+                                            .GroupBy(et =>
+                                            {
+                                                var subj = s.ExamSubjects?.FirstOrDefault(es => es.SubjectId == et.SubjectId)?.Subject;
+                                                return subj?.Name ?? "科目" + et.SubjectId;
+                                            })
+                                            .ToList();
+                                        foreach (var nameGroup in groupedByName)
                                         {
-                                            var subjName = s.ExamSubjects?.FirstOrDefault(es => es.SubjectId == subjGroup.Key)?.Subject?.Name ?? "科目" + subjGroup.Key;
-                                            var byClass = subjGroup.GroupBy(et => et.ClassInfo?.ClassName ?? "未知");
+                                            var subjName = nameGroup.Key;
+                                            // 在该组内按班级分组
+                                            var byClass = nameGroup.GroupBy(et => et.ClassInfo?.ClassName ?? "未知");
                                             var parts = new List<string>();
                                             foreach (var clsGroup in byClass)
                                             {
-                                                var teacherNames = clsGroup.Where(et => et.Admin != null).Select(et => et.Admin!.RealName);
+                                                var teacherNames = clsGroup.Where(et => et.Admin != null).Select(et => et.Admin!.RealName).Distinct();
                                                 parts.Add($"{clsGroup.Key}:{string.Join(",", teacherNames)}");
                                             }
-                                            teacherInfo.Add($"{subjName}[{string.Join(";", parts)}]");
+                                            if (parts.Count > 0)
+                                                teacherInfo.Add($"{subjName}[{string.Join(";", parts)}]");
                                         }
                                     }
                                 }
@@ -664,7 +673,7 @@
                 });
 
                 $.ajax({
-                    url: '@Url.Action("SaveExamTeachers")',
+                    url: '@Url.Action("SaveExamTeachers")?examScheduleId=' + currentAssignExamId,
                     method: 'POST',
                     contentType: 'application/json',
                     data: JSON.stringify(adminIds),
