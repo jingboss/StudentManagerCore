@@ -316,6 +316,9 @@ try
         // 学生表添加转出时间列
         try { db.Database.ExecuteSqlRaw("ALTER TABLE Student ADD COLUMN TransferOutTime datetime(6) NULL"); } catch { }
 
+        // Admin表添加Status列（用于软删除）
+        try { db.Database.ExecuteSqlRaw("ALTER TABLE Admin ADD COLUMN Status varchar(20) NULL"); } catch { }
+
         // 角色权限表
         try { db.Database.ExecuteSqlRaw(@"CREATE TABLE IF NOT EXISTS RolePermission (
             Role varchar(50) NOT NULL PRIMARY KEY,

@@ -44,10 +44,6 @@ public class TeacherController : Controller
         else
             query = query.Where(a => a.Status == null || a.Status == "正常");
 
-        // 调试统计
-        var totalDeletedNonAdmin = await _db.Admins.CountAsync(a => a.Status == "已删除" && a.Role != null && !a.Role.Contains("管理员"));
-        ViewBag.DebugDeletedCount = totalDeletedNonAdmin;
-
         // 角色筛选（多角色支持：FIND_IN_SET 匹配）
         if (!string.IsNullOrWhiteSpace(role) && role != "全部")
             query = query.Where(a => a.Role != null && a.Role.Contains(role));
