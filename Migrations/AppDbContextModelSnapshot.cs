@@ -662,6 +662,83 @@ namespace StudentManagerCore.Migrations
                     b.ToTable("GradeLevel", (string)null);
                 });
 
+            modelBuilder.Entity("StudentManagerCore.Models.GradePeriod", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("EndTime")
+                        .IsRequired()
+                        .HasMaxLength(5)
+                        .HasColumnType("varchar(5)")
+                        .HasColumnName("EndTime");
+
+                    b.Property<int>("GradeLevelId")
+                        .HasColumnType("int")
+                        .HasColumnName("GradeLevelId");
+
+                    b.Property<int>("PeriodNumber")
+                        .HasColumnType("int")
+                        .HasColumnName("PeriodNumber");
+
+                    b.Property<string>("SectionName")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("SectionName");
+
+                    b.Property<string>("StartTime")
+                        .IsRequired()
+                        .HasMaxLength(5)
+                        .HasColumnType("varchar(5)")
+                        .HasColumnName("StartTime");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GradeLevelId", "PeriodNumber")
+                        .IsUnique();
+
+                    b.ToTable("GradePeriod", (string)null);
+                });
+
+            modelBuilder.Entity("StudentManagerCore.Models.GradeScheduleConfig", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreateTime")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("CreateTime");
+
+                    b.Property<int>("DaysPerWeek")
+                        .HasColumnType("int")
+                        .HasColumnName("DaysPerWeek");
+
+                    b.Property<int>("GradeLevelId")
+                        .HasColumnType("int")
+                        .HasColumnName("GradeLevelId");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("IsActive");
+
+                    b.Property<int>("PeriodsPerDay")
+                        .HasColumnType("int")
+                        .HasColumnName("PeriodsPerDay");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GradeLevelId")
+                        .IsUnique();
+
+                    b.ToTable("GradeScheduleConfig", (string)null);
+                });
+
             modelBuilder.Entity("StudentManagerCore.Models.GradeSubject", b =>
                 {
                     b.Property<int>("Id")
@@ -694,6 +771,40 @@ namespace StudentManagerCore.Migrations
                         .IsUnique();
 
                     b.ToTable("GradeSubject", (string)null);
+                });
+
+            modelBuilder.Entity("StudentManagerCore.Models.GradeSubjectHour", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreateTime")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("CreateTime");
+
+                    b.Property<int>("GradeLevelId")
+                        .HasColumnType("int")
+                        .HasColumnName("GradeLevelId");
+
+                    b.Property<int>("PeriodsPerWeek")
+                        .HasColumnType("int")
+                        .HasColumnName("PeriodsPerWeek");
+
+                    b.Property<int>("SubjectId")
+                        .HasColumnType("int")
+                        .HasColumnName("SubjectId");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SubjectId");
+
+                    b.HasIndex("GradeLevelId", "SubjectId")
+                        .IsUnique();
+
+                    b.ToTable("GradeSubjectHour", (string)null);
                 });
 
             modelBuilder.Entity("StudentManagerCore.Models.OperationLog", b =>
@@ -1134,6 +1245,9 @@ namespace StudentManagerCore.Migrations
                         .HasColumnType("varchar(8)")
                         .HasColumnName("StudentNo");
 
+                    b.Property<DateTime?>("TransferOutTime")
+                        .HasColumnType("datetime(6)");
+
                     b.Property<DateTime?>("UpdateTime")
                         .HasColumnType("datetime(6)")
                         .HasColumnName("UpdateTime");
@@ -1239,6 +1353,185 @@ namespace StudentManagerCore.Migrations
                         .IsUnique();
 
                     b.ToTable("SubjectTeacher", (string)null);
+                });
+
+            modelBuilder.Entity("StudentManagerCore.Models.Survey", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreateTime")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("CreateTime");
+
+                    b.Property<int>("CreatedBy")
+                        .HasColumnType("int")
+                        .HasColumnName("CreatedBy");
+
+                    b.Property<string>("CreatorName")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)")
+                        .HasColumnName("CreatorName");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("longtext")
+                        .HasColumnName("Description");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("Status");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("Title");
+
+                    b.Property<DateTime?>("UpdateTime")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("UpdateTime");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Survey", (string)null);
+                });
+
+            modelBuilder.Entity("StudentManagerCore.Models.SurveyAnswer", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AnswerText")
+                        .HasColumnType("longtext")
+                        .HasColumnName("AnswerText");
+
+                    b.Property<string>("FilePath")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)")
+                        .HasColumnName("FilePath");
+
+                    b.Property<int>("QuestionId")
+                        .HasColumnType("int")
+                        .HasColumnName("QuestionId");
+
+                    b.Property<int>("SubmissionId")
+                        .HasColumnType("int")
+                        .HasColumnName("SubmissionId");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SubmissionId");
+
+                    b.ToTable("SurveyAnswer", (string)null);
+                });
+
+            modelBuilder.Entity("StudentManagerCore.Models.SurveyQuestion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("IsRequired")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("IsRequired");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int")
+                        .HasColumnName("SortOrder");
+
+                    b.Property<int>("SurveyId")
+                        .HasColumnType("int")
+                        .HasColumnName("SurveyId");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)")
+                        .HasColumnName("Title");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("Type");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SurveyId");
+
+                    b.ToTable("SurveyQuestion", (string)null);
+                });
+
+            modelBuilder.Entity("StudentManagerCore.Models.SurveyQuestionOption", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("OptionText")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("OptionText");
+
+                    b.Property<int>("QuestionId")
+                        .HasColumnType("int")
+                        .HasColumnName("QuestionId");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int")
+                        .HasColumnName("SortOrder");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("QuestionId");
+
+                    b.ToTable("SurveyQuestionOption", (string)null);
+                });
+
+            modelBuilder.Entity("StudentManagerCore.Models.SurveySubmission", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("SubmitTime")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("SubmitTime");
+
+                    b.Property<string>("SubmittedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("SubmittedBy");
+
+                    b.Property<string>("SubmitterName")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)")
+                        .HasColumnName("SubmitterName");
+
+                    b.Property<int>("SurveyId")
+                        .HasColumnType("int")
+                        .HasColumnName("SurveyId");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SurveyId");
+
+                    b.ToTable("SurveySubmission", (string)null);
                 });
 
             modelBuilder.Entity("StudentManagerCore.Models.TeacherSubject", b =>
@@ -1408,7 +1701,48 @@ namespace StudentManagerCore.Migrations
                     b.Navigation("Subject");
                 });
 
+            modelBuilder.Entity("StudentManagerCore.Models.GradePeriod", b =>
+                {
+                    b.HasOne("StudentManagerCore.Models.GradeLevel", "GradeLevel")
+                        .WithMany()
+                        .HasForeignKey("GradeLevelId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("GradeLevel");
+                });
+
+            modelBuilder.Entity("StudentManagerCore.Models.GradeScheduleConfig", b =>
+                {
+                    b.HasOne("StudentManagerCore.Models.GradeLevel", "GradeLevel")
+                        .WithMany()
+                        .HasForeignKey("GradeLevelId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("GradeLevel");
+                });
+
             modelBuilder.Entity("StudentManagerCore.Models.GradeSubject", b =>
+                {
+                    b.HasOne("StudentManagerCore.Models.GradeLevel", "GradeLevel")
+                        .WithMany()
+                        .HasForeignKey("GradeLevelId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("StudentManagerCore.Models.Subject", "Subject")
+                        .WithMany()
+                        .HasForeignKey("SubjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("GradeLevel");
+
+                    b.Navigation("Subject");
+                });
+
+            modelBuilder.Entity("StudentManagerCore.Models.GradeSubjectHour", b =>
                 {
                     b.HasOne("StudentManagerCore.Models.GradeLevel", "GradeLevel")
                         .WithMany()
@@ -1526,6 +1860,50 @@ namespace StudentManagerCore.Migrations
                     b.Navigation("Subject");
                 });
 
+            modelBuilder.Entity("StudentManagerCore.Models.SurveyAnswer", b =>
+                {
+                    b.HasOne("StudentManagerCore.Models.SurveySubmission", "Submission")
+                        .WithMany("Answers")
+                        .HasForeignKey("SubmissionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Submission");
+                });
+
+            modelBuilder.Entity("StudentManagerCore.Models.SurveyQuestion", b =>
+                {
+                    b.HasOne("StudentManagerCore.Models.Survey", "Survey")
+                        .WithMany("Questions")
+                        .HasForeignKey("SurveyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Survey");
+                });
+
+            modelBuilder.Entity("StudentManagerCore.Models.SurveyQuestionOption", b =>
+                {
+                    b.HasOne("StudentManagerCore.Models.SurveyQuestion", "Question")
+                        .WithMany("Options")
+                        .HasForeignKey("QuestionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Question");
+                });
+
+            modelBuilder.Entity("StudentManagerCore.Models.SurveySubmission", b =>
+                {
+                    b.HasOne("StudentManagerCore.Models.Survey", "Survey")
+                        .WithMany()
+                        .HasForeignKey("SurveyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Survey");
+                });
+
             modelBuilder.Entity("StudentManagerCore.Models.TeacherSubject", b =>
                 {
                     b.HasOne("StudentManagerCore.Models.Admin", "Admin")
@@ -1558,6 +1936,21 @@ namespace StudentManagerCore.Migrations
             modelBuilder.Entity("StudentManagerCore.Models.GradeLevel", b =>
                 {
                     b.Navigation("Classes");
+                });
+
+            modelBuilder.Entity("StudentManagerCore.Models.Survey", b =>
+                {
+                    b.Navigation("Questions");
+                });
+
+            modelBuilder.Entity("StudentManagerCore.Models.SurveyQuestion", b =>
+                {
+                    b.Navigation("Options");
+                });
+
+            modelBuilder.Entity("StudentManagerCore.Models.SurveySubmission", b =>
+                {
+                    b.Navigation("Answers");
                 });
 #pragma warning restore 612, 618
         }

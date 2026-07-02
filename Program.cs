@@ -312,6 +312,9 @@ try
 
         // 兼容旧表：新增列（如已存在会静默忽略）
         try { db.Database.ExecuteSqlRaw("ALTER TABLE RepairRequest ADD COLUMN PreferredTime datetime(6) NULL"); } catch { }
+
+        // 学生表添加转出时间列
+        try { db.Database.ExecuteSqlRaw("ALTER TABLE Student ADD COLUMN TransferOutTime datetime(6) NULL"); } catch { }
     }
 }
 catch { }

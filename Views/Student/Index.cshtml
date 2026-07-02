@@ -436,7 +436,7 @@ else
             {
                 rowIndex++;
                 var seq = rowIndex;
-                <tr data-id="@student.StudentID" class="context-row">
+                <tr data-id="@student.StudentID" data-name="@student.Name" data-gender="@student.Gender" class="context-row">
                     @if (!isRestricted)
                     {
                     <td><input type="checkbox" class="student-checkbox" value="@student.StudentID" /></td>
@@ -642,7 +642,7 @@ var filterParams = tabParam + statusParam + genderParam + gradeParam + classPara
             if (canDelete && activeTab != "grade")
             {
                 <div class="dropdown-divider"></div>
-                <a class="dropdown-item text-danger" href="#" id="ctxDelete"><i class="bi bi-trash me-2"></i>删除</a>
+                <a class="dropdown-item text-primary" href="#" id="ctxTransfer"><i class="bi bi-box-arrow-up-right me-2"></i>转出</a>
             }
         }
         @if (isDeletedView)
@@ -707,6 +707,37 @@ var filterParams = tabParam + statusParam + genderParam + gradeParam + classPara
                         <div class="spinner-border text-primary" role="status"></div>
                         <p class="mt-2 text-muted">加载中...</p>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 转出对话框 -->
+    <div class="modal fade" id="transferModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-box-arrow-up-right me-2"></i>学生转出</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="transferStudentId" />
+                    <div class="mb-3">
+                        <label class="form-label">学生姓名</label>
+                        <input type="text" class="form-control" id="transferName" readonly />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">性别</label>
+                        <input type="text" class="form-control" id="transferGender" readonly />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">转出时间</label>
+                        <input type="date" class="form-control" id="transferTime" />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" id="btnConfirmTransfer"><i class="bi bi-check-lg me-1"></i>确定转出</button>
                 </div>
             </div>
         </div>
@@ -799,12 +830,34 @@ $(document).on('contextmenu', '.context-row', function(e) {
             }).fail(function() { $('#viewModalBody').html('<div class="alert alert-danger">加载失败</div>'); });
         });
 
-        $('#ctxDelete').click(function(e) {
+        $('#ctxTransfer').click(function(e) {
             e.preventDefault(); $('#contextMenu').hide();
             if (!contextStudentId) return;
-            showConfirm('确认将该学生移入已删除？', function() {
-                $.post('@Url.Action("Delete")', { id: contextStudentId, __RequestVerificationToken: $('[name="__RequestVerificationToken"]').first().val() })
-                    .done(function(res) { if (res.success) location.reload(); else alert(res.message); });
+            var row = $('.context-row[data-id="' + contextStudentId + '"]');
+            $('#transferStudentId').val(contextStudentId);
+            $('#transferName').val(row.data('name'));
+            $('#transferGender').val(row.data('gender'));
+            $('#transferTime').val(new Date().toISOString().slice(0, 10));
+            new bootstrap.Modal(document.getElementById('transferModal')).show();
+        });
+
+        $('#btnConfirmTransfer').click(function() {
+            var id = $('#transferStudentId').val();
+            var time = $('#transferTime').val();
+            if (!id) return;
+            if (!time) { alert('请选择转出时间'); return; }
+            $(this).prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>处理中...');
+            $.post('@Url.Action("Delete")', {
+                id: id,
+                transferOutTime: time,
+                __RequestVerificationToken: $('[name="__RequestVerificationToken"]').first().val()
+            }).done(function(res) {
+                if (res.success) { location.reload(); }
+                else { alert(res.message); }
+            }).fail(function() {
+                alert('操作失败');
+            }).always(function() {
+                $('#btnConfirmTransfer').prop('disabled', false).html('<i class="bi bi-check-lg me-1"></i>确定转出');
             });
         });
 
@@ -816,7 +869,7 @@ $(document).on('contextmenu', '.context-row', function(e) {
 
         window.deleteStudent = function(id) {
             contextStudentId = id;
-            $('#ctxDelete').trigger('click');
+            $('#ctxTransfer').trigger('click');
         };
 
         $('#ctxRestore').click(function(e) {

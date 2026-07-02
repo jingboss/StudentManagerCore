@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
@@ -596,18 +596,19 @@ public class StudentController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Delete(int id)
+    public async Task<IActionResult> Delete(int id, DateTime? transferOutTime)
     {
         var student = await _db.Students.FindAsync(id);
         if (student == null)
             return Json(new { success = false, message = "学生不存在" });
 
-        // 软删除：标记为"已删除"
+        // 转出：标记为"已删除"，记录转出时间
         student.Status = "已删除";
+        student.TransferOutTime = transferOutTime ?? DateTime.Now;
         student.UpdateTime = DateTime.Now;
         await _db.SaveChangesAsync();
-        await LogOperation("删除", student);
-        return Json(new { success = true, message = "已移入已删除" });
+        await LogOperation("转出", student);
+        return Json(new { success = true, message = "已转出" });
     }
 
     [HttpPost]

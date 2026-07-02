@@ -198,6 +198,8 @@ public class Student
     public DateTime? CreateTime { get; set; }
 
     public DateTime? UpdateTime { get; set; }
+
+    public DateTime? TransferOutTime { get; set; }
 }
 
 public class SiteConfig
