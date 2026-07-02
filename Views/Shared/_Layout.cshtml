@@ -14,6 +14,16 @@
     var canViewLogistics = isAdmin || role == "后勤主任";
     var canSubmitRepair = !string.IsNullOrEmpty(role) && role != "后勤主任";
     var canViewStudent = !string.IsNullOrEmpty(role) && role != "后勤主任";
+    // 从数据库读取当前用户权限
+    var adminIdStr = User.FindFirst("AdminID")?.Value ?? "";
+    var currentPerms = new List<string>();
+    if (int.TryParse(adminIdStr, out int curAdminId))
+    {
+        var curAdmin = await _db.Admins.FindAsync(curAdminId);
+        if (curAdmin != null)
+            currentPerms = (curAdmin.Permissions ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
+    }
+    bool hasPerm(string p) => isAdmin || currentPerms.Contains(p, StringComparer.OrdinalIgnoreCase);
 }
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -76,30 +86,24 @@
                             </a>
                         </li>
 
-                        <!-- 问卷调查 -->
-                        <li class="nav-item">
-                            <a class="nav-link" asp-controller="Survey" asp-action="Index">
-                                <i class="bi bi-file-text-fill me-1"></i>问卷调查
-                            </a>
-                        </li>
                     }
 
-                    <!-- 成绩管理（管理员） -->
-                    @if (isAdmin)
+                    <!-- 成绩管理（按权限显示） -->
+                    @if (isAdmin || hasPerm("subject_manage") || hasPerm("exam_add") || hasPerm("score_input") || hasPerm("score_view") || hasPerm("score_import") || hasPerm("ai_settings"))
                     {
                         <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                                 <i class="bi bi-bar-chart-line me-1"></i>成绩管理
                             </a>
                             <ul class="dropdown-menu">
-                                <li><a class="dropdown-item" asp-controller="Subject" asp-action="Index"><i class="bi bi-book me-2"></i>科目管理</a></li>
-                                <li><a class="dropdown-item" asp-controller="ExamSchedule" asp-action="Index"><i class="bi bi-calendar-event me-2"></i>考试安排</a></li>
+                                @if (isAdmin || hasPerm("subject_manage")) { <li><a class="dropdown-item" asp-controller="Subject" asp-action="Index"><i class="bi bi-book me-2"></i>科目管理</a></li> }
+                                @if (isAdmin || hasPerm("exam_add") || hasPerm("exam_edit") || hasPerm("exam_delete")) { <li><a class="dropdown-item" asp-controller="ExamSchedule" asp-action="Index"><i class="bi bi-calendar-event me-2"></i>考试安排</a></li> }
                                 <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item" asp-controller="Score" asp-action="Entry"><i class="bi bi-pencil-square me-2"></i>成绩录入</a></li>
-                                <li><a class="dropdown-item" asp-controller="Score" asp-action="ScoreView"><i class="bi bi-search me-2"></i>成绩分析</a></li>
-                                <li><a class="dropdown-item" asp-controller="Score" asp-action="Import"><i class="bi bi-upload me-2"></i>批量导入</a></li>
+                                @if (isAdmin || hasPerm("score_input")) { <li><a class="dropdown-item" asp-controller="Score" asp-action="Entry"><i class="bi bi-pencil-square me-2"></i>成绩录入</a></li> }
+                                @if (isAdmin || hasPerm("score_view")) { <li><a class="dropdown-item" asp-controller="Score" asp-action="ScoreView"><i class="bi bi-search me-2"></i>成绩分析</a></li> }
+                                @if (isAdmin || hasPerm("score_import")) { <li><a class="dropdown-item" asp-controller="Score" asp-action="Import"><i class="bi bi-upload me-2"></i>批量导入</a></li> }
                                 <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item" href="javascript:void(0)" id="aiSettingsMenuItem"><i class="bi bi-gear-wide-connected me-2"></i>AI设置</a></li>
+                                @if (isAdmin || hasPerm("ai_settings")) { <li><a class="dropdown-item" href="javascript:void(0)" id="aiSettingsMenuItem"><i class="bi bi-gear-wide-connected me-2"></i>AI设置</a></li> }
                             </ul>
                         </li>
                     }

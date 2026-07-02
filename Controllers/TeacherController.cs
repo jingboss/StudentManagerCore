@@ -21,7 +21,7 @@ public class TeacherController : Controller
         _auditService = auditService;
     }
 
-    public async Task<IActionResult> Index(string? keyword, int page = 1, string? status = null, string? role = null)
+    public async Task<IActionResult> Index(string? keyword, int page = 1, string? status = null, string? role = null, string? grade = null)
     {
         int pageSize = 20;
         var currentUserRole = User.FindFirst(ClaimTypes.Role)?.Value?.Trim() ?? "";
@@ -47,6 +47,10 @@ public class TeacherController : Controller
         // 角色筛选（多角色支持：FIND_IN_SET 匹配）
         if (!string.IsNullOrWhiteSpace(role) && role != "全部")
             query = query.Where(a => a.Role != null && a.Role.Contains(role));
+
+        // 年级筛选
+        if (!string.IsNullOrWhiteSpace(grade) && grade != "全部")
+            query = query.Where(a => a.Grade != null && a.Grade == grade);
 
         if (!string.IsNullOrWhiteSpace(keyword))
         {
@@ -98,6 +102,20 @@ public class TeacherController : Controller
         ViewBag.TotalPages = (int)Math.Ceiling((double)total / pageSize);
         ViewBag.Total = total;
         ViewBag.FilterRole = role;
+        ViewBag.FilterGrade = grade;
+        // 年级列表（按自然排序）
+        var gradeOrder = new Dictionary<string, int>
+        {
+            {"一年级", 1}, {"二年级", 2}, {"三年级", 3},
+            {"四年级", 4}, {"五年级", 5}, {"六年级", 6},
+            {"七年级", 7}, {"八年级", 8}, {"九年级", 9}
+        };
+        ViewBag.GradeList = (await _db.GradeLevels.ToListAsync())
+            .Select(g => g.CurrentGradeName)
+            .Where(n => !string.IsNullOrEmpty(n))
+            .Distinct()
+            .OrderBy(n => gradeOrder.TryGetValue(n, out var o) ? o : 99)
+            .ToList();
         ViewBag.TotalTeachers = totalTeachers;
         ViewBag.HeadCount = headCount;
         ViewBag.SubjectCount = subjectCount;

@@ -58,22 +58,35 @@ public class HomeController : Controller
         ViewBag.ClassCount = await _db.ClassInfos.CountAsync();
         ViewBag.GradeCount = await _db.GradeLevels.CountAsync();
 
-        // 各年级人数分布（按年级自然排序）
+        // 各年级人数分布（显示所有年级，含0人年级）
+        var allGradeLevels = await _db.GradeLevels.ToListAsync();
+        var gradeNames = allGradeLevels
+            .Select(g => g.CurrentGradeName)
+            .Where(n => !string.IsNullOrEmpty(n))
+            .Distinct()
+            .ToList();
         var gradeOrder = new Dictionary<string, int>
         {
             {"一年级", 1}, {"二年级", 2}, {"三年级", 3},
             {"四年级", 4}, {"五年级", 5}, {"六年级", 6},
             {"七年级", 7}, {"八年级", 8}, {"九年级", 9}
         };
-        var gradeData = (await _db.Students
-            .Where(s => s.Grade != null && s.Grade != "")
+        // 按年级规则排序，不在字典中的排最后
+        gradeNames = gradeNames
+            .OrderBy(n => gradeOrder.TryGetValue(n ?? "", out var o) ? o : 99)
+            .ToList()!;
+
+        var studentCountByGrade = await _db.Students
+            .Where(s => s.Status == "在读")
             .GroupBy(s => s.Grade)
             .Select(g => new { Grade = g.Key, Count = g.Count() })
-            .ToListAsync())
-            .OrderBy(g => gradeOrder.TryGetValue(g.Grade ?? "", out var order) ? order : 99)
-            .ToList();
-        ViewBag.GradeLabels = JsonSerializer.Serialize(gradeData.Select(g => g.Grade));
-        ViewBag.GradeData = JsonSerializer.Serialize(gradeData.Select(g => g.Count));
+            .ToListAsync();
+        var countLookup = studentCountByGrade.ToDictionary(g => g.Grade ?? "", g => g.Count);
+        var labels = gradeNames.Select(n => n ?? "").ToList();
+        var data = gradeNames.Select(n => countLookup.GetValueOrDefault(n ?? "", 0)).ToList();
+
+        ViewBag.GradeLabels = JsonSerializer.Serialize(labels);
+        ViewBag.GradeData = JsonSerializer.Serialize(data);
 
         // 性别分布
         ViewBag.GenderLabels = JsonSerializer.Serialize(new[] { "男", "女" });

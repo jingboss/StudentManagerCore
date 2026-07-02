@@ -47,10 +47,10 @@
 <!-- 状态切换 -->
 <ul class="nav nav-tabs mb-3">
     <li class="nav-item">
-        <a class="nav-link @(!isDeletedView ? "active" : "")" asp-action="Index" asp-route-status="">在职教职工</a>
+        <a class="nav-link @(!isDeletedView ? "active" : "")" asp-action="Index" asp-route-status="" asp-route-grade="@ViewBag.FilterGrade" asp-route-role="@filterRole">在职教职工</a>
     </li>
     <li class="nav-item">
-        <a class="nav-link @(isDeletedView ? "active" : "")" asp-action="Index" asp-route-status="已删除">已删除教职工</a>
+        <a class="nav-link @(isDeletedView ? "active" : "")" asp-action="Index" asp-route-status="已删除" asp-route-grade="@ViewBag.FilterGrade" asp-route-role="@filterRole">已删除教职工</a>
     </li>
 </ul>
 
@@ -112,12 +112,21 @@
                 <option value="后勤主任" selected="@(filterRole == "后勤主任")">后勤主任</option>
             </select>
         </div>
+        <div class="col-auto">
+            <select name="grade" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">全部年级</option>
+                @foreach (var g in ViewBag.GradeList as List<string> ?? new List<string>())
+                {
+                    <option value="@g" selected="@(ViewBag.FilterGrade == g)">@g</option>
+                }
+            </select>
+        </div>
     }
     <div class="col-auto">
         <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-search me-1"></i>搜索</button>
         @if (!string.IsNullOrWhiteSpace(keyword))
         {
-            <a asp-action="Index" asp-route-status="@status" class="btn btn-outline-secondary btn-sm"><i class="bi bi-x-lg me-1"></i>清除</a>
+            <a asp-action="Index" asp-route-status="@status" asp-route-role="@filterRole" asp-route-grade="@ViewBag.FilterGrade" class="btn btn-outline-secondary btn-sm"><i class="bi bi-x-lg me-1"></i>清除</a>
         }
     </div>
 </form>
