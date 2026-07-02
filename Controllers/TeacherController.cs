@@ -518,6 +518,18 @@ public class TeacherController : Controller
         int failed = 0;
         int restored = 0;
 
+        // 预加载所有年级和班级，在内存中计算年级名→ClassID映射
+        var allGradeLevels = await _db.GradeLevels.Include(g => g.Classes).ToListAsync();
+        var classLookup = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var gl in allGradeLevels)
+        {
+            if (gl.Classes == null) continue;
+            foreach (var c in gl.Classes)
+            {
+                classLookup[gl.CurrentGradeName + "|" + c.ClassName] = c.ClassInfoID;
+            }
+        }
+
         using var reader = new StreamReader(file.OpenReadStream());
         // Skip header
         if (!reader.EndOfStream)
@@ -562,6 +574,16 @@ public class TeacherController : Controller
                 var existsActive = await _db.Admins.AnyAsync(a => a.Username == admin.Username && (a.Status == null || a.Status != "已删除"));
                 if (existsActive)
                 {
+                    // 已存在的用户：更新年级、班级名、ClassID
+                    var existingUser = await _db.Admins.FirstOrDefaultAsync(a => a.Username == admin.Username && (a.Status == null || a.Status != "已删除"));
+                    if (existingUser != null)
+                    {
+                        if (!string.IsNullOrEmpty(admin.Grade)) existingUser.Grade = admin.Grade;
+                        if (!string.IsNullOrEmpty(admin.ClassName)) existingUser.ClassName = admin.ClassName;
+                        if (!string.IsNullOrEmpty(admin.Phone)) existingUser.Phone = admin.Phone;
+                        if (!string.IsNullOrEmpty(existingUser.Grade) && !string.IsNullOrEmpty(existingUser.ClassName) && classLookup.TryGetValue(existingUser.Grade + "|" + existingUser.ClassName, out var cidExist))
+                            existingUser.ClassID = cidExist;
+                    }
                     failed++;
                     continue;
                 }
@@ -578,11 +600,19 @@ public class TeacherController : Controller
                     if (admin.Grade != null) deletedUser.Grade = admin.Grade;
                     if (admin.ClassName != null) deletedUser.ClassName = admin.ClassName;
                     if (admin.Position != null) deletedUser.Position = admin.Position;
+                    // 根据年级+班级名自动关联班主任
+                    if (!string.IsNullOrEmpty(deletedUser.Grade) && !string.IsNullOrEmpty(deletedUser.ClassName) && classLookup.TryGetValue(deletedUser.Grade + "|" + deletedUser.ClassName, out var cidRestore))
+                        deletedUser.ClassID = cidRestore;
+                    else
+                        deletedUser.ClassID = null;
                     restored++;
                     continue;
                 }
 
                 _db.Admins.Add(admin);
+                // 根据年级+班级名自动关联班主任
+                if (!string.IsNullOrEmpty(admin.Grade) && !string.IsNullOrEmpty(admin.ClassName) && classLookup.TryGetValue(admin.Grade + "|" + admin.ClassName, out var cidNew))
+                    admin.ClassID = cidNew;
                 imported++;
             }
             catch
@@ -651,9 +681,22 @@ public class TeacherController : Controller
                 return Json(new { success = false, message = "文件为空或只有表头" });
 
             int successCount = 0, skipCount = 0, restoreCount = 0;
+            int skipEmpty = 0, skipPwd = 0, skipExists = 0;
             var activeUsernames = new HashSet<string>(await _db.Admins
                 .Where(a => a.Status == null || a.Status != "已删除")
                 .Select(a => a.Username).ToListAsync());
+
+            // 预加载所有年级和班级，在内存中计算年级名→ClassID映射
+            var allGradeLevels = await _db.GradeLevels.Include(g => g.Classes).ToListAsync();
+            var classLookup = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (var gl in allGradeLevels)
+            {
+                if (gl.Classes == null) continue;
+                foreach (var c in gl.Classes)
+                {
+                    classLookup[gl.CurrentGradeName + "|" + c.ClassName] = c.ClassInfoID;
+                }
+            }
 
             // 从第 2 行开始（第 1 行是表头）
             for (int row = 2; row <= range.RowCount(); row++)
@@ -665,6 +708,7 @@ public class TeacherController : Controller
                 if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password) || string.IsNullOrEmpty(realName))
                 {
                     skipCount++;
+                    skipEmpty++;
                     continue;
                 }
 
@@ -672,12 +716,30 @@ public class TeacherController : Controller
                 if (pwdError != null)
                 {
                     skipCount++;
+                    skipPwd++;
                     continue;
                 }
 
                 if (activeUsernames.Contains(username))
                 {
+                    // 已存在的用户：更新年级、班级名、ClassID 信息
+                    var existingUser = await _db.Admins.FirstOrDefaultAsync(a => a.Username == username && (a.Status == null || a.Status != "已删除"));
+                    if (existingUser != null)
+                    {
+                        var grade = CellOrNull(ws, row, 15);
+                        var className = CellOrNull(ws, row, 16);
+                        if (!string.IsNullOrEmpty(grade)) existingUser.Grade = grade;
+                        if (!string.IsNullOrEmpty(className)) existingUser.ClassName = className;
+                        if (!string.IsNullOrEmpty(existingUser.Grade) && !string.IsNullOrEmpty(existingUser.ClassName) && classLookup.TryGetValue(existingUser.Grade + "|" + existingUser.ClassName, out var cidExist))
+                            existingUser.ClassID = cidExist;
+                        // 也更新角色和电话号码
+                        var role = ws.Cell(row, 14).GetString().Trim().PadRight(10)[..10];
+                        if (!string.IsNullOrEmpty(role)) existingUser.Role = role;
+                        var phone = CellOrNull(ws, row, 12);
+                        if (!string.IsNullOrEmpty(phone)) existingUser.Phone = phone;
+                    }
                     skipCount++;
+                    skipExists++;
                     continue;
                 }
 
@@ -728,28 +790,48 @@ public class TeacherController : Controller
                     deletedUser.Grade = admin.Grade;
                     deletedUser.ClassName = admin.ClassName;
                     deletedUser.Position = admin.Position;
+                    // 根据年级+班级名自动关联班主任
+                    if (!string.IsNullOrEmpty(deletedUser.Grade) && !string.IsNullOrEmpty(deletedUser.ClassName) && classLookup.TryGetValue(deletedUser.Grade + "|" + deletedUser.ClassName, out var cidRestore))
+                        deletedUser.ClassID = cidRestore;
+                    else
+                        deletedUser.ClassID = null;
                     activeUsernames.Add(username);
                     restoreCount++;
                     continue;
                 }
 
                 _db.Admins.Add(admin);
+                // 根据年级+班级名自动关联班主任
+                if (!string.IsNullOrEmpty(admin.Grade) && !string.IsNullOrEmpty(admin.ClassName) && classLookup.TryGetValue(admin.Grade + "|" + admin.ClassName, out var cidNew))
+                    admin.ClassID = cidNew;
                 activeUsernames.Add(username);
                 successCount++;
             }
 
             await _db.SaveChangesAsync();
 
+            // 调试信息：列出详细跳过原因
+            var debugInfo = "";
+            if (skipCount > 0 && successCount == 0)
+            {
+                var existingNames = await _db.Admins.Select(a => a.Username).ToListAsync();
+                debugInfo = $" | 跳过明细: 空行={skipEmpty}, 密码不合规={skipPwd}, 已存在={skipExists} | 数据库所有用户名: {string.Join(", ", existingNames)} | 总行数={range.RowCount() - 1}";
+            }
+
             var importMsg = $"导入成功！新增 {successCount} 人";
             if (restoreCount > 0) importMsg += $"，恢复 {restoreCount} 人";
-            importMsg += $"，跳过 {skipCount} 人（空行/已存在）";
+            var skipParts = new List<string>();
+            if (skipEmpty > 0) skipParts.Add($"{skipEmpty} 空行");
+            if (skipPwd > 0) skipParts.Add($"{skipPwd} 密码不合规");
+            if (skipExists > 0) skipParts.Add($"{skipExists} 已存在");
+            importMsg += $"，跳过 {skipCount} 人（{string.Join(", ", skipParts)}）";
 
             await _auditService.LogAsync("导入", $"导入教职工: 新增 {successCount} 人, 恢复 {restoreCount} 人, 跳过 {skipCount} 人");
 
             return Json(new
             {
                 success = true,
-                message = importMsg
+                message = importMsg + debugInfo
             });
         }
         catch (Exception ex)

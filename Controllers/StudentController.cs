@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
@@ -476,6 +476,8 @@ public class StudentController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Edit(int id, Student student)
     {
+        if (!await CheckPermissionAsync("student_edit"))
+            return Json(new { success = false, message = "没有编辑学生权限" });
         if (id != student.StudentID)
         {
             if (IsAjaxRequest()) return Json(new { success = false, message = "参数错误" });
@@ -594,10 +596,24 @@ public class StudentController : Controller
         return Request.Headers["X-Requested-With"] == "XMLHttpRequest";
     }
 
+    /// <summary>检查当前登录用户是否有指定权限（管理员拥有所有权限）</summary>
+    private async Task<bool> CheckPermissionAsync(string permission)
+    {
+        var adminIdStr = User.FindFirst("AdminID")?.Value ?? "";
+        if (!int.TryParse(adminIdStr, out int adminId)) return false;
+        var admin = await _db.Admins.FindAsync(adminId);
+        if (admin == null) return false;
+        if (admin.HasRole("管理员")) return true;
+        var perms = (admin.Permissions ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        return perms.Contains(permission, StringComparer.OrdinalIgnoreCase);
+    }
+
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Delete(int id, DateTime? transferOutTime)
     {
+        if (!await CheckPermissionAsync("student_delete"))
+            return Json(new { success = false, message = "没有转出权限" });
         var student = await _db.Students.FindAsync(id);
         if (student == null)
             return Json(new { success = false, message = "学生不存在" });
@@ -1274,6 +1290,8 @@ public class StudentController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> BatchDelete(List<int> ids)
     {
+        if (!await CheckPermissionAsync("student_delete"))
+            return Json(new { success = false, message = "没有转出权限" });
         if (ids == null || ids.Count == 0)
             return Json(new { success = false, message = "请选择学生" });
 

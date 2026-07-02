@@ -490,6 +490,54 @@ public class AdminCenterController : Controller
         return Json(new { success = true, message = "角色权限更新成功" });
     }
 
+    /// <summary>调试页面：查看数据库连接信息和Admin表内容</summary>
+    [AllowAnonymous]
+    public IActionResult DebugDb()
+    {
+        var connStr = _db.Database.GetConnectionString() ?? "(null)";
+        // 隐藏密码
+        var maskedConn = System.Text.RegularExpressions.Regex.Replace(connStr, @"Password\s*=\s*[^;]+", "Password=***");
+
+        var totalCount = _db.Admins.Count();
+        var activeCount = _db.Admins.Count(a => a.Status == null || a.Status != "已删除");
+        var deletedCount = _db.Admins.Count(a => a.Status == "已删除");
+        var allUsers = _db.Admins.Select(a => new { a.Username, a.RealName, a.Status, a.Role }).ToList();
+
+        var html = $"<html><body><h2>数据库调试信息</h2>";
+        html += $"<p><b>连接字符串:</b> {maskedConn}</p>";
+        html += $"<p><b>总记录数:</b> {totalCount}</p>";
+        html += $"<p><b>活跃用户数(Status为空或≠已删除):</b> {activeCount}</p>";
+        html += $"<p><b>已删除用户数:</b> {deletedCount}</p>";
+        html += $"<h3>所有用户列表:</h3><table border='1'><tr><th>用户名</th><th>姓名</th><th>状态</th><th>角色</th></tr>";
+        foreach (var u in allUsers)
+            html += $"<tr><td>{u.Username}</td><td>{u.RealName}</td><td>{u.Status ?? "(null)"}</td><td>{u.Role}</td></tr>";
+        html += "</table></body></html>";
+        return Content(html, "text/html; charset=utf-8");
+    }
+
+    /// <summary>调试API：返回JSON格式的数据库信息</summary>
+    [AllowAnonymous]
+    public IActionResult DebugDbJson()
+    {
+        var connStr = _db.Database.GetConnectionString() ?? "(null)";
+        var maskedConn = System.Text.RegularExpressions.Regex.Replace(connStr, @"Password\s*=\s*[^;]+", "Password=***");
+
+        var allUsers = _db.Admins.Select(a => new { a.Username, a.RealName, a.Status, a.Role }).ToList();
+        var activeUsernames = _db.Admins
+            .Where(a => a.Status == null || a.Status != "已删除")
+            .Select(a => a.Username).ToList();
+
+        return Json(new
+        {
+            connectionString = maskedConn,
+            totalCount = _db.Admins.Count(),
+            activeCount = activeUsernames.Count,
+            deletedCount = _db.Admins.Count(a => a.Status == "已删除"),
+            activeUsernames = activeUsernames,
+            allUsers = allUsers
+        });
+    }
+
     public async Task<IActionResult> OperationLogs(int page = 1, int pageSize = 20, string? actionType = null, string? keyword = null)
     {
         var role = User.FindFirst(ClaimTypes.Role)?.Value?.Trim() ?? "";

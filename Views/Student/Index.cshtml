@@ -11,9 +11,9 @@
     var isNormalView = string.IsNullOrEmpty(status);
     var perms = (ViewBag.Permissions as string ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries);
     bool hasPerm(string p) => perms.Contains(p);
-    var canEdit = isAdmin || hasPerm("student_edit") || isBanZhuren;
-    var canDelete = isAdmin || hasPerm("student_delete") || isBanZhuren;
-    var canAdd = isAdmin || hasPerm("student_add") || isBanZhuren;
+    var canEdit = isAdmin || hasPerm("student_edit");
+    var canDelete = isAdmin || hasPerm("student_delete");
+    var canAdd = isAdmin || hasPerm("student_add");
     var activeTab = ViewBag.ActiveTab as string ?? "student";
     var _gradeMap = ViewBag.GradeDisplayMap as Dictionary<string, string>;
     Func<string?, string> gradeDisplay = (g) => g != null && _gradeMap?.ContainsKey(g) == true ? _gradeMap[g] : (g ?? "");
