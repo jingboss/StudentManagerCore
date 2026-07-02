@@ -3,9 +3,8 @@
     ViewData["Title"] = "角色管理";
 }
 
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="mb-3">
     <h4 class="mb-0"><i class="bi bi-shield-lock-fill me-2"></i>角色管理</h4>
-    <button class="btn btn-primary" id="btnSaveAll"><i class="bi bi-floppy me-1"></i>保存全部</button>
 </div>
 
 <div class="table-responsive">
@@ -233,10 +232,9 @@
             new bootstrap.Modal(document.getElementById('permModal')).show();
         });
 
-        // 对话框"确定"按钮 - 保存当前角色的权限到表格行
+        // 对话框"确定"按钮 - 直接保存到数据库
         $('#btnSaveRole').click(function () {
             var role = $('#currentRole').val();
-            var $tr = $('#permTable tbody tr[data-role="' + role + '"]');
 
             // 收集勾选的权限
             var checkedPerms = [];
@@ -245,66 +243,61 @@
             });
             var permStr = checkedPerms.join(',');
 
-            // 更新表格行
-            $tr.data('perms', permStr);
-            var summary = '';
-            if (checkedPerms.some(function (p) { return ['student_view','student_add','student_edit','student_delete'].indexOf(p) >= 0; })) summary += '学生、';
-            if (checkedPerms.some(function (p) { return ['teacher_view','teacher_add','teacher_edit','teacher_delete'].indexOf(p) >= 0; })) summary += '教职工、';
-            if (checkedPerms.some(function (p) { return ['exam_add','exam_edit','exam_delete','score_input','score_view','score_import','ai_settings','subject_manage'].indexOf(p) >= 0; })) summary += '成绩、';
-            if (checkedPerms.some(function (p) { return ['grade_add','grade_edit','grade_delete','grade_set_teacher'].indexOf(p) >= 0; })) summary += '班级、';
-            summary = summary.replace(/、$/, '');
-            $tr.find('.perm-summary').text(summary || '无权限');
-
-            bootstrap.Modal.getInstance(document.getElementById('permModal')).hide();
-        });
-
-        // 保存全部
-        $('#btnSaveAll').click(function () {
-            var roles = [];
-            $('#permTable tbody tr').each(function () {
-                var permStr = $(this).data('perms') || '';
-                var perms = permStr.split(',').filter(function (p) { return p; });
-                roles.push({
-                    role: $(this).data('role'),
-                    studentView: perms.indexOf('student_view') >= 0,
-                    studentAdd: perms.indexOf('student_add') >= 0,
-                    studentEdit: perms.indexOf('student_edit') >= 0,
-                    studentDelete: perms.indexOf('student_delete') >= 0,
-                    teacherView: perms.indexOf('teacher_view') >= 0,
-                    teacherAdd: perms.indexOf('teacher_add') >= 0,
-                    teacherEdit: perms.indexOf('teacher_edit') >= 0,
-                    teacherDelete: perms.indexOf('teacher_delete') >= 0,
-                    examAdd: perms.indexOf('exam_add') >= 0,
-                    examEdit: perms.indexOf('exam_edit') >= 0,
-                    examDelete: perms.indexOf('exam_delete') >= 0,
-                    scoreInput: perms.indexOf('score_input') >= 0,
-                    scoreView: perms.indexOf('score_view') >= 0,
-                    scoreImport: perms.indexOf('score_import') >= 0,
-                    aiSettings: perms.indexOf('ai_settings') >= 0,
-                    subjectManage: perms.indexOf('subject_manage') >= 0,
-                    gradeAdd: perms.indexOf('grade_add') >= 0,
-                    gradeEdit: perms.indexOf('grade_edit') >= 0,
-                    gradeDelete: perms.indexOf('grade_delete') >= 0,
-                    gradeSetTeacher: perms.indexOf('grade_set_teacher') >= 0
-                });
-            });
+            var permData = {
+                role: role,
+                studentView: checkedPerms.indexOf('student_view') >= 0,
+                studentAdd: checkedPerms.indexOf('student_add') >= 0,
+                studentEdit: checkedPerms.indexOf('student_edit') >= 0,
+                studentDelete: checkedPerms.indexOf('student_delete') >= 0,
+                teacherView: checkedPerms.indexOf('teacher_view') >= 0,
+                teacherAdd: checkedPerms.indexOf('teacher_add') >= 0,
+                teacherEdit: checkedPerms.indexOf('teacher_edit') >= 0,
+                teacherDelete: checkedPerms.indexOf('teacher_delete') >= 0,
+                examAdd: checkedPerms.indexOf('exam_add') >= 0,
+                examEdit: checkedPerms.indexOf('exam_edit') >= 0,
+                examDelete: checkedPerms.indexOf('exam_delete') >= 0,
+                scoreInput: checkedPerms.indexOf('score_input') >= 0,
+                scoreView: checkedPerms.indexOf('score_view') >= 0,
+                scoreImport: checkedPerms.indexOf('score_import') >= 0,
+                aiSettings: checkedPerms.indexOf('ai_settings') >= 0,
+                subjectManage: checkedPerms.indexOf('subject_manage') >= 0,
+                gradeAdd: checkedPerms.indexOf('grade_add') >= 0,
+                gradeEdit: checkedPerms.indexOf('grade_edit') >= 0,
+                gradeDelete: checkedPerms.indexOf('grade_delete') >= 0,
+                gradeSetTeacher: checkedPerms.indexOf('grade_set_teacher') >= 0
+            };
 
             var btn = $(this);
+            var originalText = btn.html();
             btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>保存中...');
 
             $.ajax({
                 url: '@Url.Action("BatchUpdatePermissions")',
                 type: 'POST',
                 contentType: 'application/json',
-                data: JSON.stringify(roles),
+                data: JSON.stringify([permData]),
                 headers: { 'RequestVerificationToken': $('[name="__RequestVerificationToken"]').first().val() }
             }).done(function (res) {
-                if (res.success) { toastr.success(res.message); }
-                else { toastr.error(res.message); }
+                if (res.success) {
+                    toastr.success(res.message);
+                    // 更新表格行
+                    var $tr = $('#permTable tbody tr[data-role="' + role + '"]');
+                    $tr.data('perms', permStr);
+                    var summary = '';
+                    if (checkedPerms.some(function (p) { return ['student_view','student_add','student_edit','student_delete'].indexOf(p) >= 0; })) summary += '学生、';
+                    if (checkedPerms.some(function (p) { return ['teacher_view','teacher_add','teacher_edit','teacher_delete'].indexOf(p) >= 0; })) summary += '教职工、';
+                    if (checkedPerms.some(function (p) { return ['exam_add','exam_edit','exam_delete','score_input','score_view','score_import','ai_settings','subject_manage'].indexOf(p) >= 0; })) summary += '成绩、';
+                    if (checkedPerms.some(function (p) { return ['grade_add','grade_edit','grade_delete','grade_set_teacher'].indexOf(p) >= 0; })) summary += '班级、';
+                    summary = summary.replace(/、$/, '');
+                    $tr.find('.perm-summary').text(summary || '无权限');
+                    bootstrap.Modal.getInstance(document.getElementById('permModal')).hide();
+                } else {
+                    toastr.error(res.message);
+                }
             }).fail(function () {
                 toastr.error('保存失败，请重试');
             }).always(function () {
-                btn.prop('disabled', false).html('<i class="bi bi-floppy me-1"></i>保存全部');
+                btn.prop('disabled', false).html(originalText);
             });
         });
     </script>
