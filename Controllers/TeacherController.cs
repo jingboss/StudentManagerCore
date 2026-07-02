@@ -44,6 +44,10 @@ public class TeacherController : Controller
         else
             query = query.Where(a => a.Status == null || a.Status == "正常");
 
+        // 调试统计
+        var totalDeletedNonAdmin = await _db.Admins.CountAsync(a => a.Status == "已删除" && a.Role != null && !a.Role.Contains("管理员"));
+        ViewBag.DebugDeletedCount = totalDeletedNonAdmin;
+
         // 角色筛选（多角色支持：FIND_IN_SET 匹配）
         if (!string.IsNullOrWhiteSpace(role) && role != "全部")
             query = query.Where(a => a.Role != null && a.Role.Contains(role));
@@ -516,6 +520,7 @@ public class TeacherController : Controller
 
         int imported = 0;
         int failed = 0;
+        int restored = 0;
 
         using var reader = new StreamReader(file.OpenReadStream());
         // Skip header
@@ -557,11 +562,27 @@ public class TeacherController : Controller
                     Position = parts.Length > 6 ? parts[6].Trim() : null
                 };
 
-                // Check duplicate
-                var exists = await _db.Admins.AnyAsync(a => a.Username == admin.Username);
-                if (exists)
+                // Check duplicate - skip only active users, restore deleted ones
+                var existsActive = await _db.Admins.AnyAsync(a => a.Username == admin.Username && (a.Status == null || a.Status != "已删除"));
+                if (existsActive)
                 {
                     failed++;
+                    continue;
+                }
+
+                // If user exists but is deleted, restore and update
+                var deletedUser = await _db.Admins.FirstOrDefaultAsync(a => a.Username == admin.Username && a.Status == "已删除");
+                if (deletedUser != null)
+                {
+                    deletedUser.Status = "正常";
+                    deletedUser.Password = admin.Password;
+                    deletedUser.RealName = admin.RealName;
+                    deletedUser.Role = admin.Role;
+                    if (admin.Phone != null) deletedUser.Phone = admin.Phone;
+                    if (admin.Grade != null) deletedUser.Grade = admin.Grade;
+                    if (admin.ClassName != null) deletedUser.ClassName = admin.ClassName;
+                    if (admin.Position != null) deletedUser.Position = admin.Position;
+                    restored++;
                     continue;
                 }
 
@@ -575,7 +596,9 @@ public class TeacherController : Controller
         }
 
         await _db.SaveChangesAsync();
-        TempData["Success"] = $"导入完成：成功 {imported} 条，失败 {failed} 条";
+        var csvMsg = $"导入完成：成功 {imported} 条，失败 {failed} 条";
+        if (restored > 0) csvMsg += $"，恢复 {restored} 条";
+        TempData["Success"] = csvMsg;
         return RedirectToAction("Index");
     }
 
@@ -631,8 +654,10 @@ public class TeacherController : Controller
             if (range == null || range.RowCount() < 2)
                 return Json(new { success = false, message = "文件为空或只有表头" });
 
-            int successCount = 0, skipCount = 0;
-            var existingUsernames = new HashSet<string>(await _db.Admins.Select(a => a.Username).ToListAsync());
+            int successCount = 0, skipCount = 0, restoreCount = 0;
+            var activeUsernames = new HashSet<string>(await _db.Admins
+                .Where(a => a.Status == null || a.Status != "已删除")
+                .Select(a => a.Username).ToListAsync());
 
             // 从第 2 行开始（第 1 行是表头）
             for (int row = 2; row <= range.RowCount(); row++)
@@ -654,7 +679,7 @@ public class TeacherController : Controller
                     continue;
                 }
 
-                if (existingUsernames.Contains(username))
+                if (activeUsernames.Contains(username))
                 {
                     skipCount++;
                     continue;
@@ -686,19 +711,49 @@ public class TeacherController : Controller
                     CreateTime = DateTime.Now
                 };
 
+                // Check if username exists but was deleted → restore
+                var deletedUser = await _db.Admins.FirstOrDefaultAsync(a => a.Username == username && a.Status == "已删除");
+                if (deletedUser != null)
+                {
+                    deletedUser.Status = "正常";
+                    deletedUser.Password = admin.Password;
+                    deletedUser.RealName = admin.RealName;
+                    deletedUser.Gender = admin.Gender;
+                    deletedUser.Nation = admin.Nation;
+                    deletedUser.BirthDate = admin.BirthDate;
+                    deletedUser.RegisteredDomicile = admin.RegisteredDomicile;
+                    deletedUser.HighestEducation = admin.HighestEducation;
+                    deletedUser.CertSubject = admin.CertSubject;
+                    deletedUser.CertNumber = admin.CertNumber;
+                    deletedUser.CertAuthority = admin.CertAuthority;
+                    deletedUser.Phone = admin.Phone;
+                    deletedUser.SchoolType = admin.SchoolType;
+                    deletedUser.Role = admin.Role;
+                    deletedUser.Grade = admin.Grade;
+                    deletedUser.ClassName = admin.ClassName;
+                    deletedUser.Position = admin.Position;
+                    activeUsernames.Add(username);
+                    restoreCount++;
+                    continue;
+                }
+
                 _db.Admins.Add(admin);
-                existingUsernames.Add(username);
+                activeUsernames.Add(username);
                 successCount++;
             }
 
             await _db.SaveChangesAsync();
 
-            await _auditService.LogAsync("导入", $"导入教职工: 新增 {successCount} 人, 跳过 {skipCount} 人");
+            var importMsg = $"导入成功！新增 {successCount} 人";
+            if (restoreCount > 0) importMsg += $"，恢复 {restoreCount} 人";
+            importMsg += $"，跳过 {skipCount} 人（空行/已存在）";
+
+            await _auditService.LogAsync("导入", $"导入教职工: 新增 {successCount} 人, 恢复 {restoreCount} 人, 跳过 {skipCount} 人");
 
             return Json(new
             {
                 success = true,
-                message = $"导入成功！新增 {successCount} 人，跳过 {skipCount} 人（空行/已存在）"
+                message = importMsg
             });
         }
         catch (Exception ex)

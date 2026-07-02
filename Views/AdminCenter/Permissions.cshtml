@@ -271,31 +271,35 @@
             var originalText = btn.html();
             btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>保存中...');
 
+            var token = $('[name="__RequestVerificationToken"]').first().val();
+            if (!token) { alert('安全令牌缺失，请刷新页面后重试'); btn.prop('disabled', false).html(originalText); return; }
+
             $.ajax({
                 url: '@Url.Action("BatchUpdatePermissions")',
                 type: 'POST',
                 contentType: 'application/json',
                 data: JSON.stringify([permData]),
-                headers: { 'RequestVerificationToken': $('[name="__RequestVerificationToken"]').first().val() }
+                headers: { 'RequestVerificationToken': token }
             }).done(function (res) {
-                if (res.success) {
-                    toastr.success(res.message);
-                    // 更新表格行
-                    var $tr = $('#permTable tbody tr[data-role="' + role + '"]');
-                    $tr.data('perms', permStr);
-                    var summary = '';
-                    if (checkedPerms.some(function (p) { return ['student_view','student_add','student_edit','student_delete'].indexOf(p) >= 0; })) summary += '学生、';
-                    if (checkedPerms.some(function (p) { return ['teacher_view','teacher_add','teacher_edit','teacher_delete'].indexOf(p) >= 0; })) summary += '教职工、';
-                    if (checkedPerms.some(function (p) { return ['exam_add','exam_edit','exam_delete','score_input','score_view','score_import','ai_settings','subject_manage'].indexOf(p) >= 0; })) summary += '成绩、';
-                    if (checkedPerms.some(function (p) { return ['grade_add','grade_edit','grade_delete','grade_set_teacher'].indexOf(p) >= 0; })) summary += '班级、';
-                    summary = summary.replace(/、$/, '');
-                    $tr.find('.perm-summary').text(summary || '无权限');
-                    bootstrap.Modal.getInstance(document.getElementById('permModal')).hide();
-                } else {
-                    toastr.error(res.message);
-                }
-            }).fail(function () {
-                toastr.error('保存失败，请重试');
+                try {
+                    if (res.success) {
+                        alert('保存成功');
+                        var $tr = $('#permTable tbody tr[data-role="' + role + '"]');
+                        $tr.data('perms', permStr);
+                        var summary = '';
+                        if (checkedPerms.some(function (p) { return ['student_view','student_add','student_edit','student_delete'].indexOf(p) >= 0; })) summary += '学生、';
+                        if (checkedPerms.some(function (p) { return ['teacher_view','teacher_add','teacher_edit','teacher_delete'].indexOf(p) >= 0; })) summary += '教职工、';
+                        if (checkedPerms.some(function (p) { return ['exam_add','exam_edit','exam_delete','score_input','score_view','score_import','ai_settings','subject_manage'].indexOf(p) >= 0; })) summary += '成绩、';
+                        if (checkedPerms.some(function (p) { return ['grade_add','grade_edit','grade_delete','grade_set_teacher'].indexOf(p) >= 0; })) summary += '班级、';
+                        summary = summary.replace(/、$/, '');
+                        $tr.find('.perm-summary').text(summary || '无权限');
+                        bootstrap.Modal.getInstance(document.getElementById('permModal')).hide();
+                    } else {
+                        alert('保存失败：' + (res.message || '未知错误'));
+                    }
+                } catch (e) { alert('界面更新出错：' + e.message); }
+            }).fail(function (xhr) {
+                alert('保存失败（状态码：' + xhr.status + '）');
             }).always(function () {
                 btn.prop('disabled', false).html(originalText);
             });
