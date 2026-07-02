@@ -1,85 +1,74 @@
-@model List<Admin>
+@model List<RolePermissionViewModel>
 @{
-    ViewData["Title"] = "批量权限管理";
-    var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
-    var isAdmin = role.Trim() == "管理员";
+    ViewData["Title"] = "角色管理";
 }
 
-@if (!isAdmin)
-{
-    <div class="alert alert-danger">您没有权限访问此页面</div>
-    return;
-}
-
-<div class="d-flex align-items-center justify-content-between mb-3">
-    <h4 class="mb-0">
-        <i class="bi bi-shield-lock-fill me-2"></i>批量权限管理
-        <span class="badge bg-secondary ms-2">共 @Model.Count 人</span>
-    </h4>
-    <button type="button" class="btn btn-success" id="btnSaveAll">
-        <i class="bi bi-check2-all me-1"></i> 保存全部修改
-    </button>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="bi bi-shield-lock-fill me-2"></i>角色管理</h4>
+    <button class="btn btn-primary" id="btnSaveAll"><i class="bi bi-floppy me-1"></i>保存全部</button>
 </div>
 
-<div class="alert alert-info d-flex align-items-center">
-    <i class="bi bi-info-circle-fill me-2"></i>
-    勾选表示允许该操作。管理员账号拥有所有权限，不在此页面显示。
+<div class="alert alert-info py-2 small">
+    <i class="bi bi-info-circle me-1"></i>按角色设置权限，系统将自动同步应用到所有拥有该角色的用户。
 </div>
 
-<div class="table-responsive" style="overflow-x: auto;">
-    <table class="table table-bordered table-hover align-middle text-center" id="permTable" style="font-size: 0.85rem; white-space: nowrap;">
+<div class="table-responsive">
+    <table class="table table-bordered table-hover align-middle" id="permTable">
         <thead class="table-dark">
             <tr>
-                <th style="min-width:80px;">姓名</th>
-                <th style="min-width:60px;">
-                    编辑学生<br/>
-                    <input type="checkbox" class="master-check" data-col="1" title="全选/取消" />
-                </th>
-                <th style="min-width:60px;">
-                    删除学生<br/>
-                    <input type="checkbox" class="master-check" data-col="2" title="全选/取消" />
-                </th>
-                <th style="min-width:60px;">
-                    添加学生<br/>
-                    <input type="checkbox" class="master-check" data-col="3" title="全选/取消" />
-                </th>
-                <th style="min-width:60px;">
-                    修改基本信息<br/>
-                    <input type="checkbox" class="master-check" data-col="4" title="全选/取消" />
-                </th>
-                <th style="min-width:60px;">
-                    修改手机号<br/>
-                    <input type="checkbox" class="master-check" data-col="5" title="全选/取消" />
-                </th>
-                <th style="min-width:60px;">
-                    修改身份证<br/>
-                    <input type="checkbox" class="master-check" data-col="6" title="全选/取消" />
-                </th>
-                <th style="min-width:60px;">
-                    修改证书<br/>
-                    <input type="checkbox" class="master-check" data-col="7" title="全选/取消" />
-                </th>
+                <th class="text-center" style="width:60px">序号</th>
+                <th style="width:120px">角色</th>
+                <th>权限设置</th>
             </tr>
         </thead>
         <tbody>
-            @if (Model.Count == 0)
-            {
-                <tr>
-                    <td colspan="8" class="text-center text-muted py-4">暂无班主任/教师用户</td>
-                </tr>
+            @{
+                int i = 1;
             }
-            @foreach (var teacher in Model)
+            @foreach (var rp in Model)
             {
-                var perms = (teacher.Permissions ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries);
-                <tr data-id="@teacher.AdminID">
-                    <td class="text-start fw-bold">@teacher.RealName</td>
-                    <td><input type="checkbox" class="perm-check" data-perm="edit_student" @(perms.Contains("edit_student") ? "checked" : "") /></td>
-                    <td><input type="checkbox" class="perm-check" data-perm="delete_student" @(perms.Contains("delete_student") ? "checked" : "") /></td>
-                    <td><input type="checkbox" class="perm-check" data-perm="add_student" @(perms.Contains("add_student") ? "checked" : "") /></td>
-                    <td><input type="checkbox" class="perm-check" data-perm="edit_basic" @(perms.Contains("edit_basic") ? "checked" : "") /></td>
-                    <td><input type="checkbox" class="perm-check" data-perm="edit_phone" @(perms.Contains("edit_phone") ? "checked" : "") /></td>
-                    <td><input type="checkbox" class="perm-check" data-perm="edit_idcard" @(perms.Contains("edit_idcard") ? "checked" : "") /></td>
-                    <td><input type="checkbox" class="perm-check" data-perm="edit_cert" @(perms.Contains("edit_cert") ? "checked" : "") /></td>
+                var perms = (rp.Permissions ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries).Select(p => p.Trim()).ToHashSet();
+                <tr data-role="@rp.Role">
+                    <td class="text-center">@(i++)</td>
+                    <td>
+                        <strong>@rp.Role</strong>
+                    </td>
+                    <td>
+                        <div class="d-flex flex-wrap gap-3">
+                            <label class="form-check-label me-2" style="min-width:130px">
+                                <input type="checkbox" class="form-check-input perm-cb" data-perm="student_view" checked disabled />
+                                <span class="text-muted">查看学生</span>
+                            </label>
+                            <label class="form-check-label me-2" style="min-width:130px">
+                                <input type="checkbox" class="form-check-input perm-cb" data-perm="student_add" @(perms.Contains("student_add") ? "checked" : "") />
+                                新增学生
+                            </label>
+                            <label class="form-check-label me-2" style="min-width:130px">
+                                <input type="checkbox" class="form-check-input perm-cb" data-perm="student_edit" @(perms.Contains("student_edit") ? "checked" : "") />
+                                编辑学生
+                            </label>
+                            <label class="form-check-label me-2" style="min-width:150px">
+                                <input type="checkbox" class="form-check-input perm-cb" data-perm="student_delete" @(perms.Contains("student_delete") ? "checked" : "") />
+                                删除/转出学生
+                            </label>
+                            <label class="form-check-label me-2" style="min-width:130px">
+                                <input type="checkbox" class="form-check-input perm-cb" data-perm="teacher_view" checked disabled />
+                                <span class="text-muted">查看教职工</span>
+                            </label>
+                            <label class="form-check-label me-2" style="min-width:130px">
+                                <input type="checkbox" class="form-check-input perm-cb" data-perm="teacher_add" @(perms.Contains("teacher_add") ? "checked" : "") />
+                                新增教职工
+                            </label>
+                            <label class="form-check-label me-2" style="min-width:130px">
+                                <input type="checkbox" class="form-check-input perm-cb" data-perm="teacher_edit" @(perms.Contains("teacher_edit") ? "checked" : "") />
+                                编辑教职工
+                            </label>
+                            <label class="form-check-label me-2" style="min-width:130px">
+                                <input type="checkbox" class="form-check-input perm-cb" data-perm="teacher_delete" @(perms.Contains("teacher_delete") ? "checked" : "") />
+                                删除教职工
+                            </label>
+                        </div>
+                    </td>
                 </tr>
             }
         </tbody>
@@ -88,57 +77,38 @@
 
 @section Scripts {
     <script>
-        // 列全选/取消
-        $(document).on('change', '.master-check', function () {
-            var colIndex = parseInt($(this).data('col'));
-            var isChecked = $(this).prop('checked');
+        $('#btnSaveAll').click(function () {
+            var roles = [];
             $('#permTable tbody tr').each(function () {
-                $(this).find('td:eq(' + colIndex + ') input.perm-check').prop('checked', isChecked);
+                var role = $(this).data('role');
+                var permData = {
+                    role: role,
+                    studentAdd: $(this).find('.perm-cb[data-perm="student_add"]').prop('checked'),
+                    studentEdit: $(this).find('.perm-cb[data-perm="student_edit"]').prop('checked'),
+                    studentDelete: $(this).find('.perm-cb[data-perm="student_delete"]').prop('checked'),
+                    teacherAdd: $(this).find('.perm-cb[data-perm="teacher_add"]').prop('checked'),
+                    teacherEdit: $(this).find('.perm-cb[data-perm="teacher_edit"]').prop('checked'),
+                    teacherDelete: $(this).find('.perm-cb[data-perm="teacher_delete"]').prop('checked')
+                };
+                roles.push(permData);
             });
-        });
 
-        // 保存全部修改
-        $('#btnSaveAll').on('click', function () {
             var btn = $(this);
             btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>保存中...');
-
-            var updates = [];
-            $('#permTable tbody tr').each(function () {
-                var id = parseInt($(this).data('id'));
-                if (!id) return;
-                var cells = $(this).find('td');
-                updates.push({
-                    id: id,
-                    editStudent: $(cells[1]).find('input').prop('checked'),
-                    deleteStudent: $(cells[2]).find('input').prop('checked'),
-                    addStudent: $(cells[3]).find('input').prop('checked'),
-                    editBasic: $(cells[4]).find('input').prop('checked'),
-                    editPhone: $(cells[5]).find('input').prop('checked'),
-                    editIdCard: $(cells[6]).find('input').prop('checked'),
-                    editCert: $(cells[7]).find('input').prop('checked')
-                });
-            });
 
             $.ajax({
                 url: '@Url.Action("BatchUpdatePermissions")',
                 type: 'POST',
                 contentType: 'application/json',
-                data: JSON.stringify(updates),
-                headers: {
-                    'RequestVerificationToken': $('input[name="__RequestVerificationToken"]').val()
-                },
-                success: function (res) {
-                    if (res.success) {
-                        alert('✅ ' + res.message);
-                    } else {
-                        alert('❌ ' + (res.message || '保存失败'));
-                    }
-                    btn.prop('disabled', false).html('<i class="bi bi-check2-all me-1"></i> 保存全部修改');
-                },
-                error: function () {
-                    alert('网络错误，请重试');
-                    btn.prop('disabled', false).html('<i class="bi bi-check2-all me-1"></i> 保存全部修改');
-                }
+                data: JSON.stringify(roles),
+                headers: { 'RequestVerificationToken': $('[name="__RequestVerificationToken"]').first().val() }
+            }).done(function (res) {
+                if (res.success) { toastr.success(res.message); }
+                else { toastr.error(res.message); }
+            }).fail(function () {
+                toastr.error('保存失败，请重试');
+            }).always(function () {
+                btn.prop('disabled', false).html('<i class="bi bi-floppy me-1"></i>保存全部');
             });
         });
     </script>

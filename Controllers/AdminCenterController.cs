@@ -398,6 +398,84 @@ public class AdminCenterController : Controller
     }
 
     [HttpGet]
+    /// <summary>角色管理（按角色设置权限）</summary>
+    public async Task<IActionResult> Permissions()
+    {
+        var role = User.FindFirst(ClaimTypes.Role)?.Value ?? "";
+        if (role.Trim() != "管理员")
+            return RedirectToAction("Index", "Home");
+
+        // 预定义角色列表
+        var allRoles = new List<string> { "班主任", "年级级长", "科任老师", "教务主任", "校长", "后勤主任" };
+
+        // 从数据库加载已有角色权限配置
+        var saved = await _db.RolePermissions.ToListAsync();
+        var savedDict = saved.ToDictionary(r => r.Role, r => r);
+
+        // 构建视图模型
+        var rolePerms = allRoles.Select(r => new RolePermissionViewModel
+        {
+            Role = r,
+            Permissions = savedDict.ContainsKey(r) ? (savedDict[r].Permissions ?? "") : "",
+            Description = savedDict.ContainsKey(r) ? savedDict[r].Description : ""
+        }).ToList();
+
+        return View(rolePerms);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> BatchUpdatePermissions([FromBody] List<RolePermissionUpdate> updates)
+    {
+        var role = User.FindFirst(ClaimTypes.Role)?.Value?.Trim() ?? "";
+        if (role != "管理员")
+            return Json(new { success = false, message = "无权限" });
+
+        if (updates == null || updates.Count == 0)
+            return Json(new { success = false, message = "没有需要更新的数据" });
+
+        var allRoleNames = new HashSet<string> { "班主任", "年级级长", "科任老师", "教务主任", "校长", "后勤主任" };
+
+        foreach (var update in updates)
+        {
+            if (!allRoleNames.Contains(update.Role)) continue;
+
+            // 构建权限字符串
+            var perms = new List<string>();
+            if (update.StudentAdd) perms.Add("student_add");
+            if (update.StudentEdit) perms.Add("student_edit");
+            if (update.StudentDelete) perms.Add("student_delete");
+            if (update.TeacherAdd) perms.Add("teacher_add");
+            if (update.TeacherEdit) perms.Add("teacher_edit");
+            if (update.TeacherDelete) perms.Add("teacher_delete");
+            var permStr = string.Join(",", perms);
+
+            // 保存/更新角色权限配置
+            var rp = await _db.RolePermissions.FindAsync(update.Role);
+            if (rp == null)
+            {
+                rp = new RolePermission { Role = update.Role, Permissions = permStr };
+                _db.RolePermissions.Add(rp);
+            }
+            else
+            {
+                rp.Permissions = permStr;
+            }
+
+            // 同步应用到所有拥有该角色的用户
+            var usersWithRole = await _db.Admins
+                .Where(a => a.Role != null && a.Role.Contains(update.Role))
+                .ToListAsync();
+            foreach (var u in usersWithRole)
+            {
+                u.Permissions = permStr;
+            }
+        }
+
+        await _db.SaveChangesAsync();
+        return Json(new { success = true, message = "角色权限更新成功" });
+    }
+
     public async Task<IActionResult> OperationLogs(int page = 1, int pageSize = 20, string? actionType = null, string? keyword = null)
     {
         var role = User.FindFirst(ClaimTypes.Role)?.Value?.Trim() ?? "";

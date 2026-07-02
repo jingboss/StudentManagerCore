@@ -43,6 +43,7 @@ public class AppDbContext : DbContext
     public DbSet<SurveyQuestionOption> SurveyQuestionOptions { get; set; }
     public DbSet<SurveySubmission> SurveySubmissions { get; set; }
     public DbSet<SurveyAnswer> SurveyAnswers { get; set; }
+    public DbSet<RolePermission> RolePermissions { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -556,6 +557,16 @@ public class AppDbContext : DbContext
             entity.Property(e => e.AnswerText).HasColumnName("AnswerText");
             entity.Property(e => e.FilePath).HasColumnName("FilePath").HasMaxLength(500);
             entity.HasOne(e => e.Submission).WithMany(e => e.Answers).HasForeignKey(e => e.SubmissionId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // RolePermission table mapping
+        modelBuilder.Entity<RolePermission>(entity =>
+        {
+            entity.ToTable("RolePermission");
+            entity.HasKey(e => e.Role);
+            entity.Property(e => e.Role).HasColumnName("Role").HasMaxLength(50);
+            entity.Property(e => e.Permissions).HasColumnName("Permissions").HasMaxLength(500);
+            entity.Property(e => e.Description).HasColumnName("Description").HasMaxLength(200);
         });
     }
 }

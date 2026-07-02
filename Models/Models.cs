@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace StudentManagerCore.Models;
@@ -663,4 +663,34 @@ public class AiSubjectAnalysisResult
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }
+}
+/// <summary>角色权限配置</summary>
+public class RolePermission
+{
+    [Key]
+    [StringLength(50)]
+    public string Role { get; set; } = "";
+
+    [StringLength(500)]
+    public string? Permissions { get; set; }
+
+    public string? Description { get; set; }
+}
+/// <summary>角色权限更新 DTO</summary>
+public class RolePermissionUpdate
+{
+    public string Role { get; set; } = "";
+    public bool StudentAdd { get; set; }
+    public bool StudentEdit { get; set; }
+    public bool StudentDelete { get; set; }
+    public bool TeacherAdd { get; set; }
+    public bool TeacherEdit { get; set; }
+    public bool TeacherDelete { get; set; }
+}
+/// <summary>角色权限视图模型</summary>
+public class RolePermissionViewModel
+{
+    public string Role { get; set; } = "";
+    public string Permissions { get; set; } = "";
+    public string? Description { get; set; }
 }
