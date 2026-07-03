@@ -210,7 +210,7 @@ public class ScoreController : Controller
             {
                 ViewBag.TeacherGrade = admin.Grade ?? "";
                 ViewBag.TeacherClassName = admin.ClassName ?? "";
-                if (admin.ClassID.HasValue)
+                if (admin.PrimaryRole == "班主任" && admin.ClassID.HasValue)
                     ViewBag.TeacherClassInfoId = admin.ClassID.Value.ToString();
                 // 根据年级名查找 GradeLevelId
                 var grades = await _db.GradeLevels.ToListAsync();
@@ -244,13 +244,15 @@ public class ScoreController : Controller
             var admin = await _db.Admins.FindAsync(adminId.Value);
             if (admin != null)
             {
-                if (!gradeLevelId.HasValue && !string.IsNullOrEmpty(admin.Grade))
+                var primaryRole = admin.PrimaryRole;
+                if (!gradeLevelId.HasValue && !string.IsNullOrEmpty(admin.Grade) &&
+                    (primaryRole == "班主任" || primaryRole == "年级级长"))
                 {
                     var allGl = await _db.GradeLevels.ToListAsync();
                     var matched = allGl.FirstOrDefault(g => g.CurrentGradeName == admin.Grade);
                     if (matched != null) gradeLevelId = matched.GradeLevelID;
                 }
-                if (!classInfoId.HasValue && admin.ClassID.HasValue)
+                if (!classInfoId.HasValue && admin.ClassID.HasValue && primaryRole == "班主任")
                 {
                     classInfoId = admin.ClassID.Value;
                 }
@@ -724,13 +726,14 @@ public class ScoreController : Controller
             var admin = await _db.Admins.FindAsync(adminId.Value);
             if (admin != null)
             {
-                if (admin.ClassID.HasValue)
+                var primaryRole = admin.PrimaryRole;
+                if (primaryRole == "班主任" && admin.ClassID.HasValue)
                 {
                     // 班主任：只能看本班
                     roleType = "class_teacher";
                     classes = classes.Where(c => c.ClassInfoId == admin.ClassID.Value).ToList();
                 }
-                else if (!string.IsNullOrEmpty(admin.Grade))
+                else if (primaryRole == "年级级长" && !string.IsNullOrEmpty(admin.Grade))
                 {
                     // 年级级长：只能看本年级
                     roleType = "grade_leader";

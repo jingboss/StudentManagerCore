@@ -4,8 +4,9 @@
     var exams = ViewBag.ExamSchedules as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
 }
 <div class="container-fluid py-3">
-    <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex align-items-center mb-3">
         <h4 class="mb-0"><i class="bi bi-bar-chart-line me-2"></i>成绩分析系统</h4>
+        <span class="text-danger fw-bold small ms-3">成绩分析、AI 辅助研判功能仅作为教学参考依据，正式数据以教导处统一发布内容为准。</span>
     </div>
 
     <!-- 筛选条件 -->
@@ -451,7 +452,7 @@
                              '<th class="text-center">平均分</th>' +
                              '<th class="text-center">最高分</th>' +
                              '<th class="text-center">最低分</th>' +
-                             '<th class="text-center" style="min-width:55px;">中位数</th>' +
+                             '<th class="text-center" style="width:48px;font-size:0.8rem;">中位数</th>' +
                              '<th class="text-center">优秀率</th>' +
                              '<th class="text-center">良好率</th>' +
                              '<th class="text-center">及格率</th>' +
@@ -525,16 +526,16 @@
         function renderDetailTable(data) {
             $('#viewStats').text(data.studentScores.length + ' 名学生');
             var headerHtml = '<th class="text-center" style="width:36px;">排名</th>' +
-                             '<th style="width:55px;">学号</th>' +
+                             '<th style="width:70px;">学号</th>' +
                              '<th style="width:45px;">姓名</th>';
             data.subjects.forEach(function (sub) {
-                headerHtml += '<th class="text-center" style="min-width:55px;">' +
+                headerHtml += '<th class="text-center" style="width:48px;font-size:0.8rem;">' +
                               sub.subjectName + '<br><small class="text-muted">(' + sub.fullScore + ')</small></th>';
             });
-            headerHtml += '<th class="text-center" style="width:50px;">总分</th>' +
-                          '<th class="text-center" style="width:50px;">平均分</th>' +
-                          '<th class="text-center" style="width:55px;">班级排名</th>' +
-                          '<th class="text-center" style="width:55px;">年级排名</th>' +
+            headerHtml += '<th class="text-center" style="width:65px;">总分</th>' +
+                          '<th class="text-center" style="width:65px;">平均分</th>' +
+                          '<th class="text-center" style="width:70px;">班级排名</th>' +
+                          '<th class="text-center" style="width:70px;">年级排名</th>' +
                           '<th class="text-center" style="width:48px;">操作</th>';
             $('#viewHeader').html(headerHtml);
 
@@ -593,7 +594,7 @@
             $('#compareStats').text(data.rows.length + ' 名学生 · ' + data.examName + ' vs ' + data.compareExamName);
 
             var headerHtml = '<th class="text-center" style="width:30px;">排名</th>' +
-                             '<th style="width:50px;">学号</th>' +
+                             '<th style="width:48px;">学号</th>' +
                              '<th style="width:45px;">姓名</th>' +
                              '<th class="text-center" style="width:45px;">当前总分</th>' +
                              '<th class="text-center" style="width:40px;">原总分</th>' +
@@ -682,15 +683,15 @@
                 $('#top10Stats').text(res.students.length + ' 名学生');
 
                 var headerHtml = '<th class="text-center" style="width:36px;">排名</th>' +
-                                 '<th style="width:55px;">学号</th>' +
+                                 '<th style="width:70px;">学号</th>' +
                                  '<th style="width:45px;">姓名</th>';
                 res.subjects.forEach(function (sub) {
-                    headerHtml += '<th class="text-center" style="min-width:55px;">' +
+                    headerHtml += '<th class="text-center" style="width:48px;font-size:0.8rem;">' +
                                   sub.subjectName + '</th>';
                 });
-                headerHtml += '<th class="text-center" style="width:50px;">总分</th>' +
-                              '<th class="text-center" style="width:50px;">平均分</th>' +
-                              '<th class="text-center" style="width:55px;">年级排名</th>';
+                headerHtml += '<th class="text-center" style="width:65px;">总分</th>' +
+                              '<th class="text-center" style="width:65px;">平均分</th>' +
+                              '<th class="text-center" style="width:70px;">年级排名</th>';
                 $('#top10Header').html(headerHtml);
 
                 var bodyHtml = '';
