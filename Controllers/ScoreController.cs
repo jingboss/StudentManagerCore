@@ -260,6 +260,18 @@ public class ScoreController : Controller
         if (exam == null)
             return Json(new { success = false, message = "考试安排不存在" });
 
+        // 解析考试覆盖的年级ID列表（过滤不属于考试年级的成绩）
+        var gradeList = (exam.Grades ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+        List<int> validGradeLevelIds = new();
+        if (gradeList.Count > 0)
+        {
+            var allGradeLevels = await _db.GradeLevels.ToListAsync();
+            validGradeLevelIds = allGradeLevels
+                .Where(gl => gradeList.Contains(gl.CurrentGradeName))
+                .Select(gl => gl.GradeLevelID)
+                .ToList();
+        }
+
         // 获取该考试的科目（按科目名去重）
         var subjects = await _db.ExamSubjects
             .Where(es => es.ExamScheduleId == examScheduleId)
@@ -278,6 +290,10 @@ public class ScoreController : Controller
         if (gradeLevelId.HasValue)
         {
             query = query.Where(sc => sc.GradeLevelId == gradeLevelId.Value);
+        }
+        else if (validGradeLevelIds.Count > 0)
+        {
+            query = query.Where(sc => sc.GradeLevelId != null && validGradeLevelIds.Contains(sc.GradeLevelId.Value));
         }
 
         if (classInfoId.HasValue)
@@ -541,6 +557,18 @@ public class ScoreController : Controller
         if (exam == null)
             return Json(new { success = false, message = "考试安排不存在" });
 
+        // 解析考试覆盖的年级ID列表（过滤不属于考试年级的成绩）
+        var gradeList = (exam.Grades ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+        List<int> validGradeLevelIds = new();
+        if (gradeList.Count > 0)
+        {
+            var allGradeLevels = await _db.GradeLevels.ToListAsync();
+            validGradeLevelIds = allGradeLevels
+                .Where(gl => gradeList.Contains(gl.CurrentGradeName))
+                .Select(gl => gl.GradeLevelID)
+                .ToList();
+        }
+
         // 获取该考试的科目（按科目名去重）
         var subjects = await _db.ExamSubjects
             .Where(es => es.ExamScheduleId == examScheduleId)
@@ -637,9 +665,26 @@ public class ScoreController : Controller
         if (exam == null)
             return Json(new { success = false, message = "考试安排不存在" });
 
-        // 获取该考试涉及班级
-        var rawClasses = await _db.Scores
-            .Where(sc => sc.ExamScheduleId == examScheduleId && sc.ClassInfoId != null)
+        // 解析考试覆盖的年级ID列表
+        var gradeList = (exam.Grades ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+        List<int> validGradeLevelIds = new();
+        if (gradeList.Count > 0)
+        {
+            var allGradeLevels = await _db.GradeLevels.ToListAsync();
+            validGradeLevelIds = allGradeLevels
+                .Where(gl => gradeList.Contains(gl.CurrentGradeName))
+                .Select(gl => gl.GradeLevelID)
+                .ToList();
+        }
+
+        // 获取该考试有成绩的班级（按考试年级范围过滤）
+        var rawClassesQuery = _db.Scores
+            .Where(sc => sc.ExamScheduleId == examScheduleId && sc.ClassInfoId != null);
+        
+        if (validGradeLevelIds.Count > 0)
+            rawClassesQuery = rawClassesQuery.Where(sc => sc.GradeLevelId != null && validGradeLevelIds.Contains(sc.GradeLevelId.Value));
+
+        var rawClasses = await rawClassesQuery
             .Select(sc => new { sc.ClassInfoId, ClassName = sc.ClassInfo!.ClassName, GradeLevelId = (int?)sc.GradeLevelId, SchoolType = sc.GradeLevel!.SchoolType, EntryYear = sc.GradeLevel!.EntryYear })
             .Distinct()
             .OrderBy(c => c.SchoolType).ThenBy(c => c.EntryYear).ThenBy(c => c.ClassName)
@@ -654,32 +699,21 @@ public class ScoreController : Controller
         }).ToList();
 
         // 如果没有成绩数据，则根据考试覆盖年级返回班级
-        if (classes.Count == 0)
+        if (classes.Count == 0 && gradeList.Count > 0)
         {
-            var gradeList = (exam.Grades ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
-            if (gradeList.Count > 0)
-                {
-                    // 先全部加载 GradeLevels，在内存中匹配 CurrentGradeName（[NotMapped] 无法用于 EF 查询）
-                    var allGradeLevels = await _db.GradeLevels.ToListAsync();
-                    var matchedGradeLevels = allGradeLevels
-                        .Where(gl => gradeList.Contains(gl.CurrentGradeName))
-                        .Select(gl => gl.GradeLevelID)
-                        .ToList();
+            var rawClasses2 = await _db.ClassInfos
+                .Where(c => validGradeLevelIds.Contains(c.GradeLevelID))
+                .Select(c => new { ClassInfoId = (int?)c.ClassInfoID, ClassName = c.ClassName, GradeLevelId = (int?)c.GradeLevelID, SchoolType = c.GradeLevel!.SchoolType, EntryYear = c.GradeLevel!.EntryYear })
+                .OrderBy(c => c.SchoolType).ThenBy(c => c.EntryYear).ThenBy(c => c.ClassName)
+                .ToListAsync();
 
-                    var rawClasses2 = await _db.ClassInfos
-                        .Where(c => matchedGradeLevels.Contains(c.GradeLevelID))
-                        .Select(c => new { ClassInfoId = (int?)c.ClassInfoID, ClassName = c.ClassName, GradeLevelId = (int?)c.GradeLevelID, SchoolType = c.GradeLevel!.SchoolType, EntryYear = c.GradeLevel!.EntryYear })
-                        .OrderBy(c => c.SchoolType).ThenBy(c => c.EntryYear).ThenBy(c => c.ClassName)
-                        .ToListAsync();
-
-                classes = rawClasses2.Select(c => new
-                {
-                    c.ClassInfoId,
-                    c.ClassName,
-                    c.GradeLevelId,
-                    GradeName = c.SchoolType + " - " + GetGradeDisplayName(c.SchoolType, c.EntryYear)
-                }).ToList();
-            }
+            classes = rawClasses2.Select(c => new
+            {
+                c.ClassInfoId,
+                c.ClassName,
+                c.GradeLevelId,
+                GradeName = c.SchoolType + " - " + GetGradeDisplayName(c.SchoolType, c.EntryYear)
+            }).ToList();
         }
 
         // 提取年级列表（按GradeLevelId去重）
