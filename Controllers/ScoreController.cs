@@ -961,6 +961,18 @@ public class ScoreController : Controller
             .Select(es => new { es.SubjectId, es.Subject!.Name, es.Subject!.FullScore, EffectiveFullScore = es.FullScore ?? es.Subject!.FullScore })
             .ToListAsync();
 
+        // 🔍 调试：返回 JSON 看原始数据
+        var debugInfo = new
+        {
+            考试名称 = exam.Name,
+            考试年级 = exam.Grades,
+            原始科目条数 = subjectData.Count,
+            科目列表 = subjectData.Select(s => new { s.SubjectId, s.Name, s.FullScore }).ToList(),
+            去重后条数 = subjectData.GroupBy(s => s.Name).Select(g => g.First()).Count(),
+            去重后科目 = subjectData.GroupBy(s => s.Name).Select(g => g.First()).Select(s => s.Name).ToList()
+        };
+        return Json(debugInfo);
+
         // 按科目名称去重（Name 相同视为同一科目，不同年级共用一列）
         subjectData = subjectData.GroupBy(s => s.Name).Select(g => g.First()).ToList();
 
