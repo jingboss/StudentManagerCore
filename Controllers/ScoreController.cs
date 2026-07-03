@@ -316,10 +316,25 @@ public class ScoreController : Controller
             var max = count > 0 ? subScores.Max(sc => (double)sc.ScoreValue) : 0;
             var min = count > 0 ? subScores.Min(sc => (double)sc.ScoreValue) : 0;
             var fs = (decimal)sub.FullScore;
-            var excellent = subScores.Count(sc => sc.ScoreValue >= fs * 0.8m);
-            var good = subScores.Count(sc => sc.ScoreValue >= fs * 0.7m && sc.ScoreValue < fs * 0.8m);
-            var pass = subScores.Count(sc => sc.ScoreValue >= fs * 0.6m);
-            var low = subScores.Count(sc => sc.ScoreValue < fs * 0.4m);
+
+            // 按排名比例分档（以当前筛选范围内的学生为基数）
+            // A（优秀）前25% → 优秀率 ≈25%
+            // B（良好）26%~60% → 良好率 ≈35%
+            // C（及格）61%~95% → 及格率（A+B+C 累计）≈95%
+            // D（不及格）后5% → 低分率 ≈5%
+            var sortedScores = subScores
+                .OrderByDescending(sc => sc.ScoreValue)
+                .ToList();
+            int totalCount = sortedScores.Count;
+            int excellent = 0, good = 0, pass = 0, low = 0;
+            for (int si = 0; si < totalCount; si++)
+            {
+                double pct = (double)(si + 1) / totalCount;
+                if (pct <= 0.25) excellent++;
+                if (pct <= 0.95) pass++;       // 累计：A+B+C
+                if (pct > 0.25 && pct <= 0.60) good++;
+                if (pct > 0.95) low++;
+            }
 
             // 分数段（按满分比例折算为绝对分段）
             var s0_59 = subScores.Count(sc => sc.ScoreValue < fs * 0.6m);
@@ -402,8 +417,8 @@ public class ScoreController : Controller
                        .ToDictionary(s => s.StudentId, s => s.ClassRank)
             );
 
-        // 班级等级（ABCD相对比例评价：以班级总数为基数）
-        // A: 前25%  B: 25%-55%  C: 55%-85%  D: 后15%
+        // 班级等级（ABCD相对比例评价：以班级总数为基数，学校统一标准）
+        // A（优秀）前25%  B（良好）26%~60%  C（及格）61%~95%  D（不及格）后5%
         var classLevels = new Dictionary<int, string>(); // StudentId → Level
         foreach (var classGroup in studentScores
             .Where(s => s.ClassInfoId.HasValue)
@@ -418,8 +433,8 @@ public class ScoreController : Controller
                 double pct = (double)(i + 1) / total; // 前 i+1 名占比
                 string level;
                 if (pct <= 0.25) level = "A";
-                else if (pct <= 0.55) level = "B";
-                else if (pct <= 0.85) level = "C";
+                else if (pct <= 0.60) level = "B";
+                else if (pct <= 0.95) level = "C";
                 else level = "D";
                 classLevels[studentsInClass[i].StudentId] = level;
             }
