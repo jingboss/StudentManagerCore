@@ -958,8 +958,11 @@ public class ScoreController : Controller
             .Where(es => es.ExamScheduleId == examScheduleId)
             .Include(es => es.Subject)
             .OrderBy(es => es.Subject!.SortOrder)
-            .Select(es => new { es.Subject!.Name, es.Subject!.FullScore, EffectiveFullScore = es.FullScore ?? es.Subject!.FullScore })
+            .Select(es => new { es.SubjectId, es.Subject!.Name, es.Subject!.FullScore, EffectiveFullScore = es.FullScore ?? es.Subject!.FullScore })
             .ToListAsync();
+
+        // 按 SubjectId 去重，同名科目只保留一列
+        subjectData = subjectData.GroupBy(s => s.SubjectId).Select(g => g.First()).ToList();
 
         // 获取考试覆盖年级的所有学生
         var gradeList = (exam.Grades ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
@@ -1043,6 +1046,9 @@ public class ScoreController : Controller
             .OrderBy(es => es.Subject!.SortOrder)
             .Select(es => new { es.SubjectId, Name = es.Subject!.Name, BaseFullScore = es.Subject!.FullScore, EffectiveFullScore = es.FullScore ?? es.Subject!.FullScore })
             .ToListAsync();
+
+        // 按 SubjectId 去重
+        subjectData = subjectData.GroupBy(s => s.SubjectId).Select(g => g.First()).ToList();
 
         using var stream = new MemoryStream();
         await excelFile.CopyToAsync(stream);
