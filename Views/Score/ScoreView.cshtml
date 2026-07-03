@@ -536,6 +536,7 @@
                           '<th class="text-center" style="width:65px;">平均分</th>' +
                           '<th class="text-center" style="width:70px;">班级排名</th>' +
                           '<th class="text-center" style="width:70px;">年级排名</th>' +
+                          '<th class="text-center" style="width:42px;">等级</th>' +
                           '<th class="text-center" style="width:48px;">操作</th>';
             $('#viewHeader').html(headerHtml);
 
@@ -558,6 +559,7 @@
                             '<td class="text-center fw-bold text-primary">' + (row.avgScore || '-') + '</td>' +
                             '<td class="text-center">' + classRankStr + '</td>' +
                             '<td class="text-center">' + gradeRankStr + '</td>' +
+                            '<td class="text-center fw-bold">' + (row.level ? '<span class="badge" style="background-color:' + (row.level==='A'?'#28a745':row.level==='B'?'#007bff':row.level==='C'?'#ffc107;color:#333':'#dc3545') + ';">' + row.level + '</span>' : '-') + '</td>' +
                             '<td class="text-center"><button class="btn btn-sm btn-outline-info py-0 px-1" style="font-size:0.75rem;" onclick="quickAiAnalysis(' + row.studentId + ')"><i class="bi bi-robot"></i></button></td></tr>';
             });
             $('#viewBody').html(bodyHtml);

@@ -402,6 +402,29 @@ public class ScoreController : Controller
                        .ToDictionary(s => s.StudentId, s => s.ClassRank)
             );
 
+        // 班级等级（ABCD相对比例评价：以班级总数为基数）
+        // A: 前25%  B: 25%-55%  C: 55%-85%  D: 后15%
+        var classLevels = new Dictionary<int, string>(); // StudentId → Level
+        foreach (var classGroup in studentScores
+            .Where(s => s.ClassInfoId.HasValue)
+            .GroupBy(s => s.ClassInfoId!.Value))
+        {
+            var studentsInClass = classGroup
+                .OrderByDescending(s => s.TotalScore)
+                .ToList();
+            int total = studentsInClass.Count;
+            for (int i = 0; i < total; i++)
+            {
+                double pct = (double)(i + 1) / total; // 前 i+1 名占比
+                string level;
+                if (pct <= 0.25) level = "A";
+                else if (pct <= 0.55) level = "B";
+                else if (pct <= 0.85) level = "C";
+                else level = "D";
+                classLevels[studentsInClass[i].StudentId] = level;
+            }
+        }
+
         var rankedScores = studentScores
             .OrderByDescending(x => x.TotalScore)
             .Select((x, idx) =>
@@ -435,7 +458,8 @@ public class ScoreController : Controller
                     x.TotalScore,
                     AvgScore = avgScore,
                     ClassRank = classRank,
-                    GradeRank = gradeRank
+                    GradeRank = gradeRank,
+                    Level = classLevels.ContainsKey(x.StudentId) ? classLevels[x.StudentId] : ""
                 };
             })
             .ToList();
