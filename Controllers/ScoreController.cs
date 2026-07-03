@@ -650,7 +650,7 @@ public class ScoreController : Controller
             c.ClassInfoId,
             c.ClassName,
             c.GradeLevelId,
-            GradeName = GetGradeDisplayName(c.SchoolType, c.EntryYear)
+            GradeName = c.SchoolType + " - " + GetGradeDisplayName(c.SchoolType, c.EntryYear)
         }).ToList();
 
         // 如果没有成绩数据，则根据考试覆盖年级返回班级
@@ -677,7 +677,7 @@ public class ScoreController : Controller
                     c.ClassInfoId,
                     c.ClassName,
                     c.GradeLevelId,
-                    GradeName = GetGradeDisplayName(c.SchoolType, c.EntryYear)
+                    GradeName = c.SchoolType + " - " + GetGradeDisplayName(c.SchoolType, c.EntryYear)
                 }).ToList();
             }
         }

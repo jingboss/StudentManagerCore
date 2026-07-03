@@ -58,7 +58,7 @@ public class ExamScheduleController : Controller
             .ThenBy(g => g.SchoolType)
             .ToListAsync();
         ViewBag.Grades = gradeLevels
-            .Select(g => new { Value = g.CurrentGradeName, Text = g.CurrentGradeName })
+            .Select(g => new { Value = g.CurrentGradeName, Text = g.SchoolType + " - " + g.CurrentGradeName })
             .ToList();
 
         // 全部科目，用于科目多选
