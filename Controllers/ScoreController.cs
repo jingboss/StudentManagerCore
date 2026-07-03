@@ -51,7 +51,7 @@ public class ScoreController : Controller
         if (exam == null)
             return Json(new { success = false, message = "考试安排不存在" });
 
-       // 获取该考试的科目
+       // 获取该考试的科目（按名称去重）
         var subjects = await _db.ExamSubjects
             .Where(es => es.ExamScheduleId == examScheduleId)
             .Include(es => es.Subject)
@@ -59,6 +59,8 @@ public class ScoreController : Controller
             .ThenBy(es => es.Subject!.Name)
             .Select(es => new { es.SubjectId, SubjectName = es.Subject!.Name ?? "", FullScore = es.FullScore ?? es.Subject!.FullScore })
             .ToListAsync();
+
+        subjects = subjects.GroupBy(s => s.SubjectName).Select(g => g.First()).ToList();
 
         if (subjects.Count == 0)
             return Json(new { success = false, message = "该考试尚未关联科目，请先设置科目" });
@@ -258,13 +260,14 @@ public class ScoreController : Controller
         if (exam == null)
             return Json(new { success = false, message = "考试安排不存在" });
 
-        // 获取该考试的科目
+        // 获取该考试的科目（按科目名去重）
         var subjects = await _db.ExamSubjects
             .Where(es => es.ExamScheduleId == examScheduleId)
             .Include(es => es.Subject)
             .OrderBy(es => es.Subject!.SortOrder).ThenBy(es => es.Subject!.Name)
             .Select(es => new { es.SubjectId, SubjectName = es.Subject!.Name ?? "", FullScore = es.FullScore ?? es.Subject!.FullScore })
             .ToListAsync();
+        subjects = subjects.GroupBy(s => s.SubjectName).Select(g => g.First()).ToList();
 
         // 获取成绩
         var query = _db.Scores
@@ -440,13 +443,14 @@ public class ScoreController : Controller
         if (exam == null || compareExam == null)
             return Json(new { success = false, message = "考试安排不存在" });
 
-        // 获取两场考试的科目
+        // 获取两场考试的科目（按科目名去重）
         var subjects = await _db.ExamSubjects
             .Where(es => es.ExamScheduleId == examScheduleId)
             .Include(es => es.Subject)
             .OrderBy(es => es.Subject!.SortOrder)
             .Select(es => new { es.SubjectId, SubjectName = es.Subject!.Name ?? "" })
             .ToListAsync();
+        subjects = subjects.GroupBy(s => s.SubjectName).Select(g => g.First()).ToList();
         var subjectIds = subjects.Select(s => s.SubjectId).ToList();
 
         // 获取当前考试成绩
@@ -537,13 +541,14 @@ public class ScoreController : Controller
         if (exam == null)
             return Json(new { success = false, message = "考试安排不存在" });
 
-        // 获取该考试的科目
+        // 获取该考试的科目（按科目名去重）
         var subjects = await _db.ExamSubjects
             .Where(es => es.ExamScheduleId == examScheduleId)
             .Include(es => es.Subject)
             .OrderBy(es => es.Subject!.SortOrder).ThenBy(es => es.Subject!.Name)
             .Select(es => new { es.SubjectId, SubjectName = es.Subject!.Name ?? "", FullScore = es.FullScore ?? es.Subject!.FullScore })
             .ToListAsync();
+        subjects = subjects.GroupBy(s => s.SubjectName).Select(g => g.First()).ToList();
 
         // 获取成绩
         var query = _db.Scores
@@ -960,18 +965,6 @@ public class ScoreController : Controller
             .OrderBy(es => es.Subject!.SortOrder)
             .Select(es => new { es.SubjectId, es.Subject!.Name, es.Subject!.FullScore, EffectiveFullScore = es.FullScore ?? es.Subject!.FullScore })
             .ToListAsync();
-
-        // 🔍 调试：返回 JSON 看原始数据
-        var debugInfo = new
-        {
-            考试名称 = exam.Name,
-            考试年级 = exam.Grades,
-            原始科目条数 = subjectData.Count,
-            科目列表 = subjectData.Select(s => new { s.SubjectId, s.Name, s.FullScore }).ToList(),
-            去重后条数 = subjectData.GroupBy(s => s.Name).Select(g => g.First()).Count(),
-            去重后科目 = subjectData.GroupBy(s => s.Name).Select(g => g.First()).Select(s => s.Name).ToList()
-        };
-        return Json(debugInfo);
 
         // 按科目名称去重（Name 相同视为同一科目，不同年级共用一列）
         subjectData = subjectData.GroupBy(s => s.Name).Select(g => g.First()).ToList();
