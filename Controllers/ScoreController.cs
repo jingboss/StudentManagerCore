@@ -716,6 +716,34 @@ public class ScoreController : Controller
             }).ToList();
         }
 
+        // ===== 根据当前登录用户角色过滤班级/年级 =====
+        var roleType = "admin"; // admin | grade_leader | class_teacher
+        var adminId = GetAdminId();
+        if (!IsAdmin() && adminId.HasValue)
+        {
+            var admin = await _db.Admins.FindAsync(adminId.Value);
+            if (admin != null)
+            {
+                if (admin.ClassID.HasValue)
+                {
+                    // 班主任：只能看本班
+                    roleType = "class_teacher";
+                    classes = classes.Where(c => c.ClassInfoId == admin.ClassID.Value).ToList();
+                }
+                else if (!string.IsNullOrEmpty(admin.Grade))
+                {
+                    // 年级级长：只能看本年级
+                    roleType = "grade_leader";
+                    var allGradeLevels = await _db.GradeLevels.ToListAsync();
+                    var matchedGl = allGradeLevels.FirstOrDefault(g => g.CurrentGradeName == admin.Grade);
+                    if (matchedGl != null)
+                    {
+                        classes = classes.Where(c => c.GradeLevelId == matchedGl.GradeLevelID).ToList();
+                    }
+                }
+            }
+        }
+
         // 提取年级列表（按GradeLevelId去重）
         var gradeDict = new Dictionary<int, string>();
         foreach (var c in classes)
@@ -725,7 +753,7 @@ public class ScoreController : Controller
         }
         var grades = gradeDict.Select(kv => new { GradeLevelId = kv.Key, GradeName = kv.Value }).OrderBy(g => g.GradeLevelId).ToList();
 
-        return Json(new { success = true, classes, grades });
+        return Json(new { success = true, classes, grades, roleType });
     }
 
     /// <summary>
@@ -914,6 +942,12 @@ public class ScoreController : Controller
             .Select(es => es.Subject!)
             .ToListAsync();
 
+        // 按科目名称去重（同名同分合并，同名不同分保留各自的列）
+        subjects = subjects
+            .GroupBy(s => new { s.Name, s.FullScore })
+            .Select(g => g.First())
+            .ToList();
+
         var query = _db.Scores
             .Where(sc => sc.ExamScheduleId == examScheduleId)
             .Include(sc => sc.Student)
@@ -1015,28 +1049,40 @@ public class ScoreController : Controller
         using var workbook = new XLWorkbook();
         var ws = workbook.Worksheets.Add("成绩导入");
 
-        // 表头
-        ws.Cell(1, 1).Value = "序号";
-        ws.Cell(1, 2).Value = "学号";
-        ws.Cell(1, 3).Value = "姓名";
-        ws.Cell(1, 4).Value = "年级";
-        ws.Cell(1, 5).Value = "班级";
+        // 标题行
+        ws.Cell(1, 1).Value = "考试名称：" + exam.Name;
+        ws.Cell(1, 1).Style.Font.Bold = true;
+        ws.Cell(1, 1).Style.Font.FontSize = 14;
+
+        ws.Cell(2, 1).Value = "创建时间：" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+        ws.Cell(2, 1).Style.Font.FontColor = XLColor.Gray;
+
+        // 空行
+        ws.Row(3).Height = 10;
+
+        // 表头（第4行）
+        int headerRow = 4;
+        ws.Cell(headerRow, 1).Value = "序号";
+        ws.Cell(headerRow, 2).Value = "学号";
+        ws.Cell(headerRow, 3).Value = "姓名";
+        ws.Cell(headerRow, 4).Value = "年级";
+        ws.Cell(headerRow, 5).Value = "班级";
         for (int i = 0; i < subjectData.Count; i++)
         {
-            ws.Cell(1, 6 + i).Value = subjectData[i].Name;
+            ws.Cell(headerRow, 6 + i).Value = subjectData[i].Name;
             // 添加满分备注
-            ws.Cell(1, 6 + i).GetComment().AddText($"满分 {subjectData[i].EffectiveFullScore}");
+            ws.Cell(headerRow, 6 + i).GetComment().AddText($"满分 {subjectData[i].EffectiveFullScore}");
         }
 
         // 数据
         for (int i = 0; i < students.Count; i++)
         {
             var s = students[i];
-            ws.Cell(i + 2, 1).Value = i + 1;
-            ws.Cell(i + 2, 2).Value = s.StudentNo;
-            ws.Cell(i + 2, 3).Value = s.Name;
-            ws.Cell(i + 2, 4).Value = s.Grade;
-            ws.Cell(i + 2, 5).Value = s.ClassName;
+            ws.Cell(headerRow + 1 + i, 1).Value = i + 1;
+            ws.Cell(headerRow + 1 + i, 2).Value = s.StudentNo;
+            ws.Cell(headerRow + 1 + i, 3).Value = s.Name;
+            ws.Cell(headerRow + 1 + i, 4).Value = s.Grade;
+            ws.Cell(headerRow + 1 + i, 5).Value = s.ClassName;
         }
 
         // 设置列宽
@@ -1050,11 +1096,11 @@ public class ScoreController : Controller
             ws.Column(6 + i).Width = 10;  // 科目
         }
 
-        // 所有行高20，内容垂直居中
-        int totalRows = 1 + students.Count;
+        // 所有行高22，内容垂直居中
+        int totalRows = headerRow + students.Count;
         for (int r = 1; r <= totalRows; r++)
         {
-            ws.Row(r).Height = 20;
+            ws.Row(r).Height = 22;
             ws.Row(r).Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
         }
 
@@ -1095,7 +1141,19 @@ public class ScoreController : Controller
 
         using var workbook = new XLWorkbook(stream);
         var ws = workbook.Worksheet(1);
-        var rows = ws.RowsUsed().Skip(1); // 跳过表头
+
+        // 动态查找表头行（查找列2包含"学号"的行）
+        var rowsUsed = ws.RowsUsed().ToList();
+        int headerRowIndex = 0;
+        for (int r = 0; r < rowsUsed.Count; r++)
+        {
+            if (rowsUsed[r].Cell(2).GetString().Trim() == "学号")
+            {
+                headerRowIndex = r;
+                break;
+            }
+        }
+        var rows = rowsUsed.Skip(headerRowIndex + 1); // 跳过表头行，从下一行开始读取数据
 
         var previewRows = new List<object>();
         int successCount = 0, errorCount = 0;

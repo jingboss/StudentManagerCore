@@ -792,17 +792,26 @@
                 var schoolType = detectSchoolType(grades);
 
                 $.get('@Url.Action("GetSubjects")', function (allSubjects) {
+                    // 标准化科目数据（兼容大小写）
+                    allSubjects = allSubjects.map(function(s) {
+                        return {
+                            id: s.id || s.Id,
+                            name: s.name || s.Name,
+                            grade: s.grade || s.Grade || '',
+                            fullScore: s.fullScore != null ? s.fullScore : (s.FullScore != null ? s.FullScore : null)
+                        };
+                    });
                     // 按学段过滤
                     var filtered = allSubjects;
                     if (schoolType === 'primary') {
-                        var pGrades = ['一年级','二年级','三年级','四年级','五年级','六年级'];
                         filtered = allSubjects.filter(function(s) {
-                            return !s.grade || s.grade.indexOf('小') >= 0 || pGrades.indexOf(s.grade) >= 0;
+                            return !s.grade || s.grade.indexOf('小') >= 0 || s.grade.indexOf('年') >= 0;
                         });
                     } else if (schoolType === 'middle') {
-                        var mGrades = ['七年级','八年级','九年级'];
+                        // 初中：排除明确标记为"小学"的科目（含"小"字的Grade）
+                        // 其余全部显示（初中、七年级、八年级、九年级、空/无年级等均包含）
                         filtered = allSubjects.filter(function(s) {
-                            return !s.grade || s.grade.indexOf('初') >= 0 || mGrades.indexOf(s.grade) >= 0;
+                            return !s.grade || s.grade.indexOf('小') === -1;
                         });
                     }
 
@@ -812,6 +821,8 @@
                         examSubjects.forEach(function(e) { if (e.fullScore) fullScoreMap[e.subjectId] = e.fullScore; });
 
                         var html = '';
+                        // 调试信息：显示科目总数和过滤后数量
+                        html += '<div class="small text-muted mb-2">共 ' + allSubjects.length + ' 科，筛选后 ' + filtered.length + ' 科</div>';
                         if (filtered.length === 0) {
                             html = '<div class="text-muted text-center py-3">暂无可选科目</div>';
                         } else if (schoolType === 'primary') {
@@ -845,29 +856,33 @@
                                 html += '</div>';
                             });
                         } else {
-                            // 初中或混合 - 按年级分组
-                            var grouped = {};
-                            filtered.forEach(function (s) {
-                                var key = s.grade || '全校';
-                                if (!grouped[key]) grouped[key] = [];
-                                grouped[key].push(s);
+                            // 初中或混合 - 合并同名科目（去重）
+                            var mergeOrder = [];
+                            var mergeMap = {};
+                            filtered.forEach(function (subj) {
+                                var key = subj.name + '|' + (subj.fullScore || 100);
+                                if (!mergeMap[key]) {
+                                    mergeMap[key] = { name: subj.name, fullScore: subj.fullScore || 100, ids: [], grades: [] };
+                                    mergeOrder.push(key);
+                                }
+                                mergeMap[key].ids.push(subj.id);
+                                if (subj.grade) mergeMap[key].grades.push(subj.grade);
                             });
-                            var keys = Object.keys(grouped).sort();
-                            keys.forEach(function (grade) {
-                                html += '<div class="mb-2">';
-                                html += '    <div class="fw-bold small text-secondary border-bottom pb-1 mb-1">' + htmlEncode(grade) + '</div>';
-                                html += '    <div class="d-flex flex-wrap">';
-                                grouped[grade].forEach(function (subj) {
-                                    var isChecked = checkedIds.indexOf(subj.id) >= 0;
-                                    var fs = fullScoreMap[subj.id] || subj.fullScore || 100;
-                                    html += '        <div class="form-check form-check-inline mb-1" style="min-width:170px;">';
-                                    html += '            <input class="form-check-input exam-subject-check" type="checkbox" value="' + subj.id + '"' + (isChecked ? ' checked' : '') + ' />';
-                                    html += '            <label class="form-check-label me-1">' + htmlEncode(subj.name) + '</label>';
-                                    html += '            <input type="number" class="form-control form-control-sm exam-subject-fullscore d-inline-block" style="width:58px;display:inline!important;" value="' + fs + '" min="1" />';
-                                    html += '            <small class="text-muted">分</small>';
-                                    html += '        </div>';
-                                });
-                                html += '    </div>';
+
+                            mergeOrder.forEach(function (key) {
+                                var m = mergeMap[key];
+                                // 合并组内所有 subjectId 都已分配才算 checked
+                                var allChecked = m.ids.every(function (id) { return checkedIds.indexOf(id) >= 0; });
+                                // 优先取已保存的满分，否则用合并组的公共满分
+                                var fs = m.fullScore;
+                                for (var i = 0; i < m.ids.length; i++) {
+                                    if (fullScoreMap[m.ids[i]]) { fs = fullScoreMap[m.ids[i]]; break; }
+                                }
+                                html += '<div class="form-check form-check-inline mb-1" style="min-width:170px;">';
+                                html += '    <input class="form-check-input exam-subject-check" type="checkbox" value="' + m.ids.join(',') + '" data-merged="1"' + (allChecked ? ' checked' : '') + ' />';
+                                html += '    <label class="form-check-label me-1">' + htmlEncode(m.name) + '</label>';
+                                html += '    <input type="number" class="form-control form-control-sm exam-subject-fullscore d-inline-block" style="width:58px;display:inline!important;" value="' + fs + '" min="1" />';
+                                html += '    <small class="text-muted">分</small>';
                                 html += '</div>';
                             });
                         }

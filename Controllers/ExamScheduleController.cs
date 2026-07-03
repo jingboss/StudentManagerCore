@@ -504,9 +504,20 @@ public class ExamScheduleController : Controller
         return Json(new { success = true });
     }
 
+    [HttpGet]
+    public async Task<IActionResult> SeedData()
+    {
+        return await SeedDefaultSubjectsInternal();
+    }
+
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SeedDefaultSubjects()
+    {
+        return await SeedDefaultSubjectsInternal();
+    }
+
+    private async Task<IActionResult> SeedDefaultSubjectsInternal()
     {
         try
         {
