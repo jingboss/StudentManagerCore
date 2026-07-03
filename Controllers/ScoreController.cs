@@ -654,11 +654,12 @@ public class ScoreController : Controller
             var gradeList = (exam.Grades ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
             if (gradeList.Count > 0)
                 {
-                    // 直接用 GradeLevel 表反向查找，避免 entryYear 计算偏差
-                    var matchedGradeLevels = await _db.GradeLevels
+                    // 先全部加载 GradeLevels，在内存中匹配 CurrentGradeName（[NotMapped] 无法用于 EF 查询）
+                    var allGradeLevels = await _db.GradeLevels.ToListAsync();
+                    var matchedGradeLevels = allGradeLevels
                         .Where(gl => gradeList.Contains(gl.CurrentGradeName))
                         .Select(gl => gl.GradeLevelID)
-                        .ToListAsync();
+                        .ToList();
 
                     var rawClasses2 = await _db.ClassInfos
                         .Where(c => matchedGradeLevels.Contains(c.GradeLevelID))
