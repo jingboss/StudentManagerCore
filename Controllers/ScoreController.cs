@@ -653,25 +653,18 @@ public class ScoreController : Controller
         {
             var gradeList = (exam.Grades ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
             if (gradeList.Count > 0)
-            {
-                var currentYear = DateTime.Now.Year;
-                var entryYears = gradeList.Select(g =>
                 {
-                    var offset = g switch
-                    {
-                        "一年级" => 0, "二年级" => 1, "三年级" => 2,
-                        "四年级" => 3, "五年级" => 4, "六年级" => 5,
-                        "七年级" => 0, "八年级" => 1, "九年级" => 2,
-                        _ => -1
-                    };
-                    return offset >= 0 ? currentYear - offset : (int?)null;
-                }).Where(y => y.HasValue).Select(y => y!.Value).ToList();
+                    // 直接用 GradeLevel 表反向查找，避免 entryYear 计算偏差
+                    var matchedGradeLevels = await _db.GradeLevels
+                        .Where(gl => gradeList.Contains(gl.CurrentGradeName))
+                        .Select(gl => gl.GradeLevelID)
+                        .ToListAsync();
 
-                var rawClasses2 = await _db.ClassInfos
-                    .Where(c => c.GradeLevel != null && entryYears.Contains(c.GradeLevel.EntryYear))
-                    .Select(c => new { ClassInfoId = (int?)c.ClassInfoID, ClassName = c.ClassName, GradeLevelId = (int?)c.GradeLevelID, SchoolType = c.GradeLevel!.SchoolType, EntryYear = c.GradeLevel!.EntryYear })
-                    .OrderBy(c => c.SchoolType).ThenBy(c => c.EntryYear).ThenBy(c => c.ClassName)
-                    .ToListAsync();
+                    var rawClasses2 = await _db.ClassInfos
+                        .Where(c => matchedGradeLevels.Contains(c.GradeLevelID))
+                        .Select(c => new { ClassInfoId = (int?)c.ClassInfoID, ClassName = c.ClassName, GradeLevelId = (int?)c.GradeLevelID, SchoolType = c.GradeLevel!.SchoolType, EntryYear = c.GradeLevel!.EntryYear })
+                        .OrderBy(c => c.SchoolType).ThenBy(c => c.EntryYear).ThenBy(c => c.ClassName)
+                        .ToListAsync();
 
                 classes = rawClasses2.Select(c => new
                 {
