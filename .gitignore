@@ -402,6 +402,7 @@ FodyWeavers.xsd
 
 # ===== 项目自定义排除 =====
 appsettings.json
+.env                    # Docker 环境变量配置文件（含密码/密钥）
 *.log
 error.log
 migrate_error.txt

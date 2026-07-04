@@ -69,13 +69,43 @@
 
 ### 环境要求
 
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- [MySQL 8.0+](https://dev.mysql.com/downloads/)
+- [Docker](https://docs.docker.com/get-docker/) 与 [Docker Compose](https://docs.docker.com/compose/install/)（推荐）
+- 或 [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) + [MySQL 8.0+](https://dev.mysql.com/downloads/)
 - Visual Studio 2022 / VS Code / Rider
 
-### 安装步骤
+### 方法一：Docker 部署（推荐）
 
-**方法一：自动安装向导（推荐）**
+```bash
+# 1. 克隆仓库
+git clone https://github.com/your-username/StudentManagerCore.git
+cd StudentManagerCore
+
+# 2. 创建环境变量配置
+cp .env.example .env
+# 编辑 .env 文件，修改 MySQL 密码和 JWT 密钥
+
+# 3. 一键构建并启动（Linux / macOS）
+bash docker-deploy.sh
+
+# 或 Windows
+docker-deploy.bat
+
+# 或手动执行
+docker compose up -d --build
+```
+
+访问 `http://localhost:5000`，首次启动自动进入安装向导，按步骤完成配置后重启容器即可：
+
+```bash
+docker compose restart app
+```
+
+**说明：**
+- MySQL 对外端口 `3307`（避免与本地 MySQL 冲突）
+- 数据库、上传文件均保存在 Docker 命名卷中，重启不丢失
+- 通过 `.env` 文件管理敏感配置
+
+### 方法二：自动安装向导
 
 ```bash
 # 1. 克隆仓库
@@ -92,7 +122,7 @@ dotnet run
 
 首次访问 `http://localhost:5000` 自动进入安装向导，按步骤配置即可。
 
-**方法二：手动配置**
+### 方法三：手动配置
 
 ```bash
 # 设置环境变量（数据库连接 + JWT密钥）
@@ -129,7 +159,13 @@ dotnet publish -c Release -o /var/www/studentmanager
 ├── Controllers/       # MVC 控制器
 ├── Data/              # EF Core 数据上下文
 ├── Database/          # SQL 迁移脚本
-├── DataMigrator/      # 数据迁移工具
+├── docker/            # Docker 辅助配置
+│   └── mysql/init/    # MySQL 初始化脚本
+├── docker-compose.yml # Docker 编排文件
+├── Dockerfile         # 应用镜像构建文件
+├── docker-deploy.sh   # 一键部署脚本 (Linux/macOS)
+├── docker-deploy.bat  # 一键部署脚本 (Windows)
+├── .env.example       # Docker 环境变量模板
 ├── Middleware/        # 中间件（安全、限流、IP白名单）
 ├── Migrations/        # EF Core 迁移
 ├── Models/            # 数据模型
