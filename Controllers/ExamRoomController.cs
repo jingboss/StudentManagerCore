@@ -97,9 +97,9 @@ public class ExamRoomController : Controller
             }
             else if (mode == "InClass")
             {
-                // 按原班级分组
+                // 按原班级分组（按班级名称分组）
                 groups = students
-                    .GroupBy(s => s.ClassID ?? 0)
+                    .GroupBy(s => s.ClassName ?? "未分班")
                     .OrderBy(g => g.Key)
                     .Select(g => g.OrderBy(s => s.StudentID).ToList())
                     .ToList();
