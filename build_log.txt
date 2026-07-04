@@ -1,0 +1,22 @@
+  正在确定要还原的项目…
+  所有项目均是最新的，无法还原。
+C:\StudentManagerCore\StudentManagerCore\Controllers\TeacherController.cs(64,31): warning CS8602: 解引用可能出现空引用。 [C:\StudentManagerCore\StudentManagerCore\StudentManagerCore.csproj]
+C:\StudentManagerCore\StudentManagerCore\Controllers\SurveyController.cs(211,54): warning CS8602: 解引用可能出现空引用。 [C:\StudentManagerCore\StudentManagerCore\StudentManagerCore.csproj]
+C:\StudentManagerCore\StudentManagerCore\Controllers\ScoreController.cs(311,29): warning CS8714: 类型“int?”不能用作泛型类型或方法“Enumerable.ToDictionary<TSource, TKey, TElement>(IEnumerable<TSource>, Func<TSource, TKey>, Func<TSource, TElement>)”中的类型参数“TKey”。类型参数“int?”的为 Null 性与 "notnull" 约束不匹配。 [C:\StudentManagerCore\StudentManagerCore\StudentManagerCore.csproj]
+C:\StudentManagerCore\StudentManagerCore\Controllers\ScoreController.cs(321,29): warning CS8714: 类型“int?”不能用作泛型类型或方法“Enumerable.ToDictionary<TSource, TKey, TElement>(IEnumerable<TSource>, Func<TSource, TKey>, Func<TSource, TElement>)”中的类型参数“TKey”。类型参数“int?”的为 Null 性与 "notnull" 约束不匹配。 [C:\StudentManagerCore\StudentManagerCore\StudentManagerCore.csproj]
+C:\StudentManagerCore\StudentManagerCore\Views\ExamSchedule\Index.cshtml(118,55): warning CS8619: 类型“List<string?>”的值中引用类型的为 Null 性与目标类型“List<string>”不匹配。 [C:\StudentManagerCore\StudentManagerCore\StudentManagerCore.csproj]
+C:\StudentManagerCore\StudentManagerCore\Controllers\ScoreController.cs(2263,14): warning CS8321: 声明了本地函数“AppendSegment”，但从未使用过 [C:\StudentManagerCore\StudentManagerCore\StudentManagerCore.csproj]
+  StudentManagerCore -> E:\wwwroot\bianyi\web\StudentManagerCore.dll
+
+已成功生成。
+
+C:\StudentManagerCore\StudentManagerCore\Controllers\TeacherController.cs(64,31): warning CS8602: 解引用可能出现空引用。 [C:\StudentManagerCore\StudentManagerCore\StudentManagerCore.csproj]
+C:\StudentManagerCore\StudentManagerCore\Controllers\SurveyController.cs(211,54): warning CS8602: 解引用可能出现空引用。 [C:\StudentManagerCore\StudentManagerCore\StudentManagerCore.csproj]
+C:\StudentManagerCore\StudentManagerCore\Controllers\ScoreController.cs(311,29): warning CS8714: 类型“int?”不能用作泛型类型或方法“Enumerable.ToDictionary<TSource, TKey, TElement>(IEnumerable<TSource>, Func<TSource, TKey>, Func<TSource, TElement>)”中的类型参数“TKey”。类型参数“int?”的为 Null 性与 "notnull" 约束不匹配。 [C:\StudentManagerCore\StudentManagerCore\StudentManagerCore.csproj]
+C:\StudentManagerCore\StudentManagerCore\Controllers\ScoreController.cs(321,29): warning CS8714: 类型“int?”不能用作泛型类型或方法“Enumerable.ToDictionary<TSource, TKey, TElement>(IEnumerable<TSource>, Func<TSource, TKey>, Func<TSource, TElement>)”中的类型参数“TKey”。类型参数“int?”的为 Null 性与 "notnull" 约束不匹配。 [C:\StudentManagerCore\StudentManagerCore\StudentManagerCore.csproj]
+C:\StudentManagerCore\StudentManagerCore\Views\ExamSchedule\Index.cshtml(118,55): warning CS8619: 类型“List<string?>”的值中引用类型的为 Null 性与目标类型“List<string>”不匹配。 [C:\StudentManagerCore\StudentManagerCore\StudentManagerCore.csproj]
+C:\StudentManagerCore\StudentManagerCore\Controllers\ScoreController.cs(2263,14): warning CS8321: 声明了本地函数“AppendSegment”，但从未使用过 [C:\StudentManagerCore\StudentManagerCore\StudentManagerCore.csproj]
+    6 个警告
+    0 个错误
+
+已用时间 00:00:08.97
