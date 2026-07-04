@@ -1,4 +1,4 @@
-@using StudentManagerCore.Models
+﻿@using StudentManagerCore.Models
 @{
     ViewData["Title"] = "成绩分析";
     var exams = ViewBag.ExamSchedules as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
@@ -116,6 +116,27 @@
                             <tbody id="segBody"></tbody>
                         </table>
                     </div>
+                </div>
+            </div>
+            <!-- 分数段分布图表 -->
+            <div class="card mb-3">
+                <div class="card-header bg-white py-2">
+                    <span class="fw-bold"><i class="bi bi-bar-chart me-1"></i>分数段分布柱状图</span>
+                    <span class="text-muted small ms-2">直观展示分数集中区间，判断试卷难易</span>
+                </div>
+                <div class="card-body">
+                    <canvas id="chartSegment" style="height:250px; width:100%;"></canvas>
+                </div>
+            </div>
+
+            <!-- 各科平均分对比图 -->
+            <div class="card mb-3">
+                <div class="card-header bg-white py-2">
+                    <span class="fw-bold"><i class="bi bi-bar-chart-line me-1"></i>各科平均分对比图</span>
+                    <span class="text-muted small ms-2">各科平均分与满分对比，了解班级整体学情</span>
+                </div>
+                <div class="card-body">
+                    <canvas id="chartAvgCompare" style="height:250px; width:100%;"></canvas>
                 </div>
             </div>
         </div>
@@ -280,6 +301,8 @@
 </div>
 
 @section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script src="~/js/score-charts.js"></script>
     <script>
         let currentExamId = 0;
         let currentGradeId = 0;
@@ -411,6 +434,7 @@
                 renderOverview(res);
                 renderSubjectStats(res);
                 renderSegments(res);
+                renderScoreCharts(res.subjectStats);
                 renderDetailTable(res);
                 $('#viewContainer').show();
             }).fail(function() { alert('加载成绩数据失败'); });
