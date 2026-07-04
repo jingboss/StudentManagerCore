@@ -1,6 +1,6 @@
 # 学生成绩与教务管理系统
 
-基于 ASP.NET Core 8 + MySQL 的学生管理与成绩分析系统，提供学生管理、成绩录入分析、考试安排、教职工管理、后勤管理、AI 智能分析等一体化教务解决方案。
+基于 ASP.NET Core 8 + MySQL 的学生管理与成绩分析系统，提供学生管理、成绩录入分析、考试安排、教职员工管理、后勤管理、AI 智能分析等一体化教务解决方案。
 
 ## 技术栈
 
@@ -12,7 +12,7 @@
 | JWT Bearer Auth | — |
 | Bootstrap | 5.3 |
 | ClosedXML (Excel) | 0.104 |
-| Chart.js | 4.4 |
+| Chart.js | 4.4.7 |
 
 ## 功能概览
 
@@ -29,7 +29,7 @@
 - 成绩查询与多维度分析
 - 成绩报告单、学生成绩趋势图
 - **AI 智能分析** — 基于大模型的学生/班级/科目深度分析报告
-- **[成绩分析系统文档](成绩分析系统.md)** — 含等级评价标准、综合统计指标说明、角色权限等
+- **[成绩分析系统文档](成绩分析系统.md)** — 含等级评价标准、综合统计指标说明、角色权限、图表分析等
 
 ### 考试安排
 - 考试科目管理
@@ -42,8 +42,8 @@
 - 在读人数实时统计
 - 班主任分配与调整
 
-### 教职工管理
-- 教职工信息管理、角色分配
+### 教职员工管理
+- 教职员工信息管理、角色分配
 - Excel 批量导入
 - 所教科目分配
 - 账户密码管理
@@ -82,7 +82,7 @@
 git clone https://github.com/your-username/StudentManagerCore.git
 cd StudentManagerCore
 
-# 2. 复制配置文件并填入数据库密码
+# 2. 复制配置文件并填写数据库密码
 cp appsettings.template.json appsettings.json
 # 编辑 appsettings.json，填入你的 MySQL 连接信息
 
@@ -136,6 +136,10 @@ dotnet publish -c Release -o /var/www/studentmanager
 ├── Services/          # 业务服务
 ├── Views/             # Razor 视图
 ├── wwwroot/           # 静态资源
+│   ├── js/
+│   │   ├── score-charts.js  # 成绩分析图表（柱状图、平均分对比图）
+│   │   └── ...
+│   └── ...
 ├── appsettings.json   # 配置文件
 ├── Program.cs         # 应用入口
 └── StudentManagerCore.csproj
