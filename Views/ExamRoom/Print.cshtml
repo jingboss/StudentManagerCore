@@ -10,15 +10,103 @@
     <meta charset="utf-8" />
     <title>考场安排 - @schedule?.Name</title>
     <style>
-        @@page { margin: 15mm; }
-        body { font-family: 'Microsoft YaHei', sans-serif; font-size: 12px; }
-        h2 { text-align: center; margin-bottom: 4px; }
-        .sub { text-align: center; color: #666; margin-bottom: 20px; font-size: 13px; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-        th, td { border: 1px solid #333; padding: 4px 6px; text-align: center; font-size: 11px; }
-        th { background: #f0f0f0; }
-        .room-title { font-size: 14px; font-weight: bold; margin: 16px 0 4px; padding-left: 4px; border-left: 4px solid #333; }
-        .no-print { display: none; }
+        /* ========== A4 页面设置 ========== */
+        @@page {
+            size: A4 portrait;
+            margin: 12mm 15mm 15mm 15mm;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Microsoft YaHei', 'PingFang SC', 'SimHei', sans-serif;
+            font-size: 11pt;
+            line-height: 1.6;
+            color: #222;
+        }
+
+        /* ========== 每班一页 ========== */
+        .room-page {
+            page-break-after: always;
+            display: flex;
+            flex-direction: column;
+            min-height: 80vh;
+        }
+        .room-page:last-child {
+            page-break-after: avoid;
+        }
+
+        /* ========== 页头 ========== */
+        .page-header {
+            text-align: center;
+            border-bottom: 3px double #222;
+            padding-bottom: 10px;
+            margin-bottom: 12px;
+        }
+        .page-header h1 {
+            font-size: 18pt;
+            font-weight: bold;
+            letter-spacing: 4px;
+        }
+        .page-header .room-name {
+            font-size: 16pt;
+            font-weight: bold;
+            color: #c00;
+            margin-top: 4px;
+        }
+        .page-header .meta {
+            font-size: 10pt;
+            color: #555;
+            margin-top: 6px;
+        }
+        .page-header .meta span {
+            margin: 0 12px;
+        }
+
+        /* ========== 座位表 ========== */
+        .seat-grid {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .seat-table {
+            width: 100%;
+            border-collapse: collapse;
+            border: 2px solid #222;
+        }
+        .seat-table thead th {
+            background: #e8e8e8;
+            border: 1px solid #222;
+            padding: 6px 8px;
+            font-size: 11pt;
+            font-weight: bold;
+            text-align: center;
+        }
+        .seat-table tbody td {
+            border: 1px solid #999;
+            padding: 5px 8px;
+            font-size: 10.5pt;
+            text-align: center;
+            vertical-align: middle;
+        }
+        .seat-table tbody tr:nth-child(even) td {
+            background: #f7f7f7;
+        }
+        .seat-table .col-seat { width: 10%; font-weight: bold; color: #555; }
+        .seat-table .col-name { width: 32%; text-align: left; }
+        .seat-table .col-class { width: 28%; text-align: left; color: #555; font-size: 9.5pt; }
+
+        /* ========== 页脚 ========== */
+        .page-footer {
+            text-align: center;
+            font-size: 9pt;
+            color: #999;
+            border-top: 1px solid #ddd;
+            padding-top: 8px;
+            margin-top: 12px;
+        }
+
+        /* ========== 打印按钮（仅屏幕显示） ========== */
+        .no-print { display: block; }
         @@media print {
             .no-print { display: none !important; }
             body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -26,58 +114,82 @@
     </style>
 </head>
 <body>
-    <h2>@schedule?.Name 考场安排表</h2>
-    <div class="sub">年级：@grade &nbsp;|&nbsp; 考试日期：@schedule?.ExamDate.ToString("yyyy-MM-dd")</div>
 
-    @foreach (var room in Model.OrderBy(r => r.RoomName))
-    {
-        <div class="room-title">@room.RoomName（@room.SeatCount 人）</div>
-        <table>
-            <thead>
-                <tr>
-                    <th style="width:60px">座位号</th>
-                    <th>姓名</th>
-                    <th>班级</th>
-                    <th style="width:60px">座位号</th>
-                    <th>姓名</th>
-                    <th>班级</th>
-                </tr>
-            </thead>
-            <tbody>
-                @{
-                    var students = room.Students?.OrderBy(s => s.SeatNumber).ToList() ?? new();
-                    var half = (int)Math.Ceiling(students.Count / 2.0);
-                }
-                @for (int i = 0; i < half; i++)
-                {
-                    <tr>
-                        <td>@students[i].SeatNumber</td>
-                        <td style="text-align:left">@students[i].Student?.Name</td>
-                        <td style="text-align:left">@students[i].Student?.ClassName</td>
-                        @{
-                            var j = i + half;
-                            if (j < students.Count)
-                            {
-                                <td>@students[j].SeatNumber</td>
-                                <td style="text-align:left">@students[j].Student?.Name</td>
-                                <td style="text-align:left">@students[j].Student?.ClassName</td>
-                            }
-                            else
-                            {
-                                <td></td><td></td><td></td>
-                            }
-                        }
-                    </tr>
-                }
-            </tbody>
-        </table>
+    @{
+        var rooms = Model.OrderBy(r => r.RoomName).ToList();
     }
 
-    <div class="sub" style="margin-top:20px;">
-        打印时间：@DateTime.Now.ToString("yyyy-MM-dd HH:mm")
+    @for (int ri = 0; ri < rooms.Count; ri++)
+    {
+        var room = rooms[ri];
+        var students = room.Students?.OrderBy(s => s.SeatNumber).ToList() ?? new();
+        int total = students.Count;
+        int leftCount = (int)Math.Ceiling(total / 2.0);
+
+        <div class="room-page">
+            <!-- 页头 -->
+            <div class="page-header">
+                <h1>@schedule?.Name 考场安排表</h1>
+                <div class="room-name">@room.RoomName（@room.SeatCount 人）</div>
+                <div class="meta">
+                    <span>年级：@grade</span>
+                    <span>考试日期：@schedule?.ExamDate.ToString("yyyy-MM-dd")</span>
+                    <span>打印时间：@DateTime.Now.ToString("yyyy-MM-dd HH:mm")</span>
+                </div>
+            </div>
+
+            <!-- 座位表 -->
+            <div class="seat-grid">
+                <table class="seat-table">
+                    <thead>
+                        <tr>
+                            <th class="col-seat">座位号</th>
+                            <th class="col-name">姓名</th>
+                            <th class="col-class">班级</th>
+                            <th class="col-seat">座位号</th>
+                            <th class="col-name">姓名</th>
+                            <th class="col-class">班级</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (int i = 0; i < leftCount; i++)
+                        {
+                            var left = students[i];
+                            var right = (i + leftCount) < total ? students[i + leftCount] : null;
+                            <tr>
+                                <td class="col-seat">@left.SeatNumber</td>
+                                <td class="col-name">@left.Student?.Name</td>
+                                <td class="col-class">@left.Student?.ClassName</td>
+                                @if (right != null)
+                                {
+                                    <td class="col-seat">@right.SeatNumber</td>
+                                    <td class="col-name">@right.Student?.Name</td>
+                                    <td class="col-class">@right.Student?.ClassName</td>
+                                }
+                                else
+                                {
+                                    <td class="col-seat"></td>
+                                    <td class="col-name"></td>
+                                    <td class="col-class"></td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 页脚 -->
+            <div class="page-footer">
+                本表为座位编排依据，请监考教师按座位号安排考生就座。
+            </div>
+        </div>
+    }
+
+    <div style="text-align:center;margin-top:20px;">
+        <button class="no-print" onclick="window.print()" style="padding:10px 40px;font-size:16px;cursor:pointer;">
+            🖨️ 打印
+        </button>
     </div>
-    <div style="text-align:center;margin-top:10px;">
-        <button class="no-print" onclick="window.print()">打印</button>
-    </div>
+
 </body>
 </html>

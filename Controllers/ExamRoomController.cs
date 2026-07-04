@@ -57,15 +57,14 @@ public class ExamRoomController : Controller
     {
         try
         {
-            // 删除该考试+该年级的旧安排
+            // 1) 删除该考试+该年级的旧安排
             var oldRooms = await _db.ExamRooms
                 .Include(r => r.Students)
                 .Where(r => r.ExamScheduleId == examScheduleId && r.Grade == grade)
                 .ToListAsync();
             _db.ExamRooms.RemoveRange(oldRooms);
-            await _db.SaveChangesAsync();
 
-            // 查找该年级所有在校学生
+            // 2) 查找该年级所有在校学生
             var students = await _db.Students
                 .Where(s => s.Grade == grade && s.Status != "已毕业" && s.Status != "已删除")
                 .OrderBy(s => s.ClassID)
@@ -75,7 +74,7 @@ public class ExamRoomController : Controller
             if (students.Count == 0)
                 return Json(new { success = false, message = "该年级没有在校学生" });
 
-            // 按模式处理
+            // 3) 按模式分组
             List<List<Student>> groups;
 
             if (mode == "Shuffle")
@@ -102,7 +101,8 @@ public class ExamRoomController : Controller
                 return Json(new { success = false, message = "无效的安排模式" });
             }
 
-            // 创建考场记录
+            // 4) 批量创建考场（一次 SaveChanges）
+            var newRooms = new List<ExamRoom>();
             int roomIndex = 1;
             foreach (var group in groups)
             {
@@ -110,7 +110,7 @@ public class ExamRoomController : Controller
                     ? $"第{roomIndex}考场"
                     : group.FirstOrDefault()?.ClassName ?? $"第{roomIndex}考场";
 
-                var room = new ExamRoom
+                newRooms.Add(new ExamRoom
                 {
                     ExamScheduleId = examScheduleId,
                     Grade = grade,
@@ -118,25 +118,30 @@ public class ExamRoomController : Controller
                     RoomName = roomName,
                     SeatCount = group.Count,
                     CreateTime = DateTime.Now
-                };
-                _db.ExamRooms.Add(room);
-                await _db.SaveChangesAsync();
+                });
+                roomIndex++;
+            }
+            _db.ExamRooms.AddRange(newRooms);
+            await _db.SaveChangesAsync();   // 一次提交：删除旧考场 + 创建新考场
 
-                // 分配学生座位
+            // 5) 批量分配学生座位（一次 SaveChanges）
+            var studentAssignments = new List<ExamRoomStudent>();
+            for (int i = 0; i < groups.Count; i++)
+            {
+                var room = newRooms[i];
                 int seatNum = 1;
-                foreach (var student in group)
+                foreach (var student in groups[i])
                 {
-                    _db.ExamRoomStudents.Add(new ExamRoomStudent
+                    studentAssignments.Add(new ExamRoomStudent
                     {
                         ExamRoomId = room.Id,
                         StudentId = student.StudentID,
                         SeatNumber = seatNum++
                     });
                 }
-                await _db.SaveChangesAsync();
-
-                roomIndex++;
             }
+            _db.ExamRoomStudents.AddRange(studentAssignments);
+            await _db.SaveChangesAsync();   // 一次提交：所有学生座位
 
             await LogOperation("生成考场安排", examScheduleId, $"考试#{examScheduleId} 年级:{grade} 模式:{mode}");
             return Json(new { success = true, message = $"共生成 {groups.Count} 个考场，{students.Count} 名学生" });
