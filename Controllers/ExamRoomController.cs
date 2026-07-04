@@ -47,7 +47,7 @@ public class ExamRoomController : Controller
             .ToListAsync();
 
         if (scheduleGrades.Count > 0)
-            grades = grades.Where(g => scheduleGrades.Contains(g.DisplayName)).ToList();
+            grades = grades.Where(g => scheduleGrades.Contains(g.CurrentGradeName)).ToList();
 
         ViewBag.Grades = grades;
 
