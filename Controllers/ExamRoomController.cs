@@ -36,11 +36,19 @@ public class ExamRoomController : Controller
             .OrderBy(r => r.RoomName)
             .ToListAsync();
 
-        // 年级列表
+        // 年级列表（只显示该考试设定好的年级）
+        var scheduleGrades = (schedule.Grades ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToHashSet();
+
         var grades = await _db.GradeLevels
             .OrderByDescending(g => g.EntryYear)
             .ThenBy(g => g.SchoolType)
             .ToListAsync();
+
+        if (scheduleGrades.Count > 0)
+            grades = grades.Where(g => scheduleGrades.Contains(g.DisplayName)).ToList();
+
         ViewBag.Grades = grades;
 
         // 已经有安排的年级
