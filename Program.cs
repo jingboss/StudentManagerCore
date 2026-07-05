@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
 using StudentManagerCore.Data;
 using StudentManagerCore;
+using StudentManagerCore.Services;
 using Microsoft.Extensions.FileProviders;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -79,7 +80,7 @@ builder.Services.AddScoped<StudentManagerCore.Services.InstallService>();
 // Word文档导出服务
 builder.Services.AddScoped<StudentManagerCore.Services.WordExportService>();
 
-// 注册AI分析服务（云端API）- 超时由AiAnalysisService内部CancellationToken控制
+// 注册 AI 分析服务（云端API）- 超时由AiAnalysisService内部CancellationToken控制
 builder.Services.AddHttpClient<StudentManagerCore.Services.AiAnalysisService>(client =>
 {
     client.Timeout = System.Threading.Timeout.InfiniteTimeSpan;

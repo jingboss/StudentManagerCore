@@ -11,7 +11,6 @@ public class SiteSettingsController : Controller
 {
     private readonly AppDbContext _db;
     private readonly IWebHostEnvironment _env;
-
     public SiteSettingsController(AppDbContext db, IWebHostEnvironment env)
     {
         _db = db;

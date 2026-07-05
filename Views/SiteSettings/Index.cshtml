@@ -1,4 +1,4 @@
-@model Dictionary<string, string>
+﻿@model Dictionary<string, string>
 @{
     ViewData["Title"] = "网站管理";
     var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
@@ -104,8 +104,8 @@
                 </form>
             </div>
         </div>
-    </div>
-</div>
+
+        
 
 <!-- 网站关闭开关 -->
 <div class="row justify-content-center">
@@ -247,5 +247,7 @@
                 }
             });
         }
+
+        
     </script>
 }
