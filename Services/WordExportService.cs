@@ -68,6 +68,10 @@ namespace StudentManagerCore.Services
 
                 // === 表头行：9列 = 座位号 | 学号 | 姓名 | 班级 | 间隔 | 座位号 | 学号 | 姓名 | 班级 ===
                 var headerRow = new TableRow();
+                // 表头行高
+                headerRow.AppendChild(new TableRowProperties(
+                    new TableRowHeight { Val = UInt32Value.FromUInt32(400), HeightType = HeightRuleValues.AtLeast }
+                ));
                 string[] leftHeaders = { "座位号", "学号", "姓名", "班级" };
                 foreach (var h in leftHeaders)
                     headerRow.AppendChild(CreateCell(h, true, "20", "2D2D2D", "FFFFFF"));
@@ -85,6 +89,10 @@ namespace StudentManagerCore.Services
                 for (int r = 0; r < maxRows; r++)
                 {
                     var dataRow = new TableRow();
+                    // 数据行行高
+                    dataRow.AppendChild(new TableRowProperties(
+                        new TableRowHeight { Val = UInt32Value.FromUInt32(450), HeightType = HeightRuleValues.AtLeast }
+                    ));
 
                     // 左列
                     if (r < leftCount)
