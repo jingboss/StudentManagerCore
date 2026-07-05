@@ -88,22 +88,48 @@ public class ExamRoomController : Controller
 
             if (mode == "Shuffle")
             {
-                // 全年级打乱
+                // 全年级打乱，均匀分配考场人数
                 var shuffled = students.OrderBy(_ => Random.Shared.Next()).ToList();
+
+                // 计算最优考场数，使每个考场人数尽量平均
+                int total = shuffled.Count;
+                int roomCount = (int)Math.Ceiling((double)total / studentsPerRoom);
+                int baseCount = total / roomCount;
+                int remainder = total % roomCount;
+
                 groups = new List<List<Student>>();
-                for (int i = 0; i < shuffled.Count; i += studentsPerRoom)
+                int pos = 0;
+                for (int i = 0; i < roomCount; i++)
                 {
-                    groups.Add(shuffled.Skip(i).Take(studentsPerRoom).ToList());
+                    int count = baseCount + (i < remainder ? 1 : 0);
+                    groups.Add(shuffled.Skip(pos).Take(count).ToList());
+                    pos += count;
                 }
             }
             else if (mode == "InClass")
             {
-                // 按原班级分组（按班级名称分组）
-                groups = students
+                // 按原班级分组，每个班级内再均匀分配考场
+                var classGroups = students
                     .GroupBy(s => s.ClassName ?? "未分班")
                     .OrderBy(g => g.Key)
                     .Select(g => g.OrderBy(s => s.StudentID).ToList())
                     .ToList();
+
+                groups = new List<List<Student>>();
+                foreach (var classGroup in classGroups)
+                {
+                    int total = classGroup.Count;
+                    int roomCount = (int)Math.Ceiling((double)total / studentsPerRoom);
+                    int baseCount = total / roomCount;
+                    int remainder = total % roomCount;
+                    int pos = 0;
+                    for (int i = 0; i < roomCount; i++)
+                    {
+                        int count = baseCount + (i < remainder ? 1 : 0);
+                        groups.Add(classGroup.Skip(pos).Take(count).ToList());
+                        pos += count;
+                    }
+                }
             }
             else
             {
