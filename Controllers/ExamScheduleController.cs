@@ -274,6 +274,81 @@ public class ExamScheduleController : Controller
         }
     }
 
+    /// <summary>
+    /// 获取某考试各科目的考试时间设置
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> GetExamSubjectTimes(int examScheduleId)
+    {
+        try
+        {
+            var data = await _db.ExamSubjects
+                .Where(e => e.ExamScheduleId == examScheduleId)
+                .Include(e => e.Subject)
+                .GroupBy(e => e.SubjectId)
+                .Select(g => g.First())
+                .Select(e => new
+                {
+                    e.SubjectId,
+                    SubjectName = e.Subject != null ? e.Subject.Name : "",
+                    e.StartTime,
+                    e.EndTime
+                })
+                .ToListAsync();
+            return Json(new { success = true, data });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { success = false, message = "加载失败: " + ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// 保存各科考试时间设置
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveExamSubjectTimes(int examScheduleId, [FromBody] List<ExamSubjectTimeDto>? times)
+    {
+        try
+        {
+            if (times == null || times.Count == 0)
+                return Json(new { success = true });
+
+            var examSubjects = await _db.ExamSubjects
+                .Where(e => e.ExamScheduleId == examScheduleId)
+                .ToListAsync();
+
+            foreach (var t in times)
+            {
+                var matchingSubjects = examSubjects.Where(e => e.SubjectId == t.SubjectId).ToList();
+                if (matchingSubjects.Count == 0) continue;
+
+                DateTime? startTime = null;
+                if (!string.IsNullOrWhiteSpace(t.StartTime) && DateTime.TryParse(t.StartTime, out var st))
+                    startTime = st;
+
+                DateTime? endTime = null;
+                if (!string.IsNullOrWhiteSpace(t.EndTime) && DateTime.TryParse(t.EndTime, out var et))
+                    endTime = et;
+
+                foreach (var examSubject in matchingSubjects)
+                {
+                    examSubject.StartTime = startTime;
+                    examSubject.EndTime = endTime;
+                }
+            }
+
+            await _db.SaveChangesAsync();
+            await LogOperation("设置考试时间", examScheduleId, $"考试ID:{examScheduleId} 已设置{times.Count}个科目时间");
+            return Json(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { success = false, message = "保存失败: " + (ex.InnerException?.Message ?? ex.Message) });
+        }
+    }
+
     [HttpGet]
     public async Task<IActionResult> GetExamSubjectTeachers(int examScheduleId, int subjectId)
     {
@@ -697,4 +772,12 @@ public class ExamSubjectDto
 {
     public int SubjectId { get; set; }
     public int? FullScore { get; set; }
+}
+
+// 考试科目时间 DTO
+public class ExamSubjectTimeDto
+{
+    public int SubjectId { get; set; }
+    public string? StartTime { get; set; }
+    public string? EndTime { get; set; }
 }

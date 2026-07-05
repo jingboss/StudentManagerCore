@@ -449,6 +449,12 @@ public class ExamSubject
     /// <summary>该科目在该次考试的满分（null则使用Subject默认值）</summary>
     public int? FullScore { get; set; }
 
+    /// <summary>该科目考试开始时间</summary>
+    public DateTime? StartTime { get; set; }
+
+    /// <summary>该科目考试结束时间</summary>
+    public DateTime? EndTime { get; set; }
+
     [ForeignKey("ExamScheduleId")]
     public ExamSchedule? ExamSchedule { get; set; }
 
