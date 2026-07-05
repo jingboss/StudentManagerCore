@@ -399,7 +399,8 @@ public class ScoreController : Controller
 
         // 年级排名（按GradeLevelId分组）
         var gradeRankings = studentScores
-            .GroupBy(s => s.GradeLevelId)
+            .Where(s => s.GradeLevelId != null)
+            .GroupBy(s => s.GradeLevelId!.Value)
             .ToDictionary(
                 g => g.Key,
                 g => g.OrderByDescending(s => s.TotalScore)
@@ -409,7 +410,8 @@ public class ScoreController : Controller
 
         // 班级排名（按ClassInfoId分组）
         var classRankings = studentScores
-            .GroupBy(s => s.ClassInfoId)
+            .Where(s => s.ClassInfoId != null)
+            .GroupBy(s => s.ClassInfoId!.Value)
             .ToDictionary(
                 g => g.Key,
                 g => g.OrderByDescending(s => s.TotalScore)
@@ -2452,15 +2454,6 @@ public class ScoreController : Controller
         sb.AppendLine("## 分数段分布（总分）");
         var totalScores = allScores.GroupBy(sc => sc.StudentId).Select(g => g.Sum(sc => (double)sc.ScoreValue)).OrderByDescending(t => t).ToList();
         var totalFull = examSubjects.Sum(es => (double)(es.FullScore ?? es.Subject?.FullScore ?? 100));
-
-        void AppendSegment(string name, double minPct, double maxPct)
-        {
-            var low = totalFull * minPct;
-            var high = totalFull * maxPct;
-            var cnt = totalScores.Count(t => t >= low && (maxPct >= 1.0 || t < high));
-            var pct = totalScores.Count > 0 ? Math.Round((double)cnt / totalScores.Count * 100, 1) : 0;
-            sb.AppendLine($"- {name}（{minPct * 100}-{maxPct * 100}%）：{cnt}人（{pct}%）");
-        }
 
         sb.AppendLine($"| 分数段 | 人数 | 占比 |");
         sb.AppendLine($"|--------|------|------|");

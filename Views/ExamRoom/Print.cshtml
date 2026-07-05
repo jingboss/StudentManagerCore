@@ -83,9 +83,11 @@
             vertical-align: middle;
             background: #fff;
         }
-        .seat-table .col-seat { width: 8%; font-weight: bold; color: #555; font-size: 7.5pt; }
-        .seat-table .col-name { width: 32%; text-align: left; }
-        .seat-table .col-class { width: 22%; text-align: left; color: #555; font-size: 7.5pt; }
+        .seat-table .col-seat { width: 7%; font-weight: bold; color: #555; font-size: 7.5pt; }
+        .seat-table .col-stuno { width: 14%; font-size: 7.5pt; }
+        .seat-table .col-name { width: 18%; text-align: left; }
+        .seat-table .col-class { width: 14%; text-align: left; color: #555; font-size: 7.5pt; }
+        .seat-table .col-gap { width: 1%; background: #f5f5f5; border-left: none; border-right: none; }
 
         /* ========== 页脚 ========== */
         .page-footer {
@@ -136,9 +138,12 @@
                     <thead>
                         <tr>
                             <th class="col-seat">座位号</th>
+                            <th class="col-stuno">学号</th>
                             <th class="col-name">姓名</th>
                             <th class="col-class">班级</th>
+                            <th class="col-gap"></th>
                             <th class="col-seat">座位号</th>
+                            <th class="col-stuno">学号</th>
                             <th class="col-name">姓名</th>
                             <th class="col-class">班级</th>
                         </tr>
@@ -150,17 +155,21 @@
                             var right = (i + leftCount) < total ? students[i + leftCount] : null;
                             <tr>
                                 <td class="col-seat">@left.SeatNumber</td>
+                                <td class="col-stuno">@left.Student?.StudentNo</td>
                                 <td class="col-name">@left.Student?.Name</td>
                                 <td class="col-class">@left.Student?.ClassName</td>
+                                <td class="col-gap"></td>
                                 @if (right != null)
                                 {
                                     <td class="col-seat">@right.SeatNumber</td>
+                                    <td class="col-stuno">@right.Student?.StudentNo</td>
                                     <td class="col-name">@right.Student?.Name</td>
                                     <td class="col-class">@right.Student?.ClassName</td>
                                 }
                                 else
                                 {
                                     <td class="col-seat"></td>
+                                    <td class="col-stuno"></td>
                                     <td class="col-name"></td>
                                     <td class="col-class"></td>
                                 }

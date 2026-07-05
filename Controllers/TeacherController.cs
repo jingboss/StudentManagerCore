@@ -78,7 +78,7 @@ public class TeacherController : Controller
             .GroupBy(ts => ts.AdminId)
             .ToDictionary(g => g.Key, g => string.Join("、", g
                 .Where(ts => ts.Subject != null && !string.IsNullOrEmpty(ts.Subject.Name))
-                .Select(ts => ts.Subject!.Name.Trim())
+                .Select(ts => ts.Subject!.Name!.Trim())
                 .Distinct()));
         ViewBag.TeacherSubjects = teacherSubjects;
 

@@ -208,7 +208,7 @@ public class SurveyController : Controller
     public async Task<IActionResult> ResponseDetail(int submissionId)
     {
         var submission = await _db.SurveySubmissions
-            .Include(s => s.Survey).ThenInclude(s => s.Questions.OrderBy(q => q.SortOrder)).ThenInclude(q => q.Options)
+            .Include(s => s.Survey!).ThenInclude(s => s.Questions!.OrderBy(q => q.SortOrder)).ThenInclude(q => q.Options)
             .Include(s => s.Answers)
             .FirstOrDefaultAsync(s => s.Id == submissionId);
         if (submission == null) return NotFound();

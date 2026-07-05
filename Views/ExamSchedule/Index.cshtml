@@ -117,7 +117,7 @@
                                         // 负责人是考试级别，直接显示去重后的人名
                                         teacherInfo = examTeachers
                                             .Where(et => et.Admin != null)
-                                            .Select(et => et.Admin!.RealName)
+                                            .Select(et => et.Admin!.RealName!)
                                             .Distinct()
                                             .ToList();
                                     }

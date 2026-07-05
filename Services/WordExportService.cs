@@ -36,7 +36,7 @@ namespace StudentManagerCore.Services
                 body.AppendChild(roomPara);
 
                 // === 元数据行 ===
-                string examDate = schedule.ExamDate?.ToString("yyyy年MM月dd日") ?? "";
+                string examDate = schedule.ExamDate.ToString("yyyy年MM月dd日");
                 string printTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
                 string metaText = $"年级：{grade}   日期：{examDate}   打印时间：{printTime}";
                 var metaPara = MakeParagraph(metaText, 20, center: true, after: "200");
@@ -145,14 +145,14 @@ namespace StudentManagerCore.Services
 
         /// <summary>创建普通段落</summary>
         private Paragraph MakeParagraph(string text, int fontSizeHalf, bool bold = false, bool italic = false,
-            bool center = false, string before = "0", string after = "0", string color = null)
+            bool center = false, string before = "0", string after = "0", string? color = null)
         {
             var para = new Paragraph();
             var run = new Run();
             var rp = new RunProperties(
                 new FontSize { Val = fontSizeHalf.ToString() },
                 new FontSizeComplexScript { Val = fontSizeHalf.ToString() },
-                new FontName { Val = "宋体" }
+                new RunFonts { Ascii = "宋体", HighAnsi = "宋体" }
             );
             if (bold) rp.AppendChild(new Bold());
             if (italic) rp.AppendChild(new Italic());
@@ -174,7 +174,7 @@ namespace StudentManagerCore.Services
 
         /// <summary>创建表格单元格（带边框）</summary>
         private TableCell CreateCell(string text, bool isHeader, string fontSize,
-            string bgColor = null, string fontColor = null)
+            string? bgColor = null, string? fontColor = null)
         {
             var cell = new TableCell();
 
@@ -200,7 +200,7 @@ namespace StudentManagerCore.Services
             var rp = new RunProperties(
                 new FontSize { Val = fontSize },
                 new FontSizeComplexScript { Val = fontSize },
-                new FontName { Val = "宋体" }
+                new RunFonts { Ascii = "宋体", HighAnsi = "宋体" }
             );
             if (isHeader) rp.AppendChild(new Bold());
             if (!string.IsNullOrEmpty(fontColor)) rp.AppendChild(new Color { Val = fontColor });
