@@ -76,6 +76,9 @@ builder.Services.AddScoped<StudentManagerCore.Services.AuthService>();
 // 安装服务
 builder.Services.AddScoped<StudentManagerCore.Services.InstallService>();
 
+// PDF生成服务
+builder.Services.AddScoped<StudentManagerCore.Services.PdfService>();
+
 // 注册AI分析服务（云端API）- 超时由AiAnalysisService内部CancellationToken控制
 builder.Services.AddHttpClient<StudentManagerCore.Services.AiAnalysisService>(client =>
 {

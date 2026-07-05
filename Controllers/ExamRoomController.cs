@@ -194,6 +194,47 @@ public class ExamRoomController : Controller
         return View(rooms);
     }
 
+    /// <summary>导出PDF座位表</summary>
+    public async Task<IActionResult> ExportPdf(int examScheduleId, string grade)
+    {
+        try
+        {
+            var schedule = await _db.ExamSchedules.FindAsync(examScheduleId);
+            if (schedule == null) return NotFound();
+
+            var rooms = await _db.ExamRooms
+                .Include(r => r.Students!)
+                    .ThenInclude(rs => rs.Student)
+                .Where(r => r.ExamScheduleId == examScheduleId && r.Grade == grade)
+                .OrderBy(r => r.RoomName)
+                .ToListAsync();
+
+            if (rooms.Count == 0)
+                return RedirectToAction("Index", new { examScheduleId });
+
+            var pdfService = HttpContext.RequestServices.GetRequiredService<Services.PdfService>();
+            byte[] pdfBytes = pdfService.GenerateSeatingChart(rooms, schedule, grade);
+
+            string fileName = $"考场安排表_{schedule.Name}_{grade}_{DateTime.Now:yyyyMMdd_HHmm}.pdf";
+            return File(pdfBytes, "application/pdf", fileName);
+        }
+        catch (Exception ex)
+        {
+            var msg = $"[ExportPdf] {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}";
+            try
+            {
+                var logDir = System.IO.Path.Combine(
+                    System.IO.Directory.GetCurrentDirectory(), "logs");
+                System.IO.Directory.CreateDirectory(logDir);
+                System.IO.File.AppendAllText(
+                    System.IO.Path.Combine(logDir, "pdf-error.log"),
+                    $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {msg}\n\n");
+            }
+            catch { }
+            return Content("PDF生成失败，错误详情：\n" + ex.ToString().Replace("\n", "<br/>"), "text/html");
+        }
+    }
+
     private async Task LogOperation(string actionType, int targetId, string detail)
     {
         var operatorName = User.FindFirst("RealName")?.Value ?? User.Identity?.Name ?? "未知";
