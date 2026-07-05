@@ -402,34 +402,84 @@
 
 @if (User.Identity?.IsAuthenticated == true)
 {
-    <!-- 空闲超时自动退出：10分钟无操作自动登出 -->
+    <!-- 空闲超时警告对话框：20分钟无操作弹出，倒计时2分钟后自动退出 -->
+    <div class="modal fade" id="idleTimeoutModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-sm modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-body text-center py-4">
+                    <i class="bi bi-clock-history text-warning fs-1 d-block mb-3"></i>
+                    <p class="fw-bold mb-1" style="font-size:1.1rem;">您的会话即将过期</p>
+                    <p class="text-muted small mb-3">由于 20 分钟无操作，系统将在 <strong id="idleCountdown" class="text-danger">120</strong> 秒后自动退出</p>
+                    <button type="button" class="btn btn-primary px-4" id="idleContinueBtn">
+                        <i class="bi bi-arrow-repeat me-1"></i>继续会话
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         (function() {
-            var IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10分钟
-            var idleTimer;
+            var WARNING_AFTER_MS = 18 * 60 * 1000;   // 18 分钟后弹出警告
+            var COUNTDOWN_SEC  = 120;                 // 倒计时 120 秒（2 分钟）
+            var idleTimer, countdownTimer;
+            var countdownVal = COUNTDOWN_SEC;
+            var modalShown = false;
+            var modalObj = null;
+
+            var modalEl = document.getElementById('idleTimeoutModal');
+            if (modalEl) {
+                modalObj = new bootstrap.Modal(modalEl, { backdrop: 'static', keyboard: false });
+                document.getElementById('idleContinueBtn')?.addEventListener('click', function() {
+                    resetIdleTimer();
+                });
+                modalEl.addEventListener('hidden.bs.modal', function() {
+                    modalShown = false;
+                });
+            }
+
+            function showWarning() {
+                if (modalShown || !modalObj) return;
+                modalShown = true;
+                countdownVal = COUNTDOWN_SEC;
+                document.getElementById('idleCountdown').textContent = countdownVal;
+                modalObj.show();
+
+                countdownTimer = setInterval(function() {
+                    countdownVal--;
+                    document.getElementById('idleCountdown').textContent = countdownVal;
+                    if (countdownVal <= 0) {
+                        clearInterval(countdownTimer);
+                        modalObj.hide();
+                        doLogout();
+                    }
+                }, 1000);
+            }
 
             function resetIdleTimer() {
                 clearTimeout(idleTimer);
-                idleTimer = setTimeout(autoLogout, IDLE_TIMEOUT_MS);
+                clearInterval(countdownTimer);
+                if (modalObj && modalShown) {
+                    modalObj.hide();
+                }
+                modalShown = false;
+                idleTimer = setTimeout(showWarning, WARNING_AFTER_MS);
             }
 
-            function autoLogout() {
-                // 显示退出提示
+            function doLogout() {
                 var toast = document.createElement('div');
                 toast.style.cssText = 'position:fixed;top:20px;right:20px;z-index:9999;background:#fff3cd;color:#664d03;border:1px solid #ffecb5;border-radius:8px;padding:16px 24px;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.15);max-width:360px;';
-                toast.innerHTML = '<div style="font-weight:bold;margin-bottom:4px;">⏱️ 已超时自动退出</div>由于10分钟无操作，系统已自动安全退出。<br>正在跳转首页...';
+                toast.innerHTML = '<div style="font-weight:bold;margin-bottom:4px;">⏰ 已超时自动退出</div>由于 20 分钟无操作，系统已自动安全退出。<br>正在跳转首页...';
                 document.body.appendChild(toast);
-
-                // 跳转到退出
                 setTimeout(function() {
                     window.location.href = '@Url.Action("Logout", "Account")';
                 }, 1500);
             }
 
-            // 初始化计时器
+            // 初始计时
             resetIdleTimer();
 
-            // 监听用户活动事件
+            // 监听用户活动事件（重置计时）
             var events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click', 'wheel'];
             events.forEach(function(evt) {
                 document.addEventListener(evt, resetIdleTimer, { passive: true });

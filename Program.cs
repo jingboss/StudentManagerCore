@@ -121,7 +121,7 @@ if (string.IsNullOrEmpty(jwtSecretKey))
 
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "StudentManager";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "StudentManagerUsers";
-var jwtExpireMinutes = int.Parse(builder.Configuration["Jwt:ExpireMinutes"] ?? "120");
+var jwtExpireMinutes = int.Parse(builder.Configuration["Jwt:ExpireMinutes"] ?? "20");
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
