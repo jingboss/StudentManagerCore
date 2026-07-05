@@ -282,19 +282,22 @@ public class ExamScheduleController : Controller
     {
         try
         {
-            var data = await _db.ExamSubjects
+            var rawData = await _db.ExamSubjects
                 .Where(e => e.ExamScheduleId == examScheduleId)
                 .Include(e => e.Subject)
+                .ToListAsync();
+
+            var data = rawData
                 .GroupBy(e => e.SubjectId)
                 .Select(g => g.First())
                 .Select(e => new
                 {
                     e.SubjectId,
-                    SubjectName = e.Subject != null ? e.Subject.Name : "",
+                    SubjectName = e.Subject?.Name ?? "",
                     e.StartTime,
                     e.EndTime
                 })
-                .ToListAsync();
+                .ToList();
             return Json(new { success = true, data });
         }
         catch (Exception ex)
