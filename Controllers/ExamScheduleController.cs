@@ -287,8 +287,9 @@ public class ExamScheduleController : Controller
                 .Include(e => e.Subject)
                 .ToListAsync();
 
+            // 按科目名称去重（同名科目视为同一科，只保留第一个）
             var data = rawData
-                .GroupBy(e => e.SubjectId)
+                .GroupBy(e => e.Subject?.Name ?? "")
                 .Select(g => g.First())
                 .Select(e => new
                 {
@@ -320,11 +321,18 @@ public class ExamScheduleController : Controller
 
             var examSubjects = await _db.ExamSubjects
                 .Where(e => e.ExamScheduleId == examScheduleId)
+                .Include(e => e.Subject)
                 .ToListAsync();
 
             foreach (var t in times)
             {
-                var matchingSubjects = examSubjects.Where(e => e.SubjectId == t.SubjectId).ToList();
+                // 找到前台传来的 SubjectId 对应的科目名称
+                var sourceSubject = examSubjects.FirstOrDefault(e => e.SubjectId == t.SubjectId);
+                if (sourceSubject?.Subject == null) continue;
+                var subjectName = sourceSubject.Subject.Name;
+
+                // 更新该考试中所有同名科目的时间
+                var matchingSubjects = examSubjects.Where(e => e.Subject != null && e.Subject.Name == subjectName).ToList();
                 if (matchingSubjects.Count == 0) continue;
 
                 DateTime? startTime = null;
