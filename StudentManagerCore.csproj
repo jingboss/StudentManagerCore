@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <PackageReference Include="ClosedXML" Version="0.104.2" />
+    <PackageReference Include="DocumentFormat.OpenXml" Version="3.2.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Identity" Version="2.3.10" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
@@ -25,17 +26,6 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <Reference Include="QuestPDF">
-      <HintPath>libs\QuestPDF.dll</HintPath>
-    </Reference>
   </ItemGroup>
-
-  <Target Name="PostBuildCopyNative" AfterTargets="PostBuildEvent">
-    <Copy SourceFiles="libs\libgcc_s_seh-1.dll;libs\libstdc++-6.dll;libs\libwinpthread-1.dll;libs\qpdf.dll;libs\QuestPdfSkia.dll" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
-  </Target>
-  <Target Name="PostPublishCopyNative" AfterTargets="Publish">
-    <Copy SourceFiles="libs\libgcc_s_seh-1.dll;libs\libstdc++-6.dll;libs\libwinpthread-1.dll;libs\qpdf.dll;libs\QuestPdfSkia.dll" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
-  </Target>
-
 
 </Project>

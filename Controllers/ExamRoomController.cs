@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StudentManagerCore.Data;
 using StudentManagerCore.Models;
+using StudentManagerCore.Services;
 using System.Security.Claims;
 
 namespace StudentManagerCore.Controllers;
@@ -194,8 +195,8 @@ public class ExamRoomController : Controller
         return View(rooms);
     }
 
-    /// <summary>导出PDF座位表</summary>
-    public async Task<IActionResult> ExportPdf(int examScheduleId, string grade)
+    /// <summary>导出Word考场安排表</summary>
+    public async Task<IActionResult> ExportWord(int examScheduleId, string grade)
     {
         try
         {
@@ -210,28 +211,18 @@ public class ExamRoomController : Controller
                 .ToListAsync();
 
             if (rooms.Count == 0)
-                return RedirectToAction("Index", new { examScheduleId });
+                return Content("<script>alert('没有考场数据可供导出');history.back();</script>", "text/html");
 
-            var pdfService = HttpContext.RequestServices.GetRequiredService<Services.PdfService>();
-            byte[] pdfBytes = pdfService.GenerateSeatingChart(rooms, schedule, grade);
+            var wordService = HttpContext.RequestServices.GetRequiredService<WordExportService>();
+            var wordBytes = wordService.GenerateSeatingChart(rooms, schedule, grade);
 
-            string fileName = $"考场安排表_{schedule.Name}_{grade}_{DateTime.Now:yyyyMMdd_HHmm}.pdf";
-            return File(pdfBytes, "application/pdf", fileName);
+            string fileName = $"考场安排表_{schedule.Name}_{grade}_{DateTime.Now:yyyyMMdd_HHmmss}.docx";
+
+            return File(wordBytes, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", fileName);
         }
         catch (Exception ex)
         {
-            var msg = $"[ExportPdf] {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}";
-            try
-            {
-                var logDir = System.IO.Path.Combine(
-                    System.IO.Directory.GetCurrentDirectory(), "logs");
-                System.IO.Directory.CreateDirectory(logDir);
-                System.IO.File.AppendAllText(
-                    System.IO.Path.Combine(logDir, "pdf-error.log"),
-                    $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {msg}\n\n");
-            }
-            catch { }
-            return Content("PDF生成失败，错误详情：\n" + ex.ToString().Replace("\n", "<br/>"), "text/html");
+            return Content($"<div style='padding:40px;text-align:center;font-size:18px;color:#666;margin-top:100px;'>⚠️ 导出失败：{ex.Message}</div>", "text/html");
         }
     }
 
