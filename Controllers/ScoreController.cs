@@ -2282,6 +2282,29 @@ public class ScoreController : Controller
                 .OrderBy(c => c.ClassName)
                 .ToListAsync();
 
+            // 非管理员只能看到自己年级/班级的班级
+            var adminId = GetAdminId();
+            if (adminId.HasValue)
+            {
+                var admin = await _db.Admins.FindAsync(adminId.Value);
+                if (admin != null && !IsAdmin())
+                {
+                    // 只显示同年级的班级（admin.Grade 存的是 GradeLevel.CurrentGradeName 格式，如 "小学2024级"）
+                    if (!string.IsNullOrEmpty(admin.Grade))
+                    {
+                        classList = classList
+                            .Where(c => c.GradeLevel != null &&
+                                c.GradeLevel.CurrentGradeName == admin.Grade)
+                            .ToList();
+                    }
+                    // 如果是班主任，只显示自己管理的班级
+                    if (!string.IsNullOrEmpty(admin.ClassName) && admin.PrimaryRole == "班主任")
+                    {
+                        classList = classList.Where(c => c.ClassName == admin.ClassName).ToList();
+                    }
+                }
+            }
+
             var classes = classList.Select(c => new
             {
                 classInfoId = c.ClassInfoID,
@@ -2382,6 +2405,9 @@ public class ScoreController : Controller
                 .OrderBy(es => es.Subject!.SortOrder)
                 .Select(es => new { subjectId = es.SubjectId, subjectName = es.Subject!.Name ?? "" })
                 .ToListAsync();
+
+            // 科目去重（同一考试可能配置了同名科目）
+            subjects = subjects.GroupBy(s => s.subjectName).Select(g => g.First()).ToList();
 
             return Json(new { success = true, subjects });
         }

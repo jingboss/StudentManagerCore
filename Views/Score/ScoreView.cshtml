@@ -875,8 +875,16 @@
                 }
                 var html = '<option value="">-- 请选择班级 --</option>';
                 res.classes.forEach(function (c) { html += '<option value="' + c.classInfoId + '">' + htmlEncode(c.gradeName) + ' ' + htmlEncode(c.className) + '</option>'; });
-                $('#aiClassSelect').html(html);
-            }).fail(function () { $('#aiClassSelect').html('<option value="">-- 加载失败 --</option>'); });
+                                $('#aiClassSelect').html(html);
+                // 班主任自动选中其班级
+                var teacherClassInfoId = '@ViewBag.TeacherClassInfoId';
+                if (teacherClassInfoId) {
+                    var $sel = $('#aiClassSelect');
+                    if ($sel.find('option[value="' + teacherClassInfoId + '"]').length) {
+                        $sel.val(teacherClassInfoId);
+                    }
+                }
+                        			}).fail(function () { $('#aiClassSelect').html('<option value="">-- 加载失败 --</option>'); });
         }
 
         function startClassAnalysis(forceRegenerate) {
@@ -931,8 +939,16 @@
                 }
                 var html = '<option value="">-- 请选择班级 --</option>';
                 res.classes.forEach(function (c) { html += '<option value="' + c.classInfoId + '">' + htmlEncode(c.gradeName) + ' ' + htmlEncode(c.className) + '</option>'; });
-                $('#aiSubjectClassSelect').html(html);
-            }).fail(function () { $('#aiSubjectClassSelect').html('<option value="">-- 加载失败 --</option>'); });
+                                $('#aiSubjectClassSelect').html(html);
+                // 班主任自动选中其班级
+                var teacherClassInfoId = '@ViewBag.TeacherClassInfoId';
+                if (teacherClassInfoId) {
+                    var $sel = $('#aiSubjectClassSelect');
+                    if ($sel.find('option[value="' + teacherClassInfoId + '"]').length) {
+                        $sel.val(teacherClassInfoId);
+                    }
+                }
+                        }).fail(function () { $('#aiSubjectClassSelect').html('<option value="">-- 加载失败 --</option>'); });
             $('#aiSubjectSelect').html('<option value="">-- 请先选择班级 --</option>');
         }
 
