@@ -456,6 +456,7 @@ public class AdminCenterController : Controller
             if (update.ScoreInput) perms.Add("score_input");
             if (update.ScoreView) perms.Add("score_view");
             if (update.ScoreImport) perms.Add("score_import");
+            if (update.ScoreReport) perms.Add("score_report");
             if (update.AiSettings) perms.Add("ai_settings");
             if (update.SubjectManage) perms.Add("subject_manage");
             if (update.GradeAdd) perms.Add("grade_add");

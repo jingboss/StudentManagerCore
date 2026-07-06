@@ -704,6 +704,7 @@ public class RolePermissionUpdate
     public bool ScoreInput { get; set; }
     public bool ScoreView { get; set; }
     public bool ScoreImport { get; set; }
+    public bool ScoreReport { get; set; }
     public bool AiSettings { get; set; }
     public bool GradeAdd { get; set; }
     public bool GradeEdit { get; set; }

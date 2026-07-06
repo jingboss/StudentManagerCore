@@ -348,19 +348,16 @@ public class ScoreController : Controller
         var subjectStats = subjects.Select(sub =>
         {
             var subScores = scores.Where(sc => sc.SubjectId == sub.SubjectId).ToList();
-            var validScores = subScores.Where(sc => sc.ScoreValue > 0).ToList();
-            var count = subScores.Count;
-            var avg = count > 0 ? Math.Round(subScores.Average(sc => (double)sc.ScoreValue), 1) : 0;
-            var max = count > 0 ? subScores.Max(sc => (double)sc.ScoreValue) : 0;
-            var min = count > 0 ? subScores.Min(sc => (double)sc.ScoreValue) : 0;
+            var presentScores = subScores.Where(sc => !sc.IsAbsent).ToList();
+            var absentCount = subScores.Count(sc => sc.IsAbsent);
+            var count = presentScores.Count;
+            var avg = count > 0 ? Math.Round(presentScores.Average(sc => (double)sc.ScoreValue), 1) : 0;
+            var max = count > 0 ? presentScores.Max(sc => (double)sc.ScoreValue) : 0;
+            var min = count > 0 ? presentScores.Min(sc => (double)sc.ScoreValue) : 0;
             var fs = (decimal)sub.FullScore;
 
-            // 按排名比例分档（以当前筛选范围内的学生为基数）
-            // A（优秀）前25% → 优秀率 ≈25%
-            // B（良好）26%~60% → 良好率 ≈35%
-            // C（及格）61%~95% → 及格率（A+B+C 累计）≈95%
-            // D（不及格）后5% → 低分率 ≈5%
-            var sortedScores = subScores
+            // 按排名比例分档（只对实考学生排名）
+            var sortedScores = presentScores
                 .OrderByDescending(sc => sc.ScoreValue)
                 .ToList();
             int totalCount = sortedScores.Count;
@@ -369,26 +366,26 @@ public class ScoreController : Controller
             {
                 double pct = (double)(si + 1) / totalCount;
                 if (pct <= 0.25) excellent++;
-                if (pct <= 0.95) pass++;       // 累计：A+B+C
+                if (pct <= 0.95) pass++;
                 if (pct > 0.25 && pct <= 0.60) good++;
                 if (pct > 0.95) low++;
             }
 
-            // 分数段（按满分比例折算为绝对分段）
-            var s0_59 = subScores.Count(sc => sc.ScoreValue < fs * 0.6m);
-            var s60_69 = subScores.Count(sc => sc.ScoreValue >= fs * 0.6m && sc.ScoreValue < fs * 0.7m);
-            var s70_79 = subScores.Count(sc => sc.ScoreValue >= fs * 0.7m && sc.ScoreValue < fs * 0.8m);
-            var s80_89 = subScores.Count(sc => sc.ScoreValue >= fs * 0.8m && sc.ScoreValue < fs * 0.9m);
-            var s90_100 = subScores.Count(sc => sc.ScoreValue >= fs * 0.9m);
+            // 分数段（只对实考学生统计）
+            var s0_59 = presentScores.Count(sc => sc.ScoreValue < fs * 0.6m);
+            var s60_69 = presentScores.Count(sc => sc.ScoreValue >= fs * 0.6m && sc.ScoreValue < fs * 0.7m);
+            var s70_79 = presentScores.Count(sc => sc.ScoreValue >= fs * 0.7m && sc.ScoreValue < fs * 0.8m);
+            var s80_89 = presentScores.Count(sc => sc.ScoreValue >= fs * 0.8m && sc.ScoreValue < fs * 0.9m);
+            var s90_100 = presentScores.Count(sc => sc.ScoreValue >= fs * 0.9m);
 
-            // 中位数
-            var sorted = subScores.Select(sc => (double)sc.ScoreValue).OrderBy(v => v).ToList();
+            // 中位数（只对实考学生）
+            var sorted = presentScores.Select(sc => (double)sc.ScoreValue).OrderBy(v => v).ToList();
             var median = sorted.Count > 0 ? sorted[sorted.Count / 2] : 0;
 
-            // 临界生（距及格线±5%满分范围内）
+            // 临界生（距及格线±5%满分范围内，只对实考学生）
             var criticalMin = fs * 0.55m;
             var criticalMax = fs * 0.65m;
-            var criticalCount = subScores.Count(sc => sc.ScoreValue >= criticalMin && sc.ScoreValue <= criticalMax);
+            var criticalCount = presentScores.Count(sc => sc.ScoreValue >= criticalMin && sc.ScoreValue <= criticalMax);
 
             return new
             {
@@ -400,6 +397,8 @@ public class ScoreController : Controller
                 MinScore = min,
                 MedianScore = median,
                 StudentCount = count,
+                AbsentCount = absentCount,
+                TotalStudentCount = count + absentCount,
                 ExcellentCount = excellent,
                 ExcellentRate = count > 0 ? Math.Round((double)excellent / count * 100, 1) : 0,
                 GoodCount = good,
@@ -413,7 +412,7 @@ public class ScoreController : Controller
             };
         }).ToList();
 
-        // 总分统计
+        // 总分统计（排除缺考科目的0分）
         var studentScores = scores
             .GroupBy(sc => new { sc.StudentId, StudentNo = sc.Student?.StudentNo ?? "", StudentName = sc.Student?.Name ?? "" })
             .Select(g => new
@@ -421,13 +420,15 @@ public class ScoreController : Controller
                 StudentId = g.Key.StudentId,
                 StudentNo = g.Key.StudentNo,
                 StudentName = g.Key.StudentName,
-                Scores = subjects.Select(sub => new
+                Scores = subjects.Select(sub =>
                 {
-                    SubjectId = sub.SubjectId,
-                    SubjectName = sub.SubjectName,
-                    ScoreValue = g.Where(sc => sc.SubjectId == sub.SubjectId).Select(sc => (decimal?)sc.ScoreValue).FirstOrDefault() ?? 0
+                    var sc = g.FirstOrDefault(s => s.SubjectId == sub.SubjectId);
+                    if (sc == null || sc.IsAbsent)
+                        return new { SubjectId = sub.SubjectId, SubjectName = sub.SubjectName, ScoreValue = (decimal?)null, IsAbsent = sc?.IsAbsent ?? false };
+                    return new { SubjectId = sub.SubjectId, SubjectName = sub.SubjectName, ScoreValue = (decimal?)sc.ScoreValue, IsAbsent = false };
                 }).ToList(),
-                TotalScore = g.Sum(sc => sc.ScoreValue),
+                TotalScore = g.Where(sc => !sc.IsAbsent).Sum(sc => sc.ScoreValue),
+                PresentSubjectCount = g.Count(sc => !sc.IsAbsent),
                 SubjectCount = subjects.Count,
                 ClassInfoId = g.Min(sc => sc.ClassInfoId),
                 GradeLevelId = g.Min(sc => sc.GradeLevelId)
@@ -485,8 +486,8 @@ public class ScoreController : Controller
             .Select((x, idx) =>
             {
                 var totalScore = x.TotalScore;
-                var avgScore = x.SubjectCount > 0
-                    ? Math.Round((double)totalScore / x.SubjectCount, 1)
+                var avgScore = x.PresentSubjectCount > 0
+                    ? Math.Round((double)totalScore / x.PresentSubjectCount, 1)
                     : 0;
 
                 int? classRank = null;
@@ -567,11 +568,13 @@ public class ScoreController : Controller
             .Select(g => new
             {
                 g.Key.StudentId, g.Key.StudentNo, g.Key.StudentName,
-                TotalScore = g.Sum(sc => sc.ScoreValue),
-                Scores = subjects.Select(sub => new
+                TotalScore = g.Where(sc => !sc.IsAbsent).Sum(sc => sc.ScoreValue),
+                Scores = subjects.Select(sub =>
                 {
-                    SubjectId = sub.SubjectId,
-                    ScoreValue = g.Where(sc => sc.SubjectId == sub.SubjectId).Select(sc => (decimal?)sc.ScoreValue).FirstOrDefault() ?? 0
+                    var sc = g.FirstOrDefault(s => s.SubjectId == sub.SubjectId);
+                    if (sc == null || sc.IsAbsent)
+                        return new { SubjectId = sub.SubjectId, ScoreValue = (decimal?)null, IsAbsent = sc?.IsAbsent ?? false };
+                    return new { SubjectId = sub.SubjectId, ScoreValue = (decimal?)sc.ScoreValue, IsAbsent = false };
                 }).ToList()
             })
             .OrderByDescending(x => x.TotalScore)
@@ -583,11 +586,13 @@ public class ScoreController : Controller
             .Select(g => new
             {
                 StudentId = g.Key,
-                TotalScore = g.Sum(sc => sc.ScoreValue),
-                Scores = subjects.Select(sub => new
+                TotalScore = g.Where(sc => !sc.IsAbsent).Sum(sc => sc.ScoreValue),
+                Scores = subjects.Select(sub =>
                 {
-                    SubjectId = sub.SubjectId,
-                    ScoreValue = g.Where(sc => sc.SubjectId == sub.SubjectId).Select(sc => (decimal?)sc.ScoreValue).FirstOrDefault() ?? 0
+                    var sc = g.FirstOrDefault(s => s.SubjectId == sub.SubjectId);
+                    if (sc == null || sc.IsAbsent)
+                        return new { SubjectId = sub.SubjectId, ScoreValue = (decimal?)null };
+                    return new { SubjectId = sub.SubjectId, ScoreValue = (decimal?)sc.ScoreValue };
                 }).ToList()
             })
             .OrderByDescending(x => x.TotalScore)
@@ -610,7 +615,7 @@ public class ScoreController : Controller
                     SubjectId = s1.SubjectId,
                     NewScore = s1.ScoreValue,
                     OldScore = oldVal,
-                    Diff = Math.Round(s1.ScoreValue - oldVal, 1)
+                    Diff = s1.ScoreValue.HasValue ? Math.Round(s1.ScoreValue.Value - oldVal, 1) : (decimal?)null
                 };
             }).ToList();
 
@@ -672,7 +677,7 @@ public class ScoreController : Controller
         if (scores.Count == 0)
             return Json(new { success = true, subjects, students = new List<object>() });
 
-        // 按学生分组计算
+        // 按学生分组计算（排除缺考学生）
         var studentGroups = scores
             .GroupBy(sc => new { sc.StudentId, StudentNo = sc.Student?.StudentNo ?? "", StudentName = sc.Student?.Name ?? "", GradeLevelId = sc.GradeLevelId })
             .Select(g => new
@@ -682,11 +687,13 @@ public class ScoreController : Controller
                 g.Key.StudentName,
                 g.Key.GradeLevelId,
                 SubjectCount = subjects.Count,
-                TotalScore = g.Sum(sc => sc.ScoreValue),
+                PresentSubjectCount = g.Count(sc => !sc.IsAbsent),
+                TotalScore = g.Where(sc => !sc.IsAbsent).Sum(sc => sc.ScoreValue),
                 Scores = subjects.Select(sub => new
                 {
                     SubjectId = sub.SubjectId,
-                    ScoreValue = g.Where(sc => sc.SubjectId == sub.SubjectId).Select(sc => (decimal?)sc.ScoreValue).FirstOrDefault() ?? 0
+                    ScoreValue = g.Where(sc => sc.SubjectId == sub.SubjectId && !sc.IsAbsent).Select(sc => (decimal?)sc.ScoreValue).FirstOrDefault(),
+                    IsAbsent = g.Any(sc => sc.SubjectId == sub.SubjectId && sc.IsAbsent)
                 }).ToList()
             })
             .ToList();
@@ -716,7 +723,7 @@ public class ScoreController : Controller
                 x.StudentNo,
                 x.StudentName,
                 x.TotalScore,
-                AvgScore = x.SubjectCount > 0 ? Math.Round((double)x.TotalScore / x.SubjectCount, 1) : 0,
+                AvgScore = x.PresentSubjectCount > 0 ? Math.Round((double)x.TotalScore / x.PresentSubjectCount, 1) : 0,
                 GradeRank = gr,
                 x.Scores
             };
@@ -873,9 +880,9 @@ public class ScoreController : Controller
                 .Include(sc => sc.Subject)
                 .ToListAsync();
 
-            // 批量查出这几场考试全部学生的总分（用于排名）
+            // 批量查出这几场考试全部学生的总分（用于排名，排除缺考）
             var allTotalScores = await _db.Scores
-                .Where(sc => examIds.Contains(sc.ExamScheduleId))
+                .Where(sc => examIds.Contains(sc.ExamScheduleId) && !sc.IsAbsent)
                 .GroupBy(sc => new { sc.ExamScheduleId, sc.StudentId })
                 .Select(g => new
                 {
@@ -887,9 +894,9 @@ public class ScoreController : Controller
                 })
                 .ToListAsync();
 
-            // 批量查出这几场考试各科的极值
+            // 批量查出这几场考试各科的极值（排除缺考）
             var allExamScoresByExam = await _db.Scores
-                .Where(sc => examIds.Contains(sc.ExamScheduleId))
+                .Where(sc => examIds.Contains(sc.ExamScheduleId) && !sc.IsAbsent)
                 .GroupBy(sc => sc.ExamScheduleId)
                 .ToDictionaryAsync(g => g.Key, g => g.ToList());
 
@@ -901,8 +908,9 @@ public class ScoreController : Controller
                 var scores = studentScores.Where(sc => sc.ExamScheduleId == examId).ToList();
                 if (scores.Count == 0) continue;
 
-                var totalScore = scores.Sum(sc => sc.ScoreValue);
-                var avgScore = Math.Round((double)totalScore / scores.Count, 1);
+                var presentScores = scores.Where(sc => !sc.IsAbsent).ToList();
+                var totalScore = presentScores.Sum(sc => sc.ScoreValue);
+                var avgScore = presentScores.Count > 0 ? Math.Round((double)totalScore / presentScores.Count, 1) : 0;
 
                 // 该场考试所有学生总分列表
                 var examTotalScores = allTotalScores.Where(t => t.ExamScheduleId == examId).ToList();
@@ -1042,7 +1050,7 @@ public class ScoreController : Controller
 
         var grouped = scores
             .GroupBy(sc => sc.Student)
-            .OrderByDescending(g => g.Sum(sc => sc.ScoreValue))
+            .OrderByDescending(g => g.Where(sc => !sc.IsAbsent).Sum(sc => sc.ScoreValue))
             .Select((g, idx) => new
             {
                 Rank = idx + 1,
@@ -1576,19 +1584,21 @@ public class ScoreController : Controller
 
             foreach (var sub in subjects)
             {
-                var classSub = allScores.Where(sc => sc.SubjectId == sub.SubjectId && sc.ClassInfoId == classInfoId).ToList();
+                var classSub = allScores.Where(sc => sc.SubjectId == sub.SubjectId && sc.ClassInfoId == classInfoId && !sc.IsAbsent).ToList();
                 if (classSub.Count > 0)
                     classStats[sub.SubjectId] = (Math.Round(classSub.Average(sc => (double)sc.ScoreValue), 1), (double)classSub.Max(sc => sc.ScoreValue), (double)classSub.Min(sc => sc.ScoreValue));
 
-                var gradeSub = allScores.Where(sc => sc.SubjectId == sub.SubjectId && sc.GradeLevelId == gradeLevelId).ToList();
+                var gradeSub = allScores.Where(sc => sc.SubjectId == sub.SubjectId && sc.GradeLevelId == gradeLevelId && !sc.IsAbsent).ToList();
                 if (gradeSub.Count > 0)
                     gradeStats[sub.SubjectId] = (Math.Round(gradeSub.Average(sc => (double)sc.ScoreValue), 1), (double)gradeSub.Max(sc => sc.ScoreValue), (double)gradeSub.Min(sc => sc.ScoreValue));
             }
 
             // 7. 计算总分和排名
-            var studentTotal = currentScores.Sum(sc => (double)sc.ScoreValue);
+            var presentScores = currentScores.Where(sc => !sc.IsAbsent).ToList();
+            var studentTotal = presentScores.Sum(sc => (double)sc.ScoreValue);
 
             var allTotals = allScores
+                .Where(sc => !sc.IsAbsent)
                 .GroupBy(sc => sc.StudentId)
                 .Select(g => new { StudentId = g.Key, Total = g.Sum(sc => (double)sc.ScoreValue), ClassInfoId = g.Min(sc => sc.ClassInfoId), GradeLevelId = g.Min(sc => sc.GradeLevelId) })
                 .ToList();
@@ -1631,13 +1641,14 @@ public class ScoreController : Controller
                 .Select(g =>
                 {
                     var ex = recentExams.GetValueOrDefault(g.Key);
-                    var total = g.Sum(sc => (double)sc.ScoreValue);
+                    var present = g.Where(sc => !sc.IsAbsent).ToList();
+                    var total = present.Sum(sc => (double)sc.ScoreValue);
                     return new
                     {
                         ExamName = ex?.Name ?? "未知",
                         ExamDate = ex?.ExamDate.ToString("yyyy-MM-dd") ?? "",
                         TotalScore = total,
-                        AvgScore = g.Count() > 0 ? Math.Round(g.Average(sc => (double)sc.ScoreValue), 1) : 0
+                        AvgScore = present.Count > 0 ? Math.Round(present.Average(sc => (double)sc.ScoreValue), 1) : 0
                     };
                 })
                 .ToList();
@@ -1927,18 +1938,20 @@ public class ScoreController : Controller
 
         foreach (var sub in subjects)
         {
-            var classSub = allScores.Where(sc => sc.SubjectId == sub.SubjectId && sc.ClassInfoId == classInfoId).ToList();
+            var classSub = allScores.Where(sc => sc.SubjectId == sub.SubjectId && sc.ClassInfoId == classInfoId && !sc.IsAbsent).ToList();
             if (classSub.Count > 0)
                 classStats[sub.SubjectId] = (Math.Round(classSub.Average(sc => (double)sc.ScoreValue), 1), (double)classSub.Max(sc => sc.ScoreValue), (double)classSub.Min(sc => sc.ScoreValue));
 
-            var gradeSub = allScores.Where(sc => sc.SubjectId == sub.SubjectId && sc.GradeLevelId == gradeLevelId).ToList();
+            var gradeSub = allScores.Where(sc => sc.SubjectId == sub.SubjectId && sc.GradeLevelId == gradeLevelId && !sc.IsAbsent).ToList();
             if (gradeSub.Count > 0)
                 gradeStats[sub.SubjectId] = (Math.Round(gradeSub.Average(sc => (double)sc.ScoreValue), 1), (double)gradeSub.Max(sc => sc.ScoreValue), (double)gradeSub.Min(sc => sc.ScoreValue));
         }
 
-        var studentTotal = currentScores.Sum(sc => (double)sc.ScoreValue);
+        var presentScores = currentScores.Where(sc => !sc.IsAbsent).ToList();
+        var studentTotal = presentScores.Sum(sc => (double)sc.ScoreValue);
 
         var allTotals = allScores
+            .Where(sc => !sc.IsAbsent)
             .GroupBy(sc => sc.StudentId)
             .Select(g => new { StudentId = g.Key, Total = g.Sum(sc => (double)sc.ScoreValue), ClassInfoId = g.Min(sc => sc.ClassInfoId), GradeLevelId = g.Min(sc => sc.GradeLevelId) })
             .ToList();
@@ -1980,13 +1993,14 @@ public class ScoreController : Controller
             .Select(g =>
             {
                 var ex = recentExams.GetValueOrDefault(g.Key);
-                var total = g.Sum(sc => (double)sc.ScoreValue);
+                var present = g.Where(sc => !sc.IsAbsent).ToList();
+                var total = present.Sum(sc => (double)sc.ScoreValue);
                 return new
                 {
                     ExamName = ex?.Name ?? "未知",
                     ExamDate = ex?.ExamDate.ToString("yyyy-MM-dd") ?? "",
                     TotalScore = total,
-                    AvgScore = g.Count() > 0 ? Math.Round(g.Average(sc => (double)sc.ScoreValue), 1) : 0
+                    AvgScore = present.Count > 0 ? Math.Round(present.Average(sc => (double)sc.ScoreValue), 1) : 0
                 };
             })
             .ToList();
@@ -2491,7 +2505,7 @@ public class ScoreController : Controller
 
         foreach (var es in examSubjects)
         {
-            var subScores = allScores.Where(sc => sc.SubjectId == es.SubjectId).Select(sc => (double)sc.ScoreValue).ToList();
+            var subScores = allScores.Where(sc => sc.SubjectId == es.SubjectId && !sc.IsAbsent).Select(sc => (double)sc.ScoreValue).ToList();
             if (subScores.Count == 0) continue;
             var avg = subScores.Average();
             var max = subScores.Max();
@@ -2509,7 +2523,7 @@ public class ScoreController : Controller
 
         // 分数段分布
         sb.AppendLine("## 分数段分布（总分）");
-        var totalScores = allScores.GroupBy(sc => sc.StudentId).Select(g => g.Sum(sc => (double)sc.ScoreValue)).OrderByDescending(t => t).ToList();
+        var totalScores = allScores.Where(sc => !sc.IsAbsent).GroupBy(sc => sc.StudentId).Select(g => g.Sum(sc => (double)sc.ScoreValue)).OrderByDescending(t => t).ToList();
         var totalFull = examSubjects.Sum(es => (double)(es.FullScore ?? es.Subject?.FullScore ?? 100));
 
         sb.AppendLine($"| 分数段 | 人数 | 占比 |");
@@ -2530,7 +2544,7 @@ public class ScoreController : Controller
         var top5 = totalScores.Take(5).ToList();
         foreach (var t in totalScores.Select((total, idx) => new { total, idx }).Take(5))
         {
-            var sid = allScores.GroupBy(sc => sc.StudentId).OrderByDescending(g => g.Sum(sc => (double)sc.ScoreValue)).ElementAt(t.idx).Key;
+            var sid = allScores.Where(sc => !sc.IsAbsent).GroupBy(sc => sc.StudentId).OrderByDescending(g => g.Sum(sc => (double)sc.ScoreValue)).ElementAt(t.idx).Key;
             var stu = students.FirstOrDefault(s => s.StudentID == sid);
             sb.AppendLine($"| {t.idx + 1} | {stu?.Name ?? ""} | {t.total:F1} |");
         }
@@ -2544,7 +2558,7 @@ public class ScoreController : Controller
         var rankedAsc = totalScores.OrderBy(t => t).ToList();
         foreach (var t in rankedAsc.Take(5).Select((total, idx) => new { total, idx }))
         {
-            var sid = allScores.GroupBy(sc => sc.StudentId).OrderBy(g => g.Sum(sc => (double)sc.ScoreValue)).ElementAt(t.idx).Key;
+            var sid = allScores.Where(sc => !sc.IsAbsent).GroupBy(sc => sc.StudentId).OrderBy(g => g.Sum(sc => (double)sc.ScoreValue)).ElementAt(t.idx).Key;
             var stu = students.FirstOrDefault(s => s.StudentID == sid);
             sb.AppendLine($"| {studentIds.Count - t.idx} | {stu?.Name ?? ""} | {t.total:F1} |");
         }
@@ -2713,6 +2727,170 @@ public class ScoreController : Controller
         sb.AppendLine("- 语言要专业客观，给出建设性意见");
 
         return sb.ToString();
+    }
+
+    // ======================== 成绩报告单 ========================
+
+    [HttpGet]
+    public async Task<IActionResult> ReportCard()
+    {
+        var exams = await _db.ExamSchedules
+            .OrderByDescending(e => e.ExamDate)
+            .Select(e => new { e.Id, e.Name, e.ExamType, e.ExamDate, e.Status, e.Grades })
+            .ToListAsync();
+        ViewBag.ExamSchedules = exams;
+        return View();
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> GetReportCardData(int examScheduleId, string? grade = null, string? className = null, string? studentName = null)
+    {
+        try
+        {
+            var exam = await _db.ExamSchedules.FindAsync(examScheduleId);
+            if (exam == null)
+                return Json(new { success = false, message = "考试安排不存在" });
+
+            // 获取该考试的科目
+            var subjects = await _db.ExamSubjects
+                .Where(es => es.ExamScheduleId == examScheduleId)
+                .Include(es => es.Subject)
+                .OrderBy(es => es.Subject!.SortOrder)
+                .ThenBy(es => es.Subject!.Name)
+                .Select(es => new { es.SubjectId, SubjectName = es.Subject!.Name ?? "", FullScore = es.FullScore ?? es.Subject!.FullScore })
+                .ToListAsync();
+
+            subjects = subjects.GroupBy(s => s.SubjectName).Select(g => g.First()).ToList();
+
+            if (subjects.Count == 0)
+                return Json(new { success = false, message = "该考试尚未关联科目" });
+
+            // 构建学生查询
+            var gradeList = (exam.Grades ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+            IQueryable<Student> studentQuery = _db.Students.Where(s => s.Status == "在读");
+            if (gradeList.Count > 0)
+                studentQuery = studentQuery.Where(s => gradeList.Contains(s.Grade ?? ""));
+
+            if (!string.IsNullOrEmpty(grade))
+                studentQuery = studentQuery.Where(s => s.Grade == grade);
+            if (!string.IsNullOrEmpty(className))
+                studentQuery = studentQuery.Where(s => s.ClassName == className);
+            if (!string.IsNullOrEmpty(studentName))
+                studentQuery = studentQuery.Where(s => s.Name!.Contains(studentName));
+
+            var students = await studentQuery
+                .OrderBy(s => s.Grade).ThenBy(s => s.ClassName).ThenBy(s => s.Name)
+                .Select(s => new { s.StudentID, s.StudentNo, s.Name, s.Grade, s.ClassName })
+                .ToListAsync();
+
+            if (students.Count == 0)
+                return Json(new { success = false, message = "未找到匹配的学生" });
+
+            // 获取成绩
+            var studentIds = students.Select(s => s.StudentID).ToList();
+            var scores = await _db.Scores
+                .Where(sc => sc.ExamScheduleId == examScheduleId && studentIds.Contains(sc.StudentId))
+                .ToListAsync();
+
+            // 构建报告卡数据
+            var subjectFullScores = subjects.ToDictionary(s => s.SubjectId, s => s.FullScore);
+            var subjectNames = subjects.ToDictionary(s => s.SubjectId, s => s.SubjectName);
+
+            var reportCards = students.Select(student =>
+            {
+                var studentScores = scores.Where(sc => sc.StudentId == student.StudentID).ToList();
+                var subjectData = subjects.Select(sub =>
+                {
+                    var sc = studentScores.FirstOrDefault(s => s.SubjectId == sub.SubjectId);
+                    decimal? scoreVal = null;
+                    bool absent = false;
+                    if (sc != null)
+                    {
+                        scoreVal = sc.ScoreValue;
+                        absent = sc.IsAbsent;
+                    }
+                    return new
+                    {
+                        SubjectName = sub.SubjectName,
+                        ScoreValue = absent ? (decimal?)null : scoreVal,
+                        FullScore = sub.FullScore,
+                        IsAbsent = absent
+                    };
+                }).ToList();
+
+                // 计算总分和总满分
+                decimal totalScore = 0;
+                decimal totalFullScore = 0;
+                bool anyAbsent = false;
+                foreach (var sd in subjectData)
+                {
+                    if (sd.IsAbsent) { anyAbsent = true; continue; }
+                    if (sd.ScoreValue.HasValue)
+                    {
+                        totalScore += sd.ScoreValue.Value;
+                        totalFullScore += sd.FullScore;
+                    }
+                }
+
+                // 根据总分计算总体等级
+                string overallLevel = "";
+                if (anyAbsent)
+                {
+                    overallLevel = "缺考";
+                }
+                else if (totalFullScore > 0)
+                {
+                    var pct = (double)totalScore / (double)totalFullScore;
+                    if (pct >= 0.9) overallLevel = "A (优秀)";
+                    else if (pct >= 0.8) overallLevel = "B (良好)";
+                    else if (pct >= 0.6) overallLevel = "C (及格)";
+                    else overallLevel = "D (不及格)";
+                }
+
+                return new
+                {
+                    StudentId = student.StudentID,
+                    StudentNo = student.StudentNo,
+                    Name = student.Name,
+                    Grade = student.Grade,
+                    ClassName = student.ClassName,
+                    Subjects = subjectData,
+                    TotalScore = totalScore,
+                    TotalFullScore = totalFullScore,
+                    OverallLevel = overallLevel,
+                    HasAbsent = anyAbsent
+                };
+            }).ToList();
+
+            return Json(new { success = true, data = reportCards });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { success = false, message = $"加载数据失败: {ex.Message}" });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> GetClassesByGrade(string grade)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(grade))
+                return Json(new { success = false, classes = new List<string>() });
+
+            var classes = await _db.Students
+                .Where(s => s.Status == "在读" && s.Grade == grade && s.ClassName != null)
+                .Select(s => s.ClassName!)
+                .Distinct()
+                .OrderBy(c => c)
+                .ToListAsync();
+
+            return Json(new { success = true, classes });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { success = false, message = ex.Message, classes = new List<string>() });
+        }
     }
 }
 

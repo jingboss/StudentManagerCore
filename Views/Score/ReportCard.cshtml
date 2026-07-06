@@ -1,0 +1,372 @@
+@using StudentManagerCore.Models
+@{
+    ViewData["Title"] = "成绩报告单";
+    var exams = ViewBag.ExamSchedules as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+}
+<style>
+    .report-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 16px;
+    }
+    .report-card {
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 16px;
+        background: #fff;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+        transition: box-shadow 0.2s;
+    }
+    .report-card:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .report-card .student-header {
+        border-bottom: 2px solid #0d6efd;
+        padding-bottom: 8px;
+        margin-bottom: 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .report-card .student-header .name {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #0d6efd;
+    }
+    .report-card .student-header .info {
+        font-size: 0.85rem;
+        color: #6c757d;
+    }
+    .report-card .subject-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 4px 0;
+        border-bottom: 1px dashed #f0f0f0;
+        font-size: 0.9rem;
+    }
+    .report-card .subject-row:last-child {
+        border-bottom: none;
+    }
+    .report-card .subject-row .sub-name {
+        font-weight: 500;
+        color: #495057;
+        min-width: 80px;
+    }
+    .report-card .subject-row .sub-score {
+        font-weight: 600;
+        color: #212529;
+    }
+    .report-card .subject-row .sub-level {
+        padding: 1px 8px;
+        border-radius: 10px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        min-width: 60px;
+        text-align: center;
+    }
+    .level-A { background: #d1e7dd; color: #0f5132; }
+    .level-B { background: #cff4fc; color: #055160; }
+    .level-C { background: #fff3cd; color: #664d03; }
+    .level-D { background: #f8d7da; color: #842029; }
+    .level-absent { background: #e9ecef; color: #6c757d; }
+    .card-loading {
+        opacity: 0.6;
+        pointer-events: none;
+    }
+</style>
+
+<div class="container-fluid py-3">
+    <div class="d-flex align-items-center mb-3">
+        <h4 class="mb-0"><i class="bi bi-file-text me-2"></i>成绩报告单</h4>
+        <span class="text-danger fw-bold small ms-3">成绩报告单仅作为教学参考依据，正式数据以教导处统一发布内容为准。</span>
+    </div>
+
+    @Html.AntiForgeryToken()
+
+    <!-- 筛选条件 -->
+    <div class="card mb-3">
+        <div class="card-body py-2">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label small">选择考试</label>
+                    <select id="examSelect" class="form-select" onchange="onExamChange()">
+                        <option value="">-- 请选择考试 --</option>
+                        @foreach (var exam in exams)
+                        {
+                            <option value="@exam.Id" data-grades="@exam.Grades">
+                                @exam.Name（@exam.ExamType · @(((DateTime)exam.ExamDate).ToString("yyyy-MM-dd"))）
+                            </option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small">年级</label>
+                    <select id="gradeFilter" class="form-select" onchange="onGradeChange()" disabled>
+                        <option value="">全部年级</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small">班级</label>
+                    <select id="classFilter" class="form-select" onchange="onClassChange()" disabled>
+                        <option value="">全部班级</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small">学生姓名</label>
+                    <input id="nameFilter" class="form-control" placeholder="输入姓名搜索" disabled />
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label small">&nbsp;</label>
+                    <button id="generateBtn" class="btn btn-primary w-100" onclick="loadReportCards()" disabled>
+                        <i class="bi bi-file-earmark-pdf"></i> 生成
+                    </button>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small">&nbsp;</label>
+                    <div>
+                        <span id="studentCount" class="badge bg-info fs-6" style="display:none;"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 报告单网格 -->
+    <div id="reportContainer" class="py-2">
+        <div class="text-center text-muted py-5">
+            <i class="bi bi-file-text" style="font-size:3rem;"></i>
+            <p class="mt-2">请选择考试和年级后，点击"生成"按钮查看成绩报告单</p>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    let currentData = [];
+
+    function onExamChange() {
+        const examSelect = document.getElementById('examSelect');
+        const gradeFilter = document.getElementById('gradeFilter');
+        const classFilter = document.getElementById('classFilter');
+        const nameFilter = document.getElementById('nameFilter');
+        const generateBtn = document.getElementById('generateBtn');
+
+        gradeFilter.innerHTML = '<option value="">全部年级</option>';
+        classFilter.innerHTML = '<option value="">全部班级</option>';
+        gradeFilter.disabled = true;
+        classFilter.disabled = true;
+        nameFilter.disabled = true;
+        nameFilter.value = '';
+        generateBtn.disabled = true;
+        document.getElementById('reportContainer').innerHTML =
+            '<div class="text-center text-muted py-5"><i class="bi bi-file-text" style="font-size:3rem;"></i><p class="mt-2">请选择考试和年级后，点击"生成"按钮查看成绩报告单</p></div>';
+        document.getElementById('studentCount').style.display = 'none';
+        currentData = [];
+
+        const val = examSelect.value;
+        if (!val) return;
+
+        const option = examSelect.options[examSelect.selectedIndex];
+        const grades = (option.getAttribute('data-grades') || '').split(',').filter(g => g.trim());
+
+        if (grades.length > 0) {
+            grades.forEach(g => {
+                const opt = document.createElement('option');
+                opt.value = g.trim();
+                opt.textContent = g.trim();
+                gradeFilter.appendChild(opt);
+            });
+            gradeFilter.disabled = false;
+        }
+        classFilter.disabled = false;
+        nameFilter.disabled = true;  // 选班级后才启用姓名
+        generateBtn.disabled = true; // 选班级后才启用生成
+    }
+
+    function onGradeChange() {
+        // 年级变更时，清除报告并加载班级列表
+        const classFilter = document.getElementById('classFilter');
+        classFilter.innerHTML = '<option value="">全部班级</option>';
+
+        document.getElementById('reportContainer').innerHTML =
+            '<div class="text-center text-muted py-5"><i class="bi bi-file-text" style="font-size:3rem;"></i><p class="mt-2">筛选条件已变更，请重新点击"生成"按钮</p></div>';
+        document.getElementById('studentCount').style.display = 'none';
+        currentData = [];
+
+        const grade = document.getElementById('gradeFilter').value;
+        if (!grade) return;
+
+        const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+        const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+        if (token) headers['RequestVerificationToken'] = token;
+
+        const params = new URLSearchParams();
+        params.append('grade', grade);
+
+        fetch('/Score/GetClassesByGrade', {
+            method: 'POST',
+            headers: headers,
+            body: params
+        })
+        .then(r => r.json())
+        .then(res => {
+            if (res.success && res.classes) {
+                res.classes.forEach(c => {
+                    const opt = document.createElement('option');
+                    opt.value = c;
+                    opt.textContent = c;
+                    classFilter.appendChild(opt);
+                });
+            }
+        })
+        .catch(() => {});
+    }
+
+    function onClassChange() {
+        // 选择班级后，启用姓名筛选和生成按钮
+        const nameFilter = document.getElementById('nameFilter');
+        const generateBtn = document.getElementById('generateBtn');
+        nameFilter.disabled = false;
+        generateBtn.disabled = false;
+
+        // 清除报告，等待用户点击生成
+        document.getElementById('reportContainer').innerHTML =
+            '<div class="text-center text-muted py-5"><i class="bi bi-file-text" style="font-size:3rem;"></i><p class="mt-2">筛选条件已变更，请重新点击"生成"按钮</p></div>';
+        document.getElementById('studentCount').style.display = 'none';
+        currentData = [];
+    }
+
+    function onFilterChange() {
+        // 科目/班级改变时清除报告，等用户点生成
+        document.getElementById('reportContainer').innerHTML =
+            '<div class="text-center text-muted py-5"><i class="bi bi-file-text" style="font-size:3rem;"></i><p class="mt-2">筛选条件已变更，请重新点击"生成"按钮</p></div>';
+        document.getElementById('studentCount').style.display = 'none';
+        currentData = [];
+    }
+
+    function loadReportCards() {
+        const examId = document.getElementById('examSelect').value;
+        const grade = document.getElementById('gradeFilter').value;
+        const className = document.getElementById('classFilter').value;
+        const studentName = document.getElementById('nameFilter').value.trim();
+
+        if (!examId) {
+            alert('请先选择考试');
+            return;
+        }
+
+        const container = document.getElementById('reportContainer');
+        const generateBtn = document.getElementById('generateBtn');
+        generateBtn.disabled = true;
+        generateBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> 生成中...';
+        container.classList.add('card-loading');
+
+        const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+        const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+        if (token) headers['RequestVerificationToken'] = token;
+
+        const params = new URLSearchParams();
+        params.append('examScheduleId', examId);
+        if (grade) params.append('grade', grade);
+        if (className) params.append('className', className);
+        if (studentName) params.append('studentName', studentName);
+
+        fetch('/Score/GetReportCardData', {
+            method: 'POST',
+            headers: headers,
+            body: params
+        })
+        .then(r => r.json())
+        .then(res => {
+            generateBtn.disabled = false;
+            generateBtn.innerHTML = '<i class="bi bi-file-earmark-pdf"></i> 生成';
+            container.classList.remove('card-loading');
+
+            if (!res.success) {
+                container.innerHTML = `<div class="alert alert-warning">${res.message}</div>`;
+                document.getElementById('studentCount').style.display = 'none';
+                return;
+            }
+
+            currentData = res.data;
+            renderReportCards(res.data);
+        })
+        .catch(err => {
+            generateBtn.disabled = false;
+            generateBtn.innerHTML = '<i class="bi bi-file-earmark-pdf"></i> 生成';
+            container.classList.remove('card-loading');
+            container.innerHTML = `<div class="alert alert-danger">请求失败: ${err.message}</div>`;
+        });
+    }
+
+    function getLevelClass(level) {
+        if (level.includes('优秀')) return 'level-A';
+        if (level.includes('良好')) return 'level-B';
+        if (level.includes('及格')) return 'level-C';
+        if (level.includes('不及格')) return 'level-D';
+        if (level === '缺考') return 'level-absent';
+        return '';
+    }
+
+    function renderReportCards(data) {
+        const container = document.getElementById('reportContainer');
+        const countBadge = document.getElementById('studentCount');
+
+        if (!data || data.length === 0) {
+            container.innerHTML = '<div class="alert alert-info">未找到匹配的学生数据</div>';
+            countBadge.style.display = 'none';
+            return;
+        }
+
+        countBadge.style.display = 'inline';
+        countBadge.textContent = `共 ${data.length} 名学生`;
+
+        let html = '<div class="report-grid">';
+        data.forEach(student => {
+            html += '<div class="report-card">';
+            html += '<div class="student-header">';
+            html += `<span class="name">${escapeHtml(student.name || '')}</span>`;
+            html += `<span class="info">${escapeHtml(student.grade || '')} · ${escapeHtml(student.className || '')}</span>`;
+            html += '</div>';
+            html += `<div class="mb-2 small text-muted">学号：${escapeHtml(student.studentNo || '')}</div>`;
+
+            // 各科目：只显示科目名和分数
+            (student.subjects || []).forEach(sub => {
+                const scoreText = sub.isAbsent ? '缺考' : (sub.scoreValue != null ? sub.scoreValue.toString() : '');
+                html += '<div class="subject-row">';
+                html += `<span class="sub-name">${escapeHtml(sub.subjectName)}</span>`;
+                html += `<span class="sub-score">${scoreText}${!sub.isAbsent && sub.scoreValue != null ? ' / ' + sub.fullScore : ''}</span>`;
+                html += '</div>';
+            });
+
+            // 总分、等级、免责声明
+            html += '<div class="subject-row" style="border-top:2px solid #0d6efd;padding-top:8px;margin-top:6px;">';
+            html += '<span class="sub-name fw-bold text-primary">总分</span>';
+            html += `<span class="sub-score fw-bold text-primary">${student.totalScore} / ${student.totalFullScore}</span>`;
+            html += '</div>';
+            const levelText = student.hasAbsent ? '缺考' : student.overallLevel;
+            const levelClass = student.hasAbsent ? 'level-absent' : getLevelClass(levelText);
+            html += '<div class="subject-row">';
+            html += '<span class="sub-name fw-bold">等级</span>';
+            html += `<span class="sub-level ${levelClass}">${escapeHtml(levelText)}</span>`;
+            html += '</div>';
+            html += '<div class="mt-2 text-danger fw-bold small" style="border-top:1px dashed #f0f0f0;padding-top:6px;">';
+            html += '友情提示：数据仅供参考、请以教务处发布为准！';
+            html += '</div>';
+
+            html += '</div>';
+        });
+        html += '</div>';
+
+        container.innerHTML = html;
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+</script>
+}

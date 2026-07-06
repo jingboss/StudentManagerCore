@@ -101,6 +101,7 @@
                                 <li><hr class="dropdown-divider"></li>
                                 @if (isAdmin || hasPerm("score_input")) { <li><a class="dropdown-item" asp-controller="Score" asp-action="Entry"><i class="bi bi-pencil-square me-2"></i>成绩录入</a></li> }
                                 @if (isAdmin || hasPerm("score_view")) { <li><a class="dropdown-item" asp-controller="Score" asp-action="ScoreView"><i class="bi bi-search me-2"></i>成绩分析</a></li> }
+                                @if (isAdmin || hasPerm("score_report")) { <li><a class="dropdown-item" asp-controller="Score" asp-action="ReportCard"><i class="bi bi-file-text me-2"></i>成绩报告单</a></li> }
                                 @if (isAdmin || hasPerm("score_import")) { <li><a class="dropdown-item" asp-controller="Score" asp-action="Import"><i class="bi bi-upload me-2"></i>批量导入</a></li> }
                                 <li><hr class="dropdown-divider"></li>
                                 @if (isAdmin || hasPerm("ai_settings")) { <li><a class="dropdown-item" href="javascript:void(0)" id="aiSettingsMenuItem"><i class="bi bi-gear-wide-connected me-2"></i>AI设置</a></li> }

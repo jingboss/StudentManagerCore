@@ -159,6 +159,12 @@
                         </div>
                         <div class="col-md-6 mb-1">
                             <div class="form-check">
+                                <input type="checkbox" class="form-check-input perm-cb" data-perm="score_report" id="perm_score_report" />
+                                <label class="form-check-label" for="perm_score_report">📋 成绩报告单</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-1">
+                            <div class="form-check">
                                 <input type="checkbox" class="form-check-input perm-cb" data-perm="score_import" id="perm_score_import" />
                                 <label class="form-check-label" for="perm_score_import">📋 批量导入</label>
                             </div>
@@ -258,6 +264,7 @@
                 examDelete: checkedPerms.indexOf('exam_delete') >= 0,
                 scoreInput: checkedPerms.indexOf('score_input') >= 0,
                 scoreView: checkedPerms.indexOf('score_view') >= 0,
+                scoreReport: checkedPerms.indexOf('score_report') >= 0,
                 scoreImport: checkedPerms.indexOf('score_import') >= 0,
                 aiSettings: checkedPerms.indexOf('ai_settings') >= 0,
                 subjectManage: checkedPerms.indexOf('subject_manage') >= 0,
@@ -289,7 +296,7 @@
                         var summary = '';
                         if (checkedPerms.some(function (p) { return ['student_view','student_add','student_edit','student_delete'].indexOf(p) >= 0; })) summary += '学生、';
                         if (checkedPerms.some(function (p) { return ['teacher_view','teacher_add','teacher_edit','teacher_delete'].indexOf(p) >= 0; })) summary += '教职工、';
-                        if (checkedPerms.some(function (p) { return ['exam_add','exam_edit','exam_delete','score_input','score_view','score_import','ai_settings','subject_manage'].indexOf(p) >= 0; })) summary += '成绩、';
+                        if (checkedPerms.some(function (p) { return ['exam_add','exam_edit','exam_delete','score_input','score_view','score_report','score_import','ai_settings','subject_manage'].indexOf(p) >= 0; })) summary += '成绩、';
                         if (checkedPerms.some(function (p) { return ['grade_add','grade_edit','grade_delete','grade_set_teacher'].indexOf(p) >= 0; })) summary += '班级、';
                         summary = summary.replace(/、$/, '');
                         $tr.find('.perm-summary').text(summary || '无权限');
