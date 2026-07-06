@@ -2289,18 +2289,30 @@ public class ScoreController : Controller
                 var admin = await _db.Admins.FindAsync(adminId.Value);
                 if (admin != null && !IsAdmin())
                 {
-                    // 只显示同年级的班级（admin.Grade 存的是 GradeLevel.CurrentGradeName 格式，如 "小学2024级"）
+                    var filteredList = classList.ToList();
+
+                    // 先按年级过滤（admin.Grade 存的是 GradeLevel.CurrentGradeName 格式，如 "小学2024级"）
                     if (!string.IsNullOrEmpty(admin.Grade))
                     {
-                        classList = classList
+                        filteredList = filteredList
                             .Where(c => c.GradeLevel != null &&
                                 c.GradeLevel.CurrentGradeName == admin.Grade)
                             .ToList();
                     }
-                    // 如果是班主任，只显示自己管理的班级
+                    // 如果是班主任，进一步按班级名称过滤
                     if (!string.IsNullOrEmpty(admin.ClassName) && admin.PrimaryRole == "班主任")
                     {
-                        classList = classList.Where(c => c.ClassName == admin.ClassName).ToList();
+                        var classFiltered = filteredList.Where(c => c.ClassName == admin.ClassName).ToList();
+                        if (classFiltered.Any())
+                        {
+                            filteredList = classFiltered;
+                        }
+                    }
+
+                    // 只有当过滤后有结果时才应用过滤，否则保留全部班级（避免"暂无班级数据"）
+                    if (filteredList.Any())
+                    {
+                        classList = filteredList;
                     }
                 }
             }
