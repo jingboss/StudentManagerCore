@@ -2,6 +2,9 @@
 @{
     ViewData["Title"] = "成绩报告单";
     var exams = ViewBag.ExamSchedules as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+    var teacherGrade = ViewBag.TeacherGrade as string ?? "";
+    var teacherClass = ViewBag.TeacherClass as string ?? "";
+    bool isRestricted = !string.IsNullOrEmpty(teacherClass);
 }
 <style>
     .report-grid {
@@ -102,14 +105,28 @@
                 </div>
                 <div class="col-md-2">
                     <label class="form-label small">年级</label>
-                    <select id="gradeFilter" class="form-select" onchange="onGradeChange()" disabled>
-                        <option value="">全部年级</option>
+                    <select id="gradeFilter" class="form-select" onchange="onGradeChange()" @(isRestricted ? "disabled" : "")>
+                        @if (isRestricted)
+                        {
+                            <option value="@teacherGrade" selected>@teacherGrade</option>
+                        }
+                        else
+                        {
+                            <option value="">全部年级</option>
+                        }
                     </select>
                 </div>
                 <div class="col-md-2">
                     <label class="form-label small">班级</label>
-                    <select id="classFilter" class="form-select" onchange="onClassChange()" disabled>
-                        <option value="">全部班级</option>
+                    <select id="classFilter" class="form-select" onchange="onClassChange()" disabled data-default="@teacherClass">
+                        @if (isRestricted)
+                        {
+                            <option value="@teacherClass" selected>@teacherClass</option>
+                        }
+                        else
+                        {
+                            <option value="">全部班级</option>
+                        }
                     </select>
                 </div>
                 <div class="col-md-2">
@@ -144,6 +161,7 @@
 @section Scripts {
 <script>
     let currentData = [];
+    let isRestricted = @(isRestricted ? "true" : "false");
 
     function onExamChange() {
         const examSelect = document.getElementById('examSelect');
@@ -152,13 +170,20 @@
         const nameFilter = document.getElementById('nameFilter');
         const generateBtn = document.getElementById('generateBtn');
 
-        gradeFilter.innerHTML = '<option value="">全部年级</option>';
-        classFilter.innerHTML = '<option value="">全部班级</option>';
-        gradeFilter.disabled = true;
-        classFilter.disabled = true;
-        nameFilter.disabled = true;
-        nameFilter.value = '';
-        generateBtn.disabled = true;
+        if (!isRestricted) {
+            gradeFilter.innerHTML = '<option value="">全部年级</option>';
+            classFilter.innerHTML = '<option value="">全部班级</option>';
+            gradeFilter.disabled = true;
+            classFilter.disabled = true;
+            nameFilter.disabled = true;
+            nameFilter.value = '';
+            generateBtn.disabled = true;
+        } else {
+            // 受限教师：保持预选值不变，清空姓名
+            nameFilter.value = '';
+            classFilter.innerHTML = '<option value="' + classFilter.getAttribute('data-default') + '" selected>' + classFilter.getAttribute('data-default') + '</option>';
+        }
+
         document.getElementById('reportContainer').innerHTML =
             '<div class="text-center text-muted py-5"><i class="bi bi-file-text" style="font-size:3rem;"></i><p class="mt-2">请选择考试和年级后，点击"生成"按钮查看成绩报告单</p></div>';
         document.getElementById('studentCount').style.display = 'none';
@@ -170,18 +195,23 @@
         const option = examSelect.options[examSelect.selectedIndex];
         const grades = (option.getAttribute('data-grades') || '').split(',').filter(g => g.trim());
 
-        if (grades.length > 0) {
-            grades.forEach(g => {
-                const opt = document.createElement('option');
-                opt.value = g.trim();
-                opt.textContent = g.trim();
-                gradeFilter.appendChild(opt);
-            });
-            gradeFilter.disabled = false;
+        if (isRestricted) {
+            // 受限教师：直接启用姓名和生成按钮
+            nameFilter.disabled = false;
+            generateBtn.disabled = false;
+        } else {
+            if (grades.length > 0) {
+                grades.forEach(g => {
+                    const opt = document.createElement('option');
+                    opt.value = g.trim();
+                    opt.textContent = g.trim();
+                    gradeFilter.appendChild(opt);
+                });
+                gradeFilter.disabled = false;
+            }
+            classFilter.disabled = false;
+            generateBtn.disabled = true;  // 需要先选班级才能生成
         }
-        classFilter.disabled = false;
-        nameFilter.disabled = true;  // 选班级后才启用姓名
-        generateBtn.disabled = true; // 选班级后才启用生成
     }
 
     function onGradeChange() {

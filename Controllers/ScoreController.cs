@@ -2734,11 +2734,35 @@ public class ScoreController : Controller
     [HttpGet]
     public async Task<IActionResult> ReportCard()
     {
-        var exams = await _db.ExamSchedules
+        // 获取当前登录用户信息
+        var role = User.FindFirst(ClaimTypes.Role)?.Value ?? "";
+        var adminIdStr = User.FindFirst("AdminID")?.Value ?? "";
+        string? teacherGrade = null;
+        string? teacherClass = null;
+        if (int.TryParse(adminIdStr, out int adminId))
+        {
+            var admin = await _db.Admins.FindAsync(adminId);
+            if (admin != null && role.Trim() != "管理员")
+            {
+                teacherGrade = admin.Grade;
+                teacherClass = admin.ClassName;
+            }
+        }
+
+        // 非管理员只能看到自己年级的考试
+        IQueryable<ExamSchedule> examQuery = _db.ExamSchedules;
+        if (!string.IsNullOrEmpty(teacherGrade))
+        {
+            examQuery = examQuery.Where(e => e.Grades != null && e.Grades.Contains(teacherGrade));
+        }
+        var exams = await examQuery
             .OrderByDescending(e => e.ExamDate)
             .Select(e => new { e.Id, e.Name, e.ExamType, e.ExamDate, e.Status, e.Grades })
             .ToListAsync();
+
         ViewBag.ExamSchedules = exams;
+        ViewBag.TeacherGrade = teacherGrade;
+        ViewBag.TeacherClass = teacherClass;
         return View();
     }
 
@@ -2750,6 +2774,29 @@ public class ScoreController : Controller
             var exam = await _db.ExamSchedules.FindAsync(examScheduleId);
             if (exam == null)
                 return Json(new { success = false, message = "考试安排不存在" });
+
+            // 获取当前登录用户信息
+            var role = User.FindFirst(ClaimTypes.Role)?.Value ?? "";
+            var adminIdStr = User.FindFirst("AdminID")?.Value ?? "";
+            string? teacherGrade = null;
+            string? teacherClass = null;
+            if (int.TryParse(adminIdStr, out int adminId))
+            {
+                var admin = await _db.Admins.FindAsync(adminId);
+                if (admin != null && role.Trim() != "管理员")
+                {
+                    teacherGrade = admin.Grade;
+                    teacherClass = admin.ClassName;
+                }
+            }
+
+            // 非管理员强制使用自己的年级和班级
+            bool isRestricted = !string.IsNullOrEmpty(teacherClass);
+            if (isRestricted)
+            {
+                grade = teacherGrade;
+                className = teacherClass;
+            }
 
             // 获取该考试的科目
             var subjects = await _db.ExamSubjects
