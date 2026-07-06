@@ -1,4 +1,4 @@
-@using StudentManagerCore.Models
+﻿@using StudentManagerCore.Models
 @{
     ViewData["Title"] = "批量导入";
     var exams = ViewBag.ExamSchedules as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
@@ -92,13 +92,13 @@
             currentExamId = parseInt($('#examSelect').val() || 0);
             var status = $('#examSelect option:selected').data('status');
             var isActive = (status === '进行中');
-            $('#downloadBtn').prop('disabled', !currentExamId || !isActive);
+            $('#downloadBtn').prop('disabled', !currentExamId);
             $('#importBtn').prop('disabled', !currentExamId || !isActive);
             $('#previewContainer').hide();
             previewData = null;
 
             if (currentExamId && !isActive) {
-                $('#downloadBtn').after('<small id="statusWarn" class="text-danger d-block mt-1">⚠️ 仅「进行中」的考试可以导入成绩</small>');
+                $('#importBtn').after('<small id="statusWarn" class="text-danger d-block mt-1">⚠️ 仅「进行中」的考试可以导入成绩</small>');
             } else {
                 $('#statusWarn').remove();
             }
@@ -202,11 +202,16 @@
                     '<td>' + htmlEncode(row.grade) + '</td>' +
                     '<td>' + htmlEncode(row.className) + '</td>';
 
-                if (row.scores) {
+                                if (row.scores) {
                     row.scores.forEach(function (sc) {
                         var cls = sc.error ? 'text-danger' : '';
-                        bodyHtml += '<td class="text-center ' + cls + '">' +
-                            (sc.score != null ? sc.score : '-') +
+                        var displayScore = '-';
+                        if (sc.isAbsent) {
+                            displayScore = '<span class="text-warning fw-bold">缺考</span>';
+                        } else if (sc.score != null) {
+                            displayScore = sc.score;
+                        }
+                        bodyHtml += '<td class="text-center ' + cls + '">' + displayScore +
                             (sc.error ? '<br><small class="text-danger">' + sc.error + '</small>' : '') +
                             '</td>';
                     });
@@ -236,10 +241,11 @@
                 if (row.error) return;
                 var scores = [];
                 if (row.scores) {
-                    row.scores.forEach(function (sc) {
+                                        row.scores.forEach(function (sc) {
                         scores.push({
                             subjectId: sc.subjectId,
-                            scoreValue: sc.score
+                            scoreValue: sc.isAbsent ? 0 : (sc.score || 0),
+                            isAbsent: sc.isAbsent
                         });
                     });
                 }

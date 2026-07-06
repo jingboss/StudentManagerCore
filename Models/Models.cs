@@ -366,6 +366,9 @@ public class Score
     [Column(TypeName = "decimal(5,1)")]
     public decimal ScoreValue { get; set; }          // 分数
 
+    /// <summary>是否缺考（true=缺考，不计入统计）</summary>
+    public bool IsAbsent { get; set; }
+
     [StringLength(30)]
     public string? ExamType { get; set; }            // 考试类型：期中/期末/月考
 

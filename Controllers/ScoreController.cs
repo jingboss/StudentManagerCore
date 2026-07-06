@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StudentManagerCore.Data;
@@ -47,6 +47,8 @@ public class ScoreController : Controller
     [HttpPost]
     public async Task<IActionResult> GetEntryData(int examScheduleId)
     {
+        try
+        {
         var exam = await _db.ExamSchedules.FindAsync(examScheduleId);
         if (exam == null)
             return Json(new { success = false, message = "考试安排不存在" });
@@ -80,7 +82,7 @@ public class ScoreController : Controller
         // 获取已有成绩
         var existingScores = await _db.Scores
             .Where(sc => sc.ExamScheduleId == examScheduleId)
-            .Select(sc => new { sc.StudentId, sc.SubjectId, sc.ScoreValue })
+            .Select(sc => new { sc.StudentId, sc.SubjectId, sc.ScoreValue, sc.IsAbsent })
             .ToListAsync();
 
         return Json(new
@@ -91,6 +93,13 @@ public class ScoreController : Controller
             existingScores,
             subjectIds = subjects.Select(s => s.SubjectId).ToList()
         });
+        }
+        catch (Exception ex)
+        {
+            System.IO.File.AppendAllText(AppDomain.CurrentDomain.BaseDirectory + "getentry_error.txt",
+                $"Time: {DateTime.Now}\nError: {ex.Message}\nStack: {ex.StackTrace}\n\n");
+            return Json(new { success = false, message = "加载数据异常: " + ex.Message });
+        }
     }
 
     [HttpPost]
@@ -152,6 +161,7 @@ public class ScoreController : Controller
             {
                 // 已有成绩则更新
                 existing.ScoreValue = item.ScoreValue;
+                existing.IsAbsent = item.IsAbsent;
             }
             else
             {
@@ -162,6 +172,7 @@ public class ScoreController : Controller
                     StudentId = item.StudentId,
                     SubjectId = item.SubjectId,
                     ScoreValue = item.ScoreValue,
+                    IsAbsent = item.IsAbsent,
                     ExamScheduleId = examScheduleId,
                     ExamType = exam.ExamType,
                     ExamDate = exam.ExamDate,
@@ -1010,8 +1021,13 @@ public class ScoreController : Controller
                 Rank = idx + 1,
                 StudentNo = g.Key?.StudentNo ?? "",
                 StudentName = g.Key?.Name ?? "",
-                Scores = subjects.Select(sub => g.Where(sc => sc.SubjectId == sub.Id).Select(sc => (decimal?)sc.ScoreValue).FirstOrDefault() ?? 0),
-                Total = g.Sum(sc => sc.ScoreValue)
+                Scores = subjects.Select(sub =>
+                {
+                    var sc = g.FirstOrDefault(s => s.SubjectId == sub.Id);
+                    if (sc == null) return new { Value = (decimal?)null, IsAbsent = false };
+                    return new { Value = (decimal?)sc.ScoreValue, IsAbsent = sc.IsAbsent };
+                }).ToList(),
+                Total = g.Where(sc => !sc.IsAbsent).Sum(sc => sc.ScoreValue)
             }).ToList();
 
         using var workbook = new XLWorkbook();
@@ -1037,7 +1053,12 @@ public class ScoreController : Controller
             int col = 4;
             foreach (var sc in row.Scores)
             {
-                ws.Cell(r + 2, col).Value = (double)sc;
+                if (sc.IsAbsent)
+                    ws.Cell(r + 2, col).Value = "缺考";
+                else if (sc.Value.HasValue)
+                    ws.Cell(r + 2, col).Value = (double)sc.Value.Value;
+                else
+                    ws.Cell(r + 2, col).Value = "-";
                 col++;
             }
             ws.Cell(r + 2, col).Value = (double)row.Total;
@@ -1128,6 +1149,14 @@ public class ScoreController : Controller
             ws.Cell(headerRow + 1 + i, 4).Value = s.Grade;
             ws.Cell(headerRow + 1 + i, 5).Value = s.ClassName;
         }
+
+        // 说明行
+        int noteRow = headerRow + students.Count + 2;
+        ws.Cell(noteRow, 1).Value = "填写说明：";
+        ws.Cell(noteRow, 1).Style.Font.Bold = true;
+        ws.Cell(noteRow + 1, 1).Value = "1. 请按学生所在科目列填写分数";
+        ws.Cell(noteRow + 2, 1).Value = "2. 留空 或 填写「缺考」表示该生该科缺考";
+        ws.Cell(noteRow + 3, 1).Value = "3. 缺考不计入平均分、及格率等统计";
 
         // 设置列宽
         ws.Column(1).Width = 6;    // 序号
@@ -1225,27 +1254,26 @@ public class ScoreController : Controller
             for (int i = 0; i < subjectData.Count; i++)
             {
                 var cellValue = row.Cell(6 + i).GetString().Trim();
-                if (string.IsNullOrEmpty(cellValue))
+                if (string.IsNullOrEmpty(cellValue) || cellValue == "缺考" || cellValue == "que kao")
                 {
-                    rowScores.Add(new { SubjectId = subjectData[i].SubjectId, SubjectName = subjectData[i].Name, Score = (decimal?)null, Error = "" });
+                    rowScores.Add(new { SubjectId = subjectData[i].SubjectId, SubjectName = subjectData[i].Name, Score = (decimal?)null, IsAbsent = true, Error = "" });
                     continue;
                 }
-
-                if (decimal.TryParse(cellValue, out var scoreVal))
+                if (decimal.TryParse(cellValue, out decimal scoreVal))
                 {
-                    if (scoreVal < 0 || scoreVal > subjectData[i].EffectiveFullScore)
+                    if (scoreVal >= 0 && scoreVal <= subjectData[i].EffectiveFullScore)
                     {
-                        rowScores.Add(new { SubjectId = subjectData[i].SubjectId, SubjectName = subjectData[i].Name, Score = scoreVal, Error = $"超出满分({subjectData[i].EffectiveFullScore})" });
-                        hasError = true;
+                        rowScores.Add(new { SubjectId = subjectData[i].SubjectId, SubjectName = subjectData[i].Name, Score = scoreVal, IsAbsent = false, Error = "" });
                     }
                     else
                     {
-                        rowScores.Add(new { SubjectId = subjectData[i].SubjectId, SubjectName = subjectData[i].Name, Score = scoreVal, Error = "" });
+                        rowScores.Add(new { SubjectId = subjectData[i].SubjectId, SubjectName = subjectData[i].Name, Score = scoreVal, IsAbsent = false, Error = $"超出满分({subjectData[i].EffectiveFullScore})" });
+                        hasError = true;
                     }
                 }
                 else
                 {
-                    rowScores.Add(new { SubjectId = subjectData[i].SubjectId, SubjectName = subjectData[i].Name, Score = (decimal?)null, Error = "格式错误" });
+                    rowScores.Add(new { SubjectId = subjectData[i].SubjectId, SubjectName = subjectData[i].Name, Score = (decimal?)null, IsAbsent = false, Error = "格式错误" });
                     hasError = true;
                 }
             }
@@ -1308,7 +1336,7 @@ public class ScoreController : Controller
             {
                 if (fullScoreMap.TryGetValue(sc.SubjectId, out var maxScore))
                 {
-                    if (sc.ScoreValue < 0 || sc.ScoreValue > maxScore)
+                    if (!sc.IsAbsent && (sc.ScoreValue < 0 || sc.ScoreValue > maxScore))
                     {
                         errors.Add($"学生ID:{row.StudentId} 科目ID:{sc.SubjectId} 分数 {sc.ScoreValue} 超出满分 {maxScore}");
                     }
@@ -1340,6 +1368,7 @@ public class ScoreController : Controller
                 if (existingDict.TryGetValue(key, out var existing))
                 {
                     existing.ScoreValue = sc.ScoreValue;
+                    existing.IsAbsent = sc.IsAbsent;
                 }
                 else
                 {
@@ -1348,6 +1377,7 @@ public class ScoreController : Controller
                         StudentId = row.StudentId,
                         SubjectId = sc.SubjectId,
                         ScoreValue = sc.ScoreValue,
+                        IsAbsent = sc.IsAbsent,
                         ExamScheduleId = request.ExamScheduleId,
                         ExamType = exam.ExamType,
                         ExamDate = exam.ExamDate,
@@ -2664,6 +2694,7 @@ public class ScoreItem
     public int StudentId { get; set; }
     public int SubjectId { get; set; }
     public decimal ScoreValue { get; set; }
+    public bool IsAbsent { get; set; }
 }
 
 public class SaveImportRequest
@@ -2684,4 +2715,5 @@ public class ImportScoreItem
 {
     public int SubjectId { get; set; }
     public decimal ScoreValue { get; set; }
+    public bool IsAbsent { get; set; }
 }
