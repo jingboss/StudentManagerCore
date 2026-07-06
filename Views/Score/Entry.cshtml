@@ -25,9 +25,9 @@
     <div class="card mb-3">
         <div class="card-body">
             <div class="row g-3 align-items-end">
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label class="form-label">选择考试</label>
-                    <select id="examSelect" class="form-select" onchange="loadEntryData()">
+                    <select id="examSelect" class="form-select" onchange="onExamChange()">
                         <option value="">-- 请选择考试 --</option>
                         @foreach (var exam in exams)
                         {
@@ -37,9 +37,26 @@
                         }
                     </select>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <label class="form-label">考试状态</label>
                     <input id="examStatus" class="form-control" readonly value="请先选择考试" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">年级筛选</label>
+                    <select id="gradeFilter" class="form-select" onchange="onFilterChange()" disabled>
+                        <option value="">全部年级</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">班级筛选</label>
+                    <select id="classFilter" class="form-select" onchange="onFilterChange()" disabled>
+                        <option value="">全部班级</option>
+                    </select>
+                </div>
+                <div class="col-md-1 d-flex align-items-end">
+                    <button id="clearFilterBtn" class="btn btn-outline-secondary btn-sm" onclick="clearFilters()" disabled>
+                        <i class="bi bi-x-circle"></i> 清除
+                    </button>
                 </div>
             </div>
         </div>
@@ -75,6 +92,33 @@
         let scoreCache = {};     // key: studentId_subjectId → {val: number|null, absent: bool}
         let scoreChanged = {};   // key: studentId_subjectId → {val: number, absent: bool}
 
+        // ========== 考试切换 ==========
+        function onExamChange() {
+            // 重置筛选
+            $('#gradeFilter').empty().append('<option value="">全部年级</option>').prop('disabled', true);
+            $('#classFilter').empty().append('<option value="">全部班级</option>').prop('disabled', true);
+            $('#clearFilterBtn').prop('disabled', true);
+            loadEntryData();
+        }
+
+        // ========== 筛选变更 ==========
+        function onFilterChange() {
+            var changed = Object.keys(scoreChanged).length;
+            if (changed > 0 && !confirm('有 ' + changed + ' 项成绩未保存，切换筛选将丢弃更改。确定吗？')) return;
+            loadEntryData();
+        }
+
+        // ========== 清除筛选 ==========
+        function clearFilters() {
+            var changed = Object.keys(scoreChanged).length;
+            if (changed > 0 && !confirm('有 ' + changed + ' 项成绩未保存，清除筛选将丢弃更改。确定吗？')) return;
+            $('#gradeFilter').val('');
+            $('#classFilter').empty().append('<option value="">全部班级</option>');
+            $('#classFilter').prop('disabled', true);
+            $('#clearFilterBtn').prop('disabled', true);
+            loadEntryData();
+        }
+
         // ========== 加载考试数据 ==========
         function loadEntryData() {
             var examId = parseInt($('#examSelect').val() || 0);
@@ -92,10 +136,13 @@
             // 仅进行中可编辑
             var isActive = (status === '进行中');
 
+            var grade = $('#gradeFilter').val() || '';
+            var className = $('#classFilter').val() || '';
+
             $.ajax({
                 url: '@Url.Action("GetEntryData")',
                 type: 'POST',
-                data: { examScheduleId: examId },
+                data: { examScheduleId: examId, grade: grade, className: className },
                 success: function (res) {
                     if (!res.success) {
                         $('#entryContainer').hide();
@@ -105,6 +152,8 @@
                     scoreCache = {};
                     scoreChanged = {};
                     renderEntryTable(res, isActive);
+                    // 填充筛选下拉框
+                    populateFilters(res, grade, className);
                     $('#entryContainer').show();
                     $('#saveStatus').text('✅ 已加载');
                 },
@@ -118,6 +167,35 @@
                     alert(msg);
                 }
             });
+        }
+
+        // ========== 填充筛选下拉框 ==========
+        function populateFilters(data, selectedGrade, selectedClass) {
+            var grades = data.availableGrades || [];
+            var classes = data.availableClasses || [];
+
+            // 年级下拉
+            var gradeSelect = $('#gradeFilter');
+            gradeSelect.empty().append('<option value="">全部年级</option>');
+            grades.forEach(function (g) {
+                gradeSelect.append('<option value="' + htmlEncode(g) + '">' + htmlEncode(g) + '</option>');
+            });
+
+            // 班级下拉
+            var classSelect = $('#classFilter');
+            classSelect.empty().append('<option value="">全部班级</option>');
+            classes.forEach(function (c) {
+                classSelect.append('<option value="' + htmlEncode(c) + '">' + htmlEncode(c) + '</option>');
+            });
+
+            // 恢复选中值
+            if (selectedGrade) { gradeSelect.val(selectedGrade); gradeSelect.prop('disabled', false); }
+            else { gradeSelect.prop('disabled', grades.length === 0); }
+
+            if (selectedClass) { classSelect.val(selectedClass); classSelect.prop('disabled', false); }
+            else { classSelect.prop('disabled', classes.length === 0); }
+
+            $('#clearFilterBtn').prop('disabled', !selectedGrade && !selectedClass);
         }
 
         // ========== 渲染录入表 ==========
@@ -250,9 +328,32 @@
             $('#saveStatus').text(changed > 0 ? '⚠️ ' + changed + ' 项待保存' : '✅ 全部已保存');
         }
 
-        // ========== 键盘导航 ==========
+        // ========== 键盘导航：Enter 向下 · Tab 向右 ==========
         function onScoreKeydown(event, input) {
-            if (event.key === 'Enter' || event.key === 'Tab') {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                // 计算当前列索引
+                var $td = $(input).closest('td');
+                var $tr = $(input).closest('tr');
+                var colIdx = $tr.children('td').index($td);
+                // 找下一行同一列
+                var $nextTr = $tr.next('tr');
+                if ($nextTr.length) {
+                    var $nextTd = $nextTr.children('td').eq(colIdx);
+                    var $nextInput = $nextTd.find('.score-input:enabled');
+                    if ($nextInput.length) {
+                        $nextInput.focus();
+                        $nextInput.select();
+                    } else {
+                        // 缺考禁用则跳到同行下一个可用输入
+                        var $nextInputs = $nextTr.find('.score-input:enabled');
+                        var nextColIdx = Math.min(colIdx, $nextInputs.length - 1);
+                        if ($nextInputs.eq(nextColIdx).length) {
+                            $nextInputs.eq(nextColIdx).focus().select();
+                        }
+                    }
+                }
+            } else if (event.key === 'Tab') {
                 event.preventDefault();
                 var inputs = $('.score-input:enabled');
                 var idx = inputs.index(input);

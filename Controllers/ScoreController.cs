@@ -45,7 +45,7 @@ public class ScoreController : Controller
     }
 
     [HttpPost]
-    public async Task<IActionResult> GetEntryData(int examScheduleId)
+    public async Task<IActionResult> GetEntryData(int examScheduleId, string? grade = null, string? className = null)
     {
         try
         {
@@ -74,9 +74,32 @@ public class ScoreController : Controller
         {
             studentQuery = studentQuery.Where(s => gradeList.Contains(s.Grade ?? ""));
         }
+        // 年级筛选
+        if (!string.IsNullOrEmpty(grade))
+        {
+            studentQuery = studentQuery.Where(s => s.Grade == grade);
+        }
+        // 班级筛选
+        if (!string.IsNullOrEmpty(className))
+        {
+            studentQuery = studentQuery.Where(s => s.ClassName == className);
+        }
         var students = await studentQuery
             .OrderBy(s => s.Grade).ThenBy(s => s.ClassName).ThenBy(s => s.Name)
             .Select(s => new { s.StudentID, s.StudentNo, s.Name, s.Grade, s.ClassName })
+            .ToListAsync();
+
+        // 获取可用年级列表（来自考试配置）
+        var availableGrades = gradeList;
+        // 获取可用班级列表（按当前年级过滤)
+        var classQuery = _db.Students.Where(s => s.Status == "在读");
+        if (!string.IsNullOrEmpty(grade))
+            classQuery = classQuery.Where(s => s.Grade == grade);
+        var availableClasses = await classQuery
+            .Where(s => s.ClassName != null && s.ClassName != "")
+            .Select(s => s.ClassName!)
+            .Distinct()
+            .OrderBy(c => c)
             .ToListAsync();
 
         // 获取已有成绩
@@ -91,7 +114,11 @@ public class ScoreController : Controller
             subjects,
             students,
             existingScores,
-            subjectIds = subjects.Select(s => s.SubjectId).ToList()
+            subjectIds = subjects.Select(s => s.SubjectId).ToList(),
+            availableGrades,
+            availableClasses,
+            selectedGrade = grade ?? "",
+            selectedClass = className ?? ""
         });
         }
         catch (Exception ex)
