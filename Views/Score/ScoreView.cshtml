@@ -579,7 +579,7 @@
                 bodyHtml += '<tr class="' + rankClass + '">' +
                     '<td class="text-center fw-bold">' + row.rank + '</td>' +
                     '<td>' + htmlEncode(row.studentNo) + '</td>' +
-                    '<td>' + htmlEncode(maskName(row.studentName)) + '</td>' +
+                    '<td>' + htmlEncode(row.studentName) + '</td>' +
                         '<td>' + htmlEncode(row.gradeName) + '</td>' +
                         '<td>' + htmlEncode(row.className) + '</td>';
                 data.subjects.forEach(function (sub) {
@@ -668,7 +668,7 @@
                 bodyHtml += '<tr class="' + rankClass + '">' +
                     '<td class="text-center fw-bold">' + row.rank1 + '</td>' +
                     '<td>' + htmlEncode(row.studentNo) + '</td>' +
-                    '<td>' + htmlEncode(maskName(row.studentName)) + '</td>' +
+                    '<td>' + htmlEncode(row.studentName) + '</td>' +
                     '<td class="text-center fw-bold">' + row.totalScore + '</td>' +
                     '<td class="text-center">' + (row.hasComparison ? row.oldTotal : '-') + '</td>' +
                     '<td class="text-center fw-bold ' + totalDiffCls + '">' + (row.hasComparison ? totalDiffStr : '-') + '</td>' +
@@ -738,7 +738,7 @@
                     bodyHtml += '<tr class="' + cls + '">' +
                         '<td class="text-center fw-bold">' + row.rank + '</td>' +
                         '<td>' + htmlEncode(row.studentNo) + '</td>' +
-                        '<td>' + htmlEncode(maskName(row.studentName)) + '</td>' +
+                        '<td>' + htmlEncode(row.studentName) + '</td>' +
                         '<td>' + htmlEncode(row.gradeName) + '</td>' +
                         '<td>' + htmlEncode(row.className) + '</td>';
                     res.subjects.forEach(function (sub) {

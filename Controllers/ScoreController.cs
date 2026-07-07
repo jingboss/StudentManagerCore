@@ -616,12 +616,14 @@ public class ScoreController : Controller
 
         // 总分统计（排除缺考科目的0分）—— 用于显示
         var studentScores = scores
-            .GroupBy(sc => new { sc.StudentId, StudentNo = sc.Student?.StudentNo ?? "", StudentName = sc.Student?.Name ?? "" })
+            .GroupBy(sc => new { sc.StudentId, StudentNo = sc.Student?.StudentNo ?? "", StudentName = sc.Student?.Name ?? "", GradeName = sc.Student?.Grade ?? "", ClassName = sc.Student?.ClassName ?? "" })
             .Select(g => new
             {
                 StudentId = g.Key.StudentId,
                 StudentNo = g.Key.StudentNo,
                 StudentName = g.Key.StudentName,
+                GradeName = g.Key.GradeName,
+                ClassName = g.Key.ClassName,
                 Scores = subjects.Select(sub =>
                 {
                     var sc = g.FirstOrDefault(s => s.SubjectId == sub.SubjectId);
@@ -700,6 +702,8 @@ public class ScoreController : Controller
                     x.StudentId,
                     x.StudentNo,
                     x.StudentName,
+                    x.GradeName,
+                    x.ClassName,
                     x.Scores,
                     x.TotalScore,
                     AvgScore = avgScore,
@@ -726,6 +730,8 @@ public class ScoreController : Controller
                 rs.StudentId,
                 rs.StudentNo,
                 rs.StudentName,
+                rs.GradeName,
+                rs.ClassName,
                 rs.Scores,
                 rs.TotalScore,
                 rs.AvgScore,
