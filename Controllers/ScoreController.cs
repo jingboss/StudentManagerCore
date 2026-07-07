@@ -643,7 +643,8 @@ public class ScoreController : Controller
             .ToList();
 
         // 学生等级（总分百分比法：与成绩报告单综合等级一致）
-        // A≥90%  B≥80%  C≥60%  D<60%，单科不及格只拉低均分不一票否决
+        // 小学：A≥90%  B≥80%  C≥60%  D<60%
+        // 初中：A≥85%  B≥75%  C≥60%  D<60%（初中科目多，适当降低门槛补偿稀释效应）
         var classLevels = new Dictionary<int, string>(); // StudentId → Level
         foreach (var stu in studentScores)
         {
@@ -653,10 +654,20 @@ public class ScoreController : Controller
             else
             {
                 var pct = (double)stu.TotalScore / (double)stu.PresentFullScore;
-                if (pct >= 0.9) level = "A";
-                else if (pct >= 0.8) level = "B";
-                else if (pct >= 0.6) level = "C";
-                else level = "D";
+                if (isElementary)
+                {
+                    if (pct >= 0.9) level = "A";
+                    else if (pct >= 0.8) level = "B";
+                    else if (pct >= 0.6) level = "C";
+                    else level = "D";
+                }
+                else
+                {
+                    if (pct >= 0.85) level = "A";
+                    else if (pct >= 0.75) level = "B";
+                    else if (pct >= 0.6) level = "C";
+                    else level = "D";
+                }
             }
             classLevels[stu.StudentId] = level;
         }
@@ -3436,8 +3447,13 @@ public class ScoreController : Controller
             if (subjects.Count == 0)
                 return Json(new { success = false, message = "该考试尚未关联科目" });
 
-            // 构建学生查询
+            // 判断学段
             var gradeList = (exam.Grades ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+            var allGradeLevels = await _db.GradeLevels.ToListAsync();
+            var matchedGrades = allGradeLevels.Where(gl => gradeList.Contains(gl.CurrentGradeName)).ToList();
+            var isElementary = matchedGrades.Count > 0 && matchedGrades.All(gl => gl.SchoolType == "小学");
+
+            // 构建学生查询
             IQueryable<Student> studentQuery = _db.Students.Where(s => s.Status == "在读");
             if (gradeList.Count > 0)
                 studentQuery = studentQuery.Where(s => gradeList.Contains(s.Grade ?? ""));
@@ -3525,10 +3541,22 @@ public class ScoreController : Controller
                 else if (totalFullScore > 0)
                 {
                     var pct = (double)totalScore / (double)totalFullScore;
-                    if (pct >= 0.9) overallLevel = "A (优秀)";
-                    else if (pct >= 0.8) overallLevel = "B (良好)";
-                    else if (pct >= 0.6) overallLevel = "C (及格)";
-                    else overallLevel = "D (不及格)";
+                    // 小学：A≥90% B≥80% C≥60% D<60%
+                    // 初中：A≥85% B≥75% C≥60% D<60%
+                    if (isElementary)
+                    {
+                        if (pct >= 0.9) overallLevel = "A (优秀)";
+                        else if (pct >= 0.8) overallLevel = "B (良好)";
+                        else if (pct >= 0.6) overallLevel = "C (及格)";
+                        else overallLevel = "D (不及格)";
+                    }
+                    else
+                    {
+                        if (pct >= 0.85) overallLevel = "A (优秀)";
+                        else if (pct >= 0.75) overallLevel = "B (良好)";
+                        else if (pct >= 0.6) overallLevel = "C (及格)";
+                        else overallLevel = "D (不及格)";
+                    }
                 }
 
                 return new
