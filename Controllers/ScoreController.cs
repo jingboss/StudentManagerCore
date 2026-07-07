@@ -1608,8 +1608,10 @@ public class ScoreController : Controller
     [HttpPost]
     public async Task<IActionResult> ImportPreview(IFormFile excelFile, int examScheduleId)
     {
-        if (excelFile == null || excelFile.Length == 0)
-            return Json(new { success = false, message = "请上传文件" });
+        try
+        {
+            if (excelFile == null || excelFile.Length == 0)
+                return Json(new { success = false, message = "请上传文件" });
 
         if (excelFile.Length > 20 * 1024 * 1024)
             return Json(new { success = false, message = "Excel文件不能超过20MB" });
@@ -1722,6 +1724,11 @@ public class ScoreController : Controller
             errorCount,
             totalCount = previewRows.Count
         });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { success = false, message = "解析Excel文件失败：" + ex.Message });
+        }
     }
 
     [HttpPost]
