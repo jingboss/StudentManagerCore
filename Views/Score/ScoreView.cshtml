@@ -71,7 +71,7 @@
         </li>
         <li class="nav-item" role="presentation">
             <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabTop10" type="button" onclick="onTop10Tab()">
-                <i class="bi bi-trophy me-1"></i>年级排名前20名
+                <i class="bi bi-trophy me-1"></i>年级排名前10名
             </button>
         </li>
         <li class="nav-item" role="presentation">
@@ -177,11 +177,11 @@
             </div>
         </div>
 
-        <!-- ============= Tab 4: 年级排名前20名 ============= -->
+        <!-- ============= Tab 4: 年级排名前10名 ============= -->
         <div class="tab-pane fade" id="tabTop10">
             <div class="card border-warning">
                 <div class="card-header bg-warning bg-opacity-10 py-2">
-                    <span class="fw-bold"><i class="bi bi-trophy me-1"></i>年级排名前20名</span>
+                    <span class="fw-bold"><i class="bi bi-trophy me-1"></i>年级排名前10名</span>
                     <span id="top10Stats" class="text-muted small"></span>
                 </div>
                 <div class="card-body p-0">
@@ -579,7 +579,7 @@
                 bodyHtml += '<tr class="' + rankClass + '">' +
                     '<td class="text-center fw-bold">' + row.rank + '</td>' +
                     '<td>' + htmlEncode(row.studentNo) + '</td>' +
-                    '<td>' + htmlEncode(row.studentName) + '</td>' +
+                    '<td>' + htmlEncode(maskName(row.studentName)) + '</td>' +
                         '<td>' + htmlEncode(row.gradeName) + '</td>' +
                         '<td>' + htmlEncode(row.className) + '</td>';
                 data.subjects.forEach(function (sub) {
@@ -668,7 +668,7 @@
                 bodyHtml += '<tr class="' + rankClass + '">' +
                     '<td class="text-center fw-bold">' + row.rank1 + '</td>' +
                     '<td>' + htmlEncode(row.studentNo) + '</td>' +
-                    '<td>' + htmlEncode(row.studentName) + '</td>' +
+                    '<td>' + htmlEncode(maskName(row.studentName)) + '</td>' +
                     '<td class="text-center fw-bold">' + row.totalScore + '</td>' +
                     '<td class="text-center">' + (row.hasComparison ? row.oldTotal : '-') + '</td>' +
                     '<td class="text-center fw-bold ' + totalDiffCls + '">' + (row.hasComparison ? totalDiffStr : '-') + '</td>' +
@@ -693,7 +693,7 @@
             $('#compBody').html(bodyHtml);
         }
 
-        // ========== 年级排名前20名 ==========
+        // ========== 年级排名前10名 ==========
         function onTop10Tab() {
             var examId = $('#examSelect').val();
             if (!examId) { $('#top10Body').html('<tr><td colspan="99" class="text-center text-muted py-4">请先在上方选择考试</td></tr>'); return; }
@@ -738,7 +738,7 @@
                     bodyHtml += '<tr class="' + cls + '">' +
                         '<td class="text-center fw-bold">' + row.rank + '</td>' +
                         '<td>' + htmlEncode(row.studentNo) + '</td>' +
-                        '<td>' + htmlEncode(row.studentName) + '</td>' +
+                        '<td>' + htmlEncode(maskName(row.studentName)) + '</td>' +
                         '<td>' + htmlEncode(row.gradeName) + '</td>' +
                         '<td>' + htmlEncode(row.className) + '</td>';
                     res.subjects.forEach(function (sub) {
@@ -750,7 +750,7 @@
                                 '<td class="text-center fw-bold">' + row.gradeRank + '</td></tr>';
                 });
                 $('#top10Body').html(bodyHtml);
-            }).fail(function() { alert('加载年级排名前20名失败'); });
+            }).fail(function() { alert('加载年级排名前10名失败'); });
         }
 
         // ========== 导出 ==========
@@ -763,6 +763,12 @@
 
         function htmlEncode(str) {
             return $('<span>').text(str || '').html();
+        }
+        function maskName(name) {
+            if (!name) return name;
+            if (name.length === 3) return name[0] + '*' + name[2];
+            if (name.length === 2) return name[0] + '*';
+            return name;
         }
 
         // ========== Tab 5: AI成绩分析 ==========

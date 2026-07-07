@@ -383,29 +383,66 @@ public class ScoreController : Controller
 
         var allScoresForRanking = await allScoresQuery.ToListAsync();
 
-        // 构建全量学生总分数据（用于排名计算）
+        // 构建全量学生总分及科目分数数据（用于排名计算，含逐科比较）
+        var subjectPriorityIds = subjects.Select(s => s.SubjectId).ToList();
         var allStudentScores = allScoresForRanking
             .GroupBy(sc => new { sc.StudentId, StudentNo = sc.Student?.StudentNo ?? "", StudentName = sc.Student?.Name ?? "" })
             .Select(g => new
             {
                 StudentId = g.Key.StudentId,
                 TotalScore = g.Where(sc => !sc.IsAbsent).Sum(sc => sc.ScoreValue),
+                SubjectScores = subjectPriorityIds.ToDictionary(
+                    subId => subId,
+                    subId => g.Where(sc => sc.SubjectId == subId && !sc.IsAbsent).Select(sc => (decimal?)sc.ScoreValue).FirstOrDefault() ?? 0m
+                ),
                 ClassInfoId = g.Min(sc => sc.ClassInfoId),
                 GradeLevelId = g.Min(sc => sc.GradeLevelId)
             })
             .ToList();
 
-        // ★ 竞争排名（1224制）：同分同名次
-        static Dictionary<int, int> ComputeCompetitionRanking(IEnumerable<dynamic> items, Func<dynamic, decimal> orderSelector)
+        // ★ 竞争排名（同分同名次），同级排序规则：先比总分，再从科目顺序逐一比较
+        // 将排名逻辑提取为本地函数，闭包捕获 subjectPriorityIds
+        Dictionary<int, int> ComputeRanking(IEnumerable<dynamic> items)
         {
-            var sorted = items.OrderByDescending(orderSelector).ToList();
+            var list = items.Cast<dynamic>().ToList();
+            // 自定义排序：总分降序 → 各科分数按科目优先级降序
+            list.Sort((a, b) =>
+            {
+                decimal ta = (decimal)a.TotalScore, tb = (decimal)b.TotalScore;
+                if (ta != tb) return -ta.CompareTo(tb); // 总分降序
+
+                var sa = (Dictionary<int, decimal>)a.SubjectScores;
+                var sb = (Dictionary<int, decimal>)b.SubjectScores;
+                foreach (var subId in subjectPriorityIds)
+                {
+                    var va = sa.GetValueOrDefault(subId, 0);
+                    var vb = sb.GetValueOrDefault(subId, 0);
+                    if (va != vb) return -va.CompareTo(vb); // 该科降序
+                }
+                return 0; // 完全相同
+            });
+
             var result = new Dictionary<int, int>();
             int currentRank = 1;
-            for (int i = 0; i < sorted.Count; i++)
+            for (int i = 0; i < list.Count; i++)
             {
-                if (i > 0 && orderSelector(sorted[i]) != orderSelector(sorted[i - 1]))
-                    currentRank++;
-                result[(int)sorted[i].StudentId] = currentRank;
+                if (i > 0)
+                {
+                    var prev = list[i - 1]; var curr = list[i];
+                    bool diff = (decimal)prev.TotalScore != (decimal)curr.TotalScore;
+                    if (!diff)
+                    {
+                        var pScores = (Dictionary<int, decimal>)prev.SubjectScores;
+                        var cScores = (Dictionary<int, decimal>)curr.SubjectScores;
+                        foreach (var subId in subjectPriorityIds)
+                        {
+                            if (pScores.GetValueOrDefault(subId, 0) != cScores.GetValueOrDefault(subId, 0))
+                            { diff = true; break; }
+                        }
+                    }
+                    if (diff) currentRank++;
+                }
+                result[(int)list[i].StudentId] = currentRank;
             }
             return result;
         }
@@ -416,7 +453,7 @@ public class ScoreController : Controller
             .Where(s => s.GradeLevelId != null)
             .GroupBy(s => s.GradeLevelId!.Value))
         {
-            gradeRankings[gradeGroup.Key] = ComputeCompetitionRanking(gradeGroup, x => (decimal)x.TotalScore);
+            gradeRankings[gradeGroup.Key] = ComputeRanking(gradeGroup);
         }
 
         // 全量班级排名（按ClassInfoId分组）
@@ -425,7 +462,7 @@ public class ScoreController : Controller
             .Where(s => s.ClassInfoId != null)
             .GroupBy(s => s.ClassInfoId!.Value))
         {
-            classRankings[classGroup.Key] = ComputeCompetitionRanking(classGroup, x => (decimal)x.TotalScore);
+            classRankings[classGroup.Key] = ComputeRanking(classGroup);
         }
 
         // ========== ★ 第二步：按筛选条件获取显示的考试成绩 ==========
@@ -829,7 +866,7 @@ public class ScoreController : Controller
             .Where(sc => sc.ExamScheduleId == compareExamId && subjectIds.Contains(sc.SubjectId) && studentIds.Contains(sc.StudentId))
             .ToListAsync();
 
-        // 分组计算总分和排名（★ 竞争排名1224制）
+        // 分组计算总分和排名（★ 同分同名次，同级按科目录顺序逐科比较）
         var sortedGroup1 = scores1
             .GroupBy(sc => new { sc.StudentId, StudentNo = sc.Student!.StudentNo ?? "", StudentName = sc.Student!.Name ?? "" })
             .Select(g => new
@@ -844,10 +881,23 @@ public class ScoreController : Controller
                     return new { SubjectId = sub.SubjectId, ScoreValue = (decimal?)sc.ScoreValue, IsAbsent = false };
                 }).ToList()
             })
-            .OrderByDescending(x => x.TotalScore)
             .ToList();
 
-        // 竞争排名（1224制）：先计算排名字典，再用 Select 构建强类型列表
+        // 自定义排序：总分降序 → 各科按科目顺序逐科降序
+        var subjectCmpIds = subjectIds;
+        sortedGroup1.Sort((a, b) =>
+        {
+            if (a.TotalScore != b.TotalScore) return -a.TotalScore.CompareTo(b.TotalScore);
+            foreach (var subId in subjectCmpIds)
+            {
+                var sa = a.Scores.FirstOrDefault(s => s.SubjectId == subId)?.ScoreValue ?? 0m;
+                var sb = b.Scores.FirstOrDefault(s => s.SubjectId == subId)?.ScoreValue ?? 0m;
+                if (sa != sb) return -sa.CompareTo(sb);
+            }
+            return 0;
+        });
+
+        // 竞争排名（同分同名次）：比较总分和各科分数
         var rankDict1 = new Dictionary<int, int>();
         for (int i = 0; i < sortedGroup1.Count; i++)
         {
@@ -855,7 +905,17 @@ public class ScoreController : Controller
             else
             {
                 int prevRank = rankDict1[sortedGroup1[i - 1].StudentId];
-                rankDict1[sortedGroup1[i].StudentId] = sortedGroup1[i].TotalScore == sortedGroup1[i - 1].TotalScore ? prevRank : prevRank + 1;
+                bool same = sortedGroup1[i].TotalScore == sortedGroup1[i - 1].TotalScore;
+                if (same)
+                {
+                    foreach (var subId in subjectCmpIds)
+                    {
+                        var sa = sortedGroup1[i].Scores.FirstOrDefault(s => s.SubjectId == subId)?.ScoreValue ?? 0m;
+                        var sb = sortedGroup1[i - 1].Scores.FirstOrDefault(s => s.SubjectId == subId)?.ScoreValue ?? 0m;
+                        if (sa != sb) { same = false; break; }
+                    }
+                }
+                rankDict1[sortedGroup1[i].StudentId] = same ? prevRank : prevRank + 1;
             }
         }
 
@@ -880,8 +940,19 @@ public class ScoreController : Controller
                     return new { SubjectId = sub.SubjectId, ScoreValue = (decimal?)sc.ScoreValue };
                 }).ToList()
             })
-            .OrderByDescending(x => x.TotalScore)
             .ToList();
+
+        sortedGroup2.Sort((a, b) =>
+        {
+            if (a.TotalScore != b.TotalScore) return -a.TotalScore.CompareTo(b.TotalScore);
+            foreach (var subId in subjectCmpIds)
+            {
+                var sa = a.Scores.FirstOrDefault(s => s.SubjectId == subId)?.ScoreValue ?? 0m;
+                var sb = b.Scores.FirstOrDefault(s => s.SubjectId == subId)?.ScoreValue ?? 0m;
+                if (sa != sb) return -sa.CompareTo(sb);
+            }
+            return 0;
+        });
 
         var rankDict2 = new Dictionary<int, int>();
         for (int i = 0; i < sortedGroup2.Count; i++)
@@ -890,7 +961,17 @@ public class ScoreController : Controller
             else
             {
                 int prevRank = rankDict2[sortedGroup2[i - 1].StudentId];
-                rankDict2[sortedGroup2[i].StudentId] = sortedGroup2[i].TotalScore == sortedGroup2[i - 1].TotalScore ? prevRank : prevRank + 1;
+                bool same = sortedGroup2[i].TotalScore == sortedGroup2[i - 1].TotalScore;
+                if (same)
+                {
+                    foreach (var subId in subjectCmpIds)
+                    {
+                        var sa = sortedGroup2[i].Scores.FirstOrDefault(s => s.SubjectId == subId)?.ScoreValue ?? 0m;
+                        var sb = sortedGroup2[i - 1].Scores.FirstOrDefault(s => s.SubjectId == subId)?.ScoreValue ?? 0m;
+                        if (sa != sb) { same = false; break; }
+                    }
+                }
+                rankDict2[sortedGroup2[i].StudentId] = same ? prevRank : prevRank + 1;
             }
         }
 
@@ -1004,19 +1085,43 @@ public class ScoreController : Controller
             })
             .ToList();
 
-        // ★ 年级排名（竞争排名1224制：同分同名次）
+        // ★ 年级排名（同分同名次，同级按科目顺序逐科比较）
+        var subjectPriorityIds = subjects.Select(s => s.SubjectId).ToList();
         var gradeRanks = new Dictionary<int, Dictionary<int, int>>();
         foreach (var gradeGroup in studentGroups
             .Where(s => s.GradeLevelId.HasValue)
             .GroupBy(s => s.GradeLevelId!.Value))
         {
-            var sorted = gradeGroup.OrderByDescending(s => s.TotalScore).ToList();
+            var sorted = gradeGroup.ToList();
+            sorted.Sort((a, b) =>
+            {
+                if (a.TotalScore != b.TotalScore) return -a.TotalScore.CompareTo(b.TotalScore);
+                foreach (var subId in subjectPriorityIds)
+                {
+                    var sa = a.Scores.FirstOrDefault(s => s.SubjectId == subId)?.ScoreValue ?? 0m;
+                    var sb = b.Scores.FirstOrDefault(s => s.SubjectId == subId)?.ScoreValue ?? 0m;
+                    if (sa != sb) return -sa.CompareTo(sb);
+                }
+                return 0;
+            });
             var ranks = new Dictionary<int, int>();
             int currentRank = 1;
             for (int i = 0; i < sorted.Count; i++)
             {
-                if (i > 0 && sorted[i].TotalScore != sorted[i - 1].TotalScore)
-                    currentRank++;
+                if (i > 0)
+                {
+                    bool diff = sorted[i].TotalScore != sorted[i - 1].TotalScore;
+                    if (!diff)
+                    {
+                        foreach (var subId in subjectPriorityIds)
+                        {
+                            var sa = sorted[i].Scores.FirstOrDefault(s => s.SubjectId == subId)?.ScoreValue ?? 0;
+                            var sb = sorted[i - 1].Scores.FirstOrDefault(s => s.SubjectId == subId)?.ScoreValue ?? 0;
+                            if (sa != sb) { diff = true; break; }
+                        }
+                    }
+                    if (diff) currentRank++;
+                }
                 ranks[sorted[i].StudentId] = currentRank;
             }
             gradeRanks[gradeGroup.Key] = ranks;
@@ -1045,7 +1150,7 @@ public class ScoreController : Controller
         })
         .Where(x => x.GradeRank.HasValue)
         .OrderBy(x => x.GradeRank)
-        .Take(20)
+        .Take(10)
         .Select((x, idx) => new
         {
             Rank = idx + 1,
@@ -1410,7 +1515,7 @@ public class ScoreController : Controller
         }
     }
 
-    [HttpPost]
+    [HttpGet]
     public async Task<IActionResult> ExportExcel(int examScheduleId, int? classInfoId)
     {
         var exam = await _db.ExamSchedules.FindAsync(examScheduleId);
