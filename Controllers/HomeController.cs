@@ -265,6 +265,10 @@ public class HomeController : Controller
     public IActionResult Error(int statusCode = 0)
     {
         ViewBag.StatusCode = statusCode;
+        if (Request.Headers["Accept"].ToString().Contains("application/json"))
+        {
+            return Json(new { success = false, message = statusCode == 404 ? "请求的资源不存在" : "系统出了点小问题" });
+        }
         return View();
     }
 }

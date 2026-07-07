@@ -379,6 +379,13 @@
             html += '<span class="sub-name fw-bold text-primary">总分</span>';
             html += `<span class="sub-score fw-bold text-primary">${student.totalScore} / ${student.totalFullScore}</span>`;
             html += '</div>';
+            // 平均分
+            if (student.averageScore != null) {
+                html += '<div class="subject-row">';
+                html += '<span class="sub-name">平均分</span>';
+                html += `<span class="sub-score">${student.averageScore}</span>`;
+                html += '</div>';
+            }
             const levelText = student.overallLevel || 'C';
             const levelClass = getLevelClass(levelText);
             html += '<div class="subject-row">';

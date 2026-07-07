@@ -983,12 +983,14 @@ public class ScoreController : Controller
 
         // 按学生分组计算（排除缺考学生）
         var studentGroups = scores
-            .GroupBy(sc => new { sc.StudentId, StudentNo = sc.Student?.StudentNo ?? "", StudentName = sc.Student?.Name ?? "", GradeLevelId = sc.GradeLevelId })
+            .GroupBy(sc => new { sc.StudentId, StudentNo = sc.Student?.StudentNo ?? "", StudentName = sc.Student?.Name ?? "", GradeName = sc.Student?.Grade ?? "", ClassName = sc.Student?.ClassName ?? "", GradeLevelId = sc.GradeLevelId })
             .Select(g => new
             {
                 g.Key.StudentId,
                 g.Key.StudentNo,
                 g.Key.StudentName,
+                g.Key.GradeName,
+                g.Key.ClassName,
                 g.Key.GradeLevelId,
                 SubjectCount = subjects.Count,
                 PresentSubjectCount = g.Count(sc => !sc.IsAbsent),
@@ -1033,6 +1035,8 @@ public class ScoreController : Controller
                 x.StudentId,
                 x.StudentNo,
                 x.StudentName,
+                x.GradeName,
+                x.ClassName,
                 x.TotalScore,
                 AvgScore = x.PresentSubjectCount > 0 ? Math.Round((double)x.TotalScore / x.PresentSubjectCount, 1) : 0,
                 GradeRank = gr,
@@ -1041,12 +1045,14 @@ public class ScoreController : Controller
         })
         .Where(x => x.GradeRank.HasValue)
         .OrderBy(x => x.GradeRank)
-        .Take(10)
+        .Take(20)
         .Select((x, idx) => new
         {
             Rank = idx + 1,
             x.StudentNo,
             x.StudentName,
+            x.GradeName,
+            x.ClassName,
             x.TotalScore,
             x.AvgScore,
             GradeRank = x.GradeRank,
@@ -1735,139 +1741,145 @@ public class ScoreController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SaveImport([FromBody] SaveImportRequest request)
     {
-        if (request?.Rows == null || request.Rows.Count == 0)
-            return Json(new { success = false, message = "无数据" });
-
-        var exam = await _db.ExamSchedules.FindAsync(request.ExamScheduleId);
-        if (exam == null)
-            return Json(new { success = false, message = "考试安排不存在" });
-
-        if (exam.Status != "进行中")
-            return Json(new { success = false, message = "仅「进行中」的考试可以导入成绩" });
-
-        var studentIds = request.Rows.Select(r => r.StudentId).Distinct().ToList();
-        var subjectIds = request.Rows.SelectMany(r => r.Scores).Select(s => s.SubjectId).Distinct().ToList();
-
-        // 加载该考试的科目满分
-        var fullScoreData = await _db.ExamSubjects
-            .Where(es => es.ExamScheduleId == request.ExamScheduleId && subjectIds.Contains(es.SubjectId))
-            .Select(es => new { es.SubjectId, FullScore = es.FullScore ?? es.Subject!.FullScore })
-            .ToListAsync();
-        var fullScoreMap = fullScoreData.ToDictionary(fs => fs.SubjectId, fs => fs.FullScore);
-
-        // 校验分数是否超出满分
-        var errors = new List<string>();
-        foreach (var row in request.Rows)
+        try
         {
-            foreach (var sc in row.Scores)
+            if (request?.Rows == null || request.Rows.Count == 0)
+                return Json(new { success = false, message = "无数据" });
+
+            var exam = await _db.ExamSchedules.FindAsync(request.ExamScheduleId);
+            if (exam == null)
+                return Json(new { success = false, message = "考试安排不存在" });
+
+            if (exam.Status != "进行中")
+                return Json(new { success = false, message = "仅「进行中」的考试可以导入成绩" });
+
+            var studentIds = request.Rows.Select(r => r.StudentId).Distinct().ToList();
+            var subjectIds = request.Rows.SelectMany(r => r.Scores).Select(s => s.SubjectId).Distinct().ToList();
+
+            // 加载该考试的科目满分
+            var fullScoreData = await _db.ExamSubjects
+                .Where(es => es.ExamScheduleId == request.ExamScheduleId && subjectIds.Contains(es.SubjectId))
+                .Select(es => new { es.SubjectId, FullScore = es.FullScore ?? es.Subject!.FullScore })
+                .ToListAsync();
+            var fullScoreMap = fullScoreData.ToDictionary(fs => fs.SubjectId, fs => fs.FullScore);
+
+            // 校验分数是否超出满分
+            var errors = new List<string>();
+            foreach (var row in request.Rows)
             {
-                if (fullScoreMap.TryGetValue(sc.SubjectId, out var maxScore))
+                foreach (var sc in row.Scores)
                 {
-                    if (!sc.IsAbsent && (sc.ScoreValue < 0 || sc.ScoreValue > maxScore))
+                    if (fullScoreMap.TryGetValue(sc.SubjectId, out var maxScore))
                     {
-                        errors.Add($"学生ID:{row.StudentId} 科目ID:{sc.SubjectId} 分数 {sc.ScoreValue} 超出满分 {maxScore}");
+                        if (!sc.IsAbsent && (sc.ScoreValue < 0 || sc.ScoreValue > maxScore))
+                        {
+                            errors.Add($"学生ID:{row.StudentId} 科目ID:{sc.SubjectId} 分数 {sc.ScoreValue} 超出满分 {maxScore}");
+                        }
                     }
                 }
             }
-        }
-        if (errors.Count > 0)
-            return Json(new { success = false, message = "存在超出满分的成绩:\n" + string.Join("\n", errors.Take(20)) + (errors.Count > 20 ? $"\n...还有{errors.Count - 20}条错误" : "") });
+            if (errors.Count > 0)
+                return Json(new { success = false, message = "存在超出满分的成绩:\n" + string.Join("\n", errors.Take(20)) + (errors.Count > 20 ? $"\n...还有{errors.Count - 20}条错误" : "") });
 
-        // 批量加载已有成绩
-        var existingList = await _db.Scores
-            .Where(sc => sc.ExamScheduleId == request.ExamScheduleId
-                      && studentIds.Contains(sc.StudentId)
-                      && subjectIds.Contains(sc.SubjectId))
-            .ToListAsync();
-        var existingDict = existingList.ToDictionary(sc => $"{sc.StudentId}_{sc.SubjectId}");
+            // 批量加载已有成绩
+            var existingList = await _db.Scores
+                .Where(sc => sc.ExamScheduleId == request.ExamScheduleId
+                          && studentIds.Contains(sc.StudentId)
+                          && subjectIds.Contains(sc.SubjectId))
+                .ToListAsync();
+            var existingDict = existingList.ToDictionary(sc => $"{sc.StudentId}_{sc.SubjectId}");
 
-        // 加载学生班级信息
-        var students = await _db.Students.Where(s => studentIds.Contains(s.StudentID)).ToListAsync();
-        var studentDict = students.ToDictionary(s => s.StudentID);
+            // 加载学生班级信息
+            var students = await _db.Students.Where(s => studentIds.Contains(s.StudentID)).ToListAsync();
+            var studentDict = students.ToDictionary(s => s.StudentID);
 
-        int saved = 0;
-        foreach (var row in request.Rows)
-        {
-            studentDict.TryGetValue(row.StudentId, out var student);
-            foreach (var sc in row.Scores)
+            // 预加载所有班级信息（含年级），避免循环内反复查库
+            var allClassInfos = await _db.ClassInfos
+                .Include(c => c.GradeLevel)
+                .Where(c => c.GradeLevel != null)
+                .ToListAsync();
+            // 建立按 "ClassName|GradeName" 的快速查找字典（GradeName = CurrentGradeName）
+            var classInfoLookup = allClassInfos
+                .GroupBy(c => $"{c.ClassName}|{c.GradeLevel!.CurrentGradeName}")
+                .ToDictionary(g => g.Key, g => g.First());
+
+            int saved = 0;
+            foreach (var row in request.Rows)
             {
-                var key = $"{row.StudentId}_{sc.SubjectId}";
-                if (existingDict.TryGetValue(key, out var existing))
+                studentDict.TryGetValue(row.StudentId, out var student);
+                foreach (var sc in row.Scores)
                 {
-                    existing.ScoreValue = sc.ScoreValue;
-                    existing.IsAbsent = sc.IsAbsent;
-                    // 同时修正可能错误的 ClassInfoId/GradeLevelId
-                    if (student != null)
+                    var key = $"{row.StudentId}_{sc.SubjectId}";
+                    if (existingDict.TryGetValue(key, out var existing))
                     {
-                        ClassInfo? existingCi = null;
-                        if (student.ClassID.HasValue && student.ClassID.Value > 0)
+                        existing.ScoreValue = sc.ScoreValue;
+                        existing.IsAbsent = sc.IsAbsent;
+                        // 同时修正可能错误的 ClassInfoId/GradeLevelId
+                        if (student != null)
                         {
-                            existingCi = await _db.ClassInfos
-                                .FirstOrDefaultAsync(c => c.ClassInfoID == student.ClassID.Value);
-                        }
-                        if (existingCi == null && !string.IsNullOrEmpty(student.ClassName))
-                        {
-                            existingCi = await _db.ClassInfos
-                                .Include(c => c.GradeLevel)
-                                .FirstOrDefaultAsync(c => c.ClassName == student.ClassName
-                                    && c.GradeLevel != null
-                                    && (c.GradeLevel.CurrentGradeName == student.Grade
-                                        || c.GradeLevel.DisplayName == student.Grade));
-                        }
-                        if (existingCi != null)
-                        {
-                            existing.ClassInfoId = existingCi.ClassInfoID;
-                            existing.GradeLevelId = existingCi.GradeLevelID;
+                            ClassInfo? existingCi = null;
+                            if (student.ClassID.HasValue && student.ClassID.Value > 0)
+                            {
+                                existingCi = allClassInfos
+                                    .FirstOrDefault(c => c.ClassInfoID == student.ClassID.Value);
+                            }
+                            if (existingCi == null && !string.IsNullOrEmpty(student.ClassName) && !string.IsNullOrEmpty(student.Grade))
+                            {
+                                var lookupKey = $"{student.ClassName}|{student.Grade}";
+                                classInfoLookup.TryGetValue(lookupKey, out existingCi);
+                            }
+                            if (existingCi != null)
+                            {
+                                existing.ClassInfoId = existingCi.ClassInfoID;
+                                existing.GradeLevelId = existingCi.GradeLevelID;
+                            }
                         }
                     }
-                }
-                else
-                {
-                    var newScore = new Score
+                    else
                     {
-                        StudentId = row.StudentId,
-                        SubjectId = sc.SubjectId,
-                        ScoreValue = sc.ScoreValue,
-                        IsAbsent = sc.IsAbsent,
-                        ExamScheduleId = request.ExamScheduleId,
-                        ExamType = exam.ExamType,
-                        ExamDate = exam.ExamDate,
-                        CreateTime = DateTime.Now,
-                    };
-                    if (student != null)
-                    {
-                        ClassInfo? classInfo = null;
-
-                        if (student.ClassID.HasValue && student.ClassID.Value > 0)
+                        var newScore = new Score
                         {
-                            classInfo = await _db.ClassInfos
-                                .FirstOrDefaultAsync(c => c.ClassInfoID == student.ClassID.Value);
-                        }
-
-                        if (classInfo == null && !string.IsNullOrEmpty(student.ClassName))
+                            StudentId = row.StudentId,
+                            SubjectId = sc.SubjectId,
+                            ScoreValue = sc.ScoreValue,
+                            IsAbsent = sc.IsAbsent,
+                            ExamScheduleId = request.ExamScheduleId,
+                            ExamType = exam.ExamType,
+                            ExamDate = exam.ExamDate,
+                            CreateTime = DateTime.Now,
+                        };
+                        if (student != null)
                         {
-                            classInfo = await _db.ClassInfos
-                                .Include(c => c.GradeLevel)
-                                .FirstOrDefaultAsync(c => c.ClassName == student.ClassName
-                                    && c.GradeLevel != null
-                                    && (c.GradeLevel.CurrentGradeName == student.Grade
-                                        || c.GradeLevel.DisplayName == student.Grade));
+                            ClassInfo? classInfo = null;
+                            if (student.ClassID.HasValue && student.ClassID.Value > 0)
+                            {
+                                classInfo = allClassInfos
+                                    .FirstOrDefault(c => c.ClassInfoID == student.ClassID.Value);
+                            }
+                            if (classInfo == null && !string.IsNullOrEmpty(student.ClassName) && !string.IsNullOrEmpty(student.Grade))
+                            {
+                                var lookupKey = $"{student.ClassName}|{student.Grade}";
+                                classInfoLookup.TryGetValue(lookupKey, out classInfo);
+                            }
+                            if (classInfo != null)
+                            {
+                                newScore.ClassInfoId = classInfo.ClassInfoID;
+                                newScore.GradeLevelId = classInfo.GradeLevelID;
+                            }
                         }
-
-                        if (classInfo != null)
-                        {
-                            newScore.ClassInfoId = classInfo.ClassInfoID;
-                            newScore.GradeLevelId = classInfo.GradeLevelID;
-                        }
+                        _db.Scores.Add(newScore);
                     }
-                    _db.Scores.Add(newScore);
+                    saved++;
                 }
-                saved++;
             }
-        }
 
-        await _db.SaveChangesAsync();
-        return Json(new { success = true, message = $"成功导入 {saved} 条成绩" });
+            await _db.SaveChangesAsync();
+            return Json(new { success = true, message = $"成功导入 {saved} 条成绩" });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { success = false, message = $"导入失败：{ex.Message}" });
+        }
     }
 
     private static string GetGradeDisplayName(string schoolType, int entryYear)
@@ -3424,6 +3436,7 @@ public class ScoreController : Controller
                     Subjects = subjectData,
                     TotalScore = totalScore,
                     TotalFullScore = totalFullScore,
+                    AverageScore = totalSubjects - absentCount > 0 ? Math.Round(totalScore / (totalSubjects - absentCount), 1) : (decimal?)null,
                     OverallLevel = overallLevel,
                     HasAbsent = absentCount > 0
                 };

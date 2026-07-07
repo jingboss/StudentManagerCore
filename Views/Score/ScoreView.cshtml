@@ -71,7 +71,7 @@
         </li>
         <li class="nav-item" role="presentation">
             <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabTop10" type="button" onclick="onTop10Tab()">
-                <i class="bi bi-trophy me-1"></i>年级排名前10名
+                <i class="bi bi-trophy me-1"></i>年级排名前20名
             </button>
         </li>
         <li class="nav-item" role="presentation">
@@ -177,11 +177,11 @@
             </div>
         </div>
 
-        <!-- ============= Tab 4: 年级排名前10名 ============= -->
+        <!-- ============= Tab 4: 年级排名前20名 ============= -->
         <div class="tab-pane fade" id="tabTop10">
             <div class="card border-warning">
                 <div class="card-header bg-warning bg-opacity-10 py-2">
-                    <span class="fw-bold"><i class="bi bi-trophy me-1"></i>年级排名前10名</span>
+                    <span class="fw-bold"><i class="bi bi-trophy me-1"></i>年级排名前20名</span>
                     <span id="top10Stats" class="text-muted small"></span>
                 </div>
                 <div class="card-body p-0">
@@ -556,7 +556,9 @@
             $('#viewStats').text(data.studentScores.length + ' 名学生');
             var headerHtml = '<th class="text-center" style="width:36px;">排名</th>' +
                              '<th style="width:70px;">学号</th>' +
-                             '<th style="width:45px;">姓名</th>';
+                             '<th style="width:45px;">姓名</th>' +
+                                 '<th style="width:50px;">年级</th>' +
+                                 '<th style="width:45px;">班级</th>';
             data.subjects.forEach(function (sub) {
                 headerHtml += '<th class="text-center" style="width:48px;font-size:0.8rem;">' +
                               sub.subjectName + '<br><small class="text-muted">(' + sub.fullScore + ')</small></th>';
@@ -577,7 +579,9 @@
                 bodyHtml += '<tr class="' + rankClass + '">' +
                     '<td class="text-center fw-bold">' + row.rank + '</td>' +
                     '<td>' + htmlEncode(row.studentNo) + '</td>' +
-                    '<td>' + htmlEncode(row.studentName) + '</td>';
+                    '<td>' + htmlEncode(row.studentName) + '</td>' +
+                        '<td>' + htmlEncode(row.gradeName) + '</td>' +
+                        '<td>' + htmlEncode(row.className) + '</td>';
                 data.subjects.forEach(function (sub) {
                     var score = row.scores.find(function (s) { return s.subjectId === sub.subjectId; });
                     bodyHtml += '<td class="text-center">' + (score ? score.scoreValue : '-') + '</td>';
@@ -689,7 +693,7 @@
             $('#compBody').html(bodyHtml);
         }
 
-        // ========== 年级排名前10名 ==========
+        // ========== 年级排名前20名 ==========
         function onTop10Tab() {
             var examId = $('#examSelect').val();
             if (!examId) { $('#top10Body').html('<tr><td colspan="99" class="text-center text-muted py-4">请先在上方选择考试</td></tr>'); return; }
@@ -716,7 +720,9 @@
 
                 var headerHtml = '<th class="text-center" style="width:36px;">排名</th>' +
                                  '<th style="width:70px;">学号</th>' +
-                                 '<th style="width:45px;">姓名</th>';
+                                 '<th style="width:45px;">姓名</th>' +
+                                 '<th style="width:50px;">年级</th>' +
+                                 '<th style="width:45px;">班级</th>';
                 res.subjects.forEach(function (sub) {
                     headerHtml += '<th class="text-center" style="width:48px;font-size:0.8rem;">' +
                                   sub.subjectName + '</th>';
@@ -732,7 +738,9 @@
                     bodyHtml += '<tr class="' + cls + '">' +
                         '<td class="text-center fw-bold">' + row.rank + '</td>' +
                         '<td>' + htmlEncode(row.studentNo) + '</td>' +
-                        '<td>' + htmlEncode(row.studentName) + '</td>';
+                        '<td>' + htmlEncode(row.studentName) + '</td>' +
+                        '<td>' + htmlEncode(row.gradeName) + '</td>' +
+                        '<td>' + htmlEncode(row.className) + '</td>';
                     res.subjects.forEach(function (sub) {
                         var score = row.scores.find(function(s) { return s.subjectId === sub.subjectId; });
                         bodyHtml += '<td class="text-center">' + (score ? score.scoreValue : '-') + '</td>';
@@ -742,7 +750,7 @@
                                 '<td class="text-center fw-bold">' + row.gradeRank + '</td></tr>';
                 });
                 $('#top10Body').html(bodyHtml);
-            }).fail(function() { alert('加载年级排名前10失败'); });
+            }).fail(function() { alert('加载年级排名前20名失败'); });
         }
 
         // ========== 导出 ==========
