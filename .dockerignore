@@ -1,49 +1,24 @@
-# .NET build artifacts
-bin/
-obj/
-publish/
-
-# IDE files
-.vs/
-.vscode/
-.idea/
-*.suo
-*.user
-*.userosscache
-*.sln.docstates
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# Git / project files
-.git/
-.gitignore
-.gitattributes
-
-# Logs
-*.log
-error.log
-migrate_error.txt
-
-# Temp / local data (not needed in Docker)
-check_data/
-check_db/
-check_exam_subject/
-check_user/
-DataMigrator/
-fix_enc/
-hash_pwd/
-StudentManagerCore/  # nested project folder (not published)
-
-# Runtime uploaded files (will be created by docker volume)
-uploads/
-
-# Config template (use appsettings.json with env vars instead)
-appsettings.template.json
-
-# Docker files (exclude from build context if not needed, but keep in source)
-docker/
-
-# Python scripts
-*.py
+**/.classpath
+**/.dockerignore
+**/.env
+**/.git
+**/.gitignore
+**/.project
+**/.settings
+**/.toolstarget
+**/.vs
+**/.vscode
+**/*.*proj.user
+**/*.dbmdl
+**/*.jfm
+**/bin
+**/charts
+**/docker-compose*
+**/compose*
+**/Dockerfile*
+**/node_modules
+**/npm-debug.log
+**/obj
+**/secrets.dev.yaml
+**/values.dev.yaml
+lib

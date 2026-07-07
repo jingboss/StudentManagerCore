@@ -1,48 +1,44 @@
-version: "3.8"
+version: '3.8'
 
 services:
-  mysql:
-    image: mysql:8.0
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: studentmanager-db
-    restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123}
-      MYSQL_DATABASE: StudentManagerDB
-      MYSQL_CHARACTER_SET_SERVER: utf8mb4
-      MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=${MSSQL_SA_PASSWORD:-YourPassword123!}
+      - MSSQL_PID=Express
     ports:
-      - "3307:3306"
+      - "1433:1433"
     volumes:
-      - mysql_data:/var/lib/mysql
-      - ./docker/mysql/init:/docker-entrypoint-initdb.d
+      - sqlserver-data:/var/opt/mssql
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "${MSSQL_SA_PASSWORD:-YourPassword123!}" -C -Q "SELECT 1" || exit 1
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 30s
 
   app:
+    image: studentmanager-core:latest
+    container_name: studentmanager-app
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: studentmanager-app
-    restart: unless-stopped
-    ports:
-      - "5000:5000"
     environment:
-      ASPNETCORE_URLS: http://+:5000
-      ASPNETCORE_ENVIRONMENT: Production
-      ConnectionStrings__DefaultConnection: "Server=mysql;Port=3306;Database=StudentManagerDB;User Id=root;Password=${MYSQL_ROOT_PASSWORD:-root123};CharSet=utf8mb4;"
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
-    volumes:
-      - app_uploads:/app/uploads
-      - app_wwwroot_imge:/app/wwwroot/imge
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:80
+      - ConnectionStrings__DefaultConnection=Server=sqlserver;Database=StudentManagerDB;User Id=sa;Password=${MSSQL_SA_PASSWORD:-YourPassword123!};TrustServerCertificate=True
+      - Jwt__Key=${JWT_KEY:-YourSuperSecretKeyThatIsAtLeast32CharactersLong!}
+      - Jwt__Issuer=${JWT_ISSUER:-StudentManagerCore}
+      - Jwt__Audience=${JWT_AUDIENCE:-StudentManagerCore}
+      - Jwt__ExpireMinutes=${JWT_EXPIRE_MINUTES:-120}
+    ports:
+      - "${WEB_PORT:-8080}:80"
     depends_on:
-      mysql:
+      sqlserver:
         condition: service_healthy
+    restart: unless-stopped
 
 volumes:
-  mysql_data:
-  app_uploads:
-  app_wwwroot_imge:
+  sqlserver-data:
