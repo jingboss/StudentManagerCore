@@ -765,8 +765,8 @@ public class StudentController : Controller
                             .Where(s => s.ClassInfoId == studentClassInfoId.Value)
                             .OrderByDescending(s => s.Total).ToList();
                         classTotal = classScores.Count;
-                        var pos = classScores.FindIndex(s => s.StudentId == id);
-                        classRank = pos >= 0 ? pos + 1 : null;
+                        var sameScoreFirst = classScores.FindIndex(s => s.Total == totalScore);
+                        classRank = sameScoreFirst >= 0 ? sameScoreFirst + 1 : null;
                     }
 
                     // 年级排名
@@ -778,8 +778,8 @@ public class StudentController : Controller
                             .Where(s => s.GradeLevelId == studentGradeLevelId.Value)
                             .OrderByDescending(s => s.Total).ToList();
                         gradeTotal = gradeScores.Count;
-                        var pos = gradeScores.FindIndex(s => s.StudentId == id);
-                        gradeRank = pos >= 0 ? pos + 1 : null;
+                        var sameScoreFirst = gradeScores.FindIndex(s => s.Total == totalScore);
+                        gradeRank = sameScoreFirst >= 0 ? sameScoreFirst + 1 : null;
                     }
 
                     recentExams.Add(new

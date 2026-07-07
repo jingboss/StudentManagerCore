@@ -845,14 +845,20 @@
                     // 按学段过滤
                     var filtered = allSubjects;
                     if (schoolType === 'primary') {
+                        // 小学：只显示"无年级"或年级名含"小"或年级名以"一"/"二"/"三"/"四"/"五"/"六"开头的科目
                         filtered = allSubjects.filter(function(s) {
-                            return !s.grade || s.grade.indexOf('小') >= 0 || s.grade.indexOf('年') >= 0;
+                            if (!s.grade) return true; // 无年级限制 = 全校适用
+                            if (s.grade.indexOf('小') >= 0) return true;
+                            var firstChar = s.grade.trim().charAt(0);
+                            return '一二三四五六'.indexOf(firstChar) >= 0;
                         });
                     } else if (schoolType === 'middle') {
-                        // 初中：排除明确标记为"小学"的科目（含"小"字的Grade）
-                        // 其余全部显示（初中、七年级、八年级、九年级、空/无年级等均包含）
+                        // 初中：只显示"无年级"或年级名含"初"或年级名以"七"/"八"/"九"开头的科目
                         filtered = allSubjects.filter(function(s) {
-                            return !s.grade || s.grade.indexOf('小') === -1;
+                            if (!s.grade) return true; // 无年级限制 = 全校适用
+                            if (s.grade.indexOf('初') >= 0) return true;
+                            var firstChar = s.grade.trim().charAt(0);
+                            return '七八九'.indexOf(firstChar) >= 0;
                         });
                     }
 

@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StudentManagerCore.Data;
@@ -205,11 +205,29 @@ public class ScoreController : Controller
                     ExamDate = exam.ExamDate,
                     CreateTime = DateTime.Now,
                 };
-                // 填充分级班级快照
+                // 填充分级班级快照（必须同时按年级+班级精确匹配，避免不同年级同名班级串数据）
                 if (student != null)
                 {
-                    var classInfo = await _db.ClassInfos
-                        .FirstOrDefaultAsync(c => c.ClassName == student.ClassName);
+                    ClassInfo? classInfo = null;
+
+                    // 优先使用 ClassID（如果学生已有 ClassID）
+                    if (student.ClassID.HasValue && student.ClassID.Value > 0)
+                    {
+                        classInfo = await _db.ClassInfos
+                            .FirstOrDefaultAsync(c => c.ClassInfoID == student.ClassID.Value);
+                    }
+
+                    // 回退：按班级名+年级名精确匹配
+                    if (classInfo == null && !string.IsNullOrEmpty(student.ClassName))
+                    {
+                        classInfo = await _db.ClassInfos
+                            .Include(c => c.GradeLevel)
+                            .FirstOrDefaultAsync(c => c.ClassName == student.ClassName
+                                && c.GradeLevel != null
+                                && (c.GradeLevel.CurrentGradeName == student.Grade
+                                    || c.GradeLevel.DisplayName == student.Grade));
+                    }
+
                     if (classInfo != null)
                     {
                         score.ClassInfoId = classInfo.ClassInfoID;
@@ -275,6 +293,11 @@ public class ScoreController : Controller
     [HttpPost]
     public async Task<IActionResult> GetViewData(int examScheduleId, int? gradeLevelId, int? classInfoId)
     {
+        try
+        {
+        // 自动修复已有错误数据：Score 的 GradeLevelId/ClassInfoId 与 Student 不一致的
+        await AutoFixScoreClassReferences(examScheduleId);
+
         // 非管理员用户，自动默认筛选到其管理的班级
         var adminId = GetAdminId();
         if (!IsAdmin() && adminId.HasValue)
@@ -312,6 +335,25 @@ public class ScoreController : Controller
                 .ToList();
         }
 
+        // 判断学段：小学还是初中
+        var allMatchedGradeLevels = await _db.GradeLevels.ToListAsync();
+        var matchedGrades = allMatchedGradeLevels
+            .Where(gl => validGradeLevelIds.Contains(gl.GradeLevelID))
+            .ToList();
+        var isElementary = matchedGrades.Count > 0 && matchedGrades.All(gl => gl.SchoolType == "小学");
+
+        // 如果按 CurrentGradeName 匹配不上，尝试按显示名称匹配
+        if (validGradeLevelIds.Count == 0 && gradeList.Count > 0)
+        {
+            var allGradeLevels2 = await _db.GradeLevels.ToListAsync();
+            validGradeLevelIds = MatchGradeLevelIdsByDisplayName(gradeList, allGradeLevels2);
+            // 重新判断学段
+            matchedGrades = allGradeLevels2
+                .Where(gl => validGradeLevelIds.Contains(gl.GradeLevelID))
+                .ToList();
+            isElementary = matchedGrades.Count > 0 && matchedGrades.All(gl => gl.SchoolType == "小学");
+        }
+
         // 获取该考试的科目（按科目名去重）
         var subjects = await _db.ExamSubjects
             .Where(es => es.ExamScheduleId == examScheduleId)
@@ -321,30 +363,155 @@ public class ScoreController : Controller
             .ToListAsync();
         subjects = subjects.GroupBy(s => s.SubjectName).Select(g => g.First()).ToList();
 
-        // 获取成绩
+        // ========== ★ 第一步：获取全部成绩数据用于排名（不受筛选影响） ==========
+        var allScoresQuery = _db.Scores
+            .Where(sc => sc.ExamScheduleId == examScheduleId)
+            .Include(sc => sc.Student)
+            .AsQueryable();
+
+        // 但全部数据仍然要限制在考试覆盖的年级范围内
+        if (validGradeLevelIds.Count > 0)
+        {
+            var allGradeLevels = await _db.GradeLevels
+                .Where(g => validGradeLevelIds.Contains(g.GradeLevelID))
+                .ToListAsync();
+            var gradeNames = allGradeLevels.Select(g => g.CurrentGradeName).Where(n => !string.IsNullOrEmpty(n)).ToList();
+            allScoresQuery = allScoresQuery.Where(sc =>
+                (sc.GradeLevelId != null && validGradeLevelIds.Contains(sc.GradeLevelId.Value))
+                || (sc.Student != null && sc.Student.Grade != null && gradeNames.Contains(sc.Student.Grade)));
+        }
+
+        var allScoresForRanking = await allScoresQuery.ToListAsync();
+
+        // 构建全量学生总分数据（用于排名计算）
+        var allStudentScores = allScoresForRanking
+            .GroupBy(sc => new { sc.StudentId, StudentNo = sc.Student?.StudentNo ?? "", StudentName = sc.Student?.Name ?? "" })
+            .Select(g => new
+            {
+                StudentId = g.Key.StudentId,
+                TotalScore = g.Where(sc => !sc.IsAbsent).Sum(sc => sc.ScoreValue),
+                ClassInfoId = g.Min(sc => sc.ClassInfoId),
+                GradeLevelId = g.Min(sc => sc.GradeLevelId)
+            })
+            .ToList();
+
+        // ★ 竞争排名（1224制）：同分同名次
+        static Dictionary<int, int> ComputeCompetitionRanking(IEnumerable<dynamic> items, Func<dynamic, decimal> orderSelector)
+        {
+            var sorted = items.OrderByDescending(orderSelector).ToList();
+            var result = new Dictionary<int, int>();
+            int currentRank = 1;
+            for (int i = 0; i < sorted.Count; i++)
+            {
+                if (i > 0 && orderSelector(sorted[i]) != orderSelector(sorted[i - 1]))
+                    currentRank++;
+                result[(int)sorted[i].StudentId] = currentRank;
+            }
+            return result;
+        }
+
+        // 全量年级排名（按GradeLevelId分组）
+        var gradeRankings = new Dictionary<int, Dictionary<int, int>>();
+        foreach (var gradeGroup in allStudentScores
+            .Where(s => s.GradeLevelId != null)
+            .GroupBy(s => s.GradeLevelId!.Value))
+        {
+            gradeRankings[gradeGroup.Key] = ComputeCompetitionRanking(gradeGroup, x => (decimal)x.TotalScore);
+        }
+
+        // 全量班级排名（按ClassInfoId分组）
+        var classRankings = new Dictionary<int, Dictionary<int, int>>();
+        foreach (var classGroup in allStudentScores
+            .Where(s => s.ClassInfoId != null)
+            .GroupBy(s => s.ClassInfoId!.Value))
+        {
+            classRankings[classGroup.Key] = ComputeCompetitionRanking(classGroup, x => (decimal)x.TotalScore);
+        }
+
+        // ========== ★ 第二步：按筛选条件获取显示的考试成绩 ==========
         var query = _db.Scores
             .Where(sc => sc.ExamScheduleId == examScheduleId)
             .Include(sc => sc.Student)
             .AsQueryable();
 
-        if (gradeLevelId.HasValue)
+        // 构建筛选条件（兼容旧数据中可能因同名班级导致的错误 GradeLevelId/ClassInfoId）
+        if (gradeLevelId.HasValue || classInfoId.HasValue)
         {
-            query = query.Where(sc => sc.GradeLevelId == gradeLevelId.Value);
+            string? gradeName = null;
+            string? className = null;
+
+            if (gradeLevelId.HasValue)
+            {
+                var gradeLevel = await _db.GradeLevels.FindAsync(gradeLevelId.Value);
+                gradeName = gradeLevel?.CurrentGradeName;
+            }
+            if (classInfoId.HasValue)
+            {
+                var classInfo = await _db.ClassInfos.FindAsync(classInfoId.Value);
+                className = classInfo?.ClassName;
+            }
+
+            // 主条件：Score 的 GradeLevelId/ClassInfoId 匹配
+            // 兜底条件：Student 的 Grade/ClassName 匹配（修复旧数据）
+            if (gradeLevelId.HasValue && classInfoId.HasValue)
+            {
+                var gl = gradeLevelId.Value;
+                var ci = classInfoId.Value;
+                if (!string.IsNullOrEmpty(gradeName) && !string.IsNullOrEmpty(className))
+                {
+                    query = query.Where(sc =>
+                        (sc.GradeLevelId == gl && sc.ClassInfoId == ci)
+                        || (sc.Student != null && sc.Student.Grade == gradeName && sc.Student.ClassName == className));
+                }
+                else
+                {
+                    query = query.Where(sc => sc.GradeLevelId == gl && sc.ClassInfoId == ci);
+                }
+            }
+            else if (gradeLevelId.HasValue)
+            {
+                var gl = gradeLevelId.Value;
+                if (!string.IsNullOrEmpty(gradeName))
+                {
+                    query = query.Where(sc =>
+                        sc.GradeLevelId == gl
+                        || (sc.Student != null && sc.Student.Grade == gradeName));
+                }
+                else
+                {
+                    query = query.Where(sc => sc.GradeLevelId == gl);
+                }
+            }
+            else if (classInfoId.HasValue)
+            {
+                var ci = classInfoId.Value;
+                if (!string.IsNullOrEmpty(className) && !string.IsNullOrEmpty(gradeName))
+                {
+                    query = query.Where(sc =>
+                        sc.ClassInfoId == ci
+                        || (sc.Student != null && sc.Student.ClassName == className && sc.Student.Grade == gradeName));
+                }
+                else
+                {
+                    query = query.Where(sc => sc.ClassInfoId == ci);
+                }
+            }
         }
         else if (validGradeLevelIds.Count > 0)
         {
-            query = query.Where(sc => sc.GradeLevelId != null && validGradeLevelIds.Contains(sc.GradeLevelId.Value));
-        }
-
-        if (classInfoId.HasValue)
-        {
-            query = query.Where(sc => sc.ClassInfoId == classInfoId.Value);
+            // 无手动筛选时，限制为考试覆盖的年级（同时用学生信息兜底）
+            var gradeLevels = await _db.GradeLevels
+                .Where(g => validGradeLevelIds.Contains(g.GradeLevelID))
+                .ToListAsync();
+            var gradeNames = gradeLevels.Select(g => g.CurrentGradeName).Where(n => !string.IsNullOrEmpty(n)).ToList();
+            query = query.Where(sc =>
+                (sc.GradeLevelId != null && validGradeLevelIds.Contains(sc.GradeLevelId.Value))
+                || (sc.Student != null && sc.Student.Grade != null && gradeNames.Contains(sc.Student.Grade)));
         }
 
         var scores = await query.ToListAsync();
 
-        // 各科统计汇总
-        var studentCount = scores.Select(sc => sc.StudentId).Distinct().Count();
+        // ========== ★ 第三步：构建显示的得分详情（基于筛选后的数据） ==========
         var subjectStats = subjects.Select(sub =>
         {
             var subScores = scores.Where(sc => sc.SubjectId == sub.SubjectId).ToList();
@@ -382,10 +549,8 @@ public class ScoreController : Controller
             var sorted = presentScores.Select(sc => (double)sc.ScoreValue).OrderBy(v => v).ToList();
             var median = sorted.Count > 0 ? sorted[sorted.Count / 2] : 0;
 
-            // 临界生（距及格线±5%满分范围内，只对实考学生）
-            var criticalMin = fs * 0.55m;
-            var criticalMax = fs * 0.65m;
-            var criticalCount = presentScores.Count(sc => sc.ScoreValue >= criticalMin && sc.ScoreValue <= criticalMax);
+            // 临界生（仅初中适用，小学设为-1表示不适用）
+            var criticalCount = isElementary ? -1 : presentScores.Count(sc => sc.ScoreValue >= fs * 0.55m && sc.ScoreValue <= fs * 0.65m);
 
             return new
             {
@@ -412,7 +577,7 @@ public class ScoreController : Controller
             };
         }).ToList();
 
-        // 总分统计（排除缺考科目的0分）
+        // 总分统计（排除缺考科目的0分）—— 用于显示
         var studentScores = scores
             .GroupBy(sc => new { sc.StudentId, StudentNo = sc.Student?.StudentNo ?? "", StudentName = sc.Student?.Name ?? "" })
             .Select(g => new
@@ -428,6 +593,10 @@ public class ScoreController : Controller
                     return new { SubjectId = sub.SubjectId, SubjectName = sub.SubjectName, ScoreValue = (decimal?)sc.ScoreValue, IsAbsent = false };
                 }).ToList(),
                 TotalScore = g.Where(sc => !sc.IsAbsent).Sum(sc => sc.ScoreValue),
+                // 实考科目的满分之和（缺考科目不计入）
+                PresentFullScore = g.Where(sc => !sc.IsAbsent)
+                    .Join(subjects, sc => sc.SubjectId, sub => sub.SubjectId, (sc, sub) => sub.FullScore)
+                    .Sum(),
                 PresentSubjectCount = g.Count(sc => !sc.IsAbsent),
                 SubjectCount = subjects.Count,
                 ClassInfoId = g.Min(sc => sc.ClassInfoId),
@@ -436,54 +605,28 @@ public class ScoreController : Controller
             .OrderByDescending(x => x.TotalScore)
             .ToList();
 
-        // 年级排名（按GradeLevelId分组）
-        var gradeRankings = studentScores
-            .Where(s => s.GradeLevelId != null)
-            .GroupBy(s => s.GradeLevelId!.Value)
-            .ToDictionary(
-                g => g.Key,
-                g => g.OrderByDescending(s => s.TotalScore)
-                       .Select((s, idx) => new { s.StudentId, GradeRank = idx + 1 })
-                       .ToDictionary(s => s.StudentId, s => s.GradeRank)
-            );
-
-        // 班级排名（按ClassInfoId分组）
-        var classRankings = studentScores
-            .Where(s => s.ClassInfoId != null)
-            .GroupBy(s => s.ClassInfoId!.Value)
-            .ToDictionary(
-                g => g.Key,
-                g => g.OrderByDescending(s => s.TotalScore)
-                       .Select((s, idx) => new { s.StudentId, ClassRank = idx + 1 })
-                       .ToDictionary(s => s.StudentId, s => s.ClassRank)
-            );
-
-        // 班级等级（ABCD相对比例评价：以班级总数为基数，学校统一标准）
-        // A（优秀）前25%  B（良好）26%~60%  C（及格）61%~95%  D（不及格）后5%
+        // 学生等级（总分百分比法：与成绩报告单综合等级一致）
+        // A≥90%  B≥80%  C≥60%  D<60%，单科不及格只拉低均分不一票否决
         var classLevels = new Dictionary<int, string>(); // StudentId → Level
-        foreach (var classGroup in studentScores
-            .Where(s => s.ClassInfoId.HasValue)
-            .GroupBy(s => s.ClassInfoId!.Value))
+        foreach (var stu in studentScores)
         {
-            var studentsInClass = classGroup
-                .OrderByDescending(s => s.TotalScore)
-                .ToList();
-            int total = studentsInClass.Count;
-            for (int i = 0; i < total; i++)
+            string level;
+            if (stu.PresentFullScore <= 0)
+                level = "缺考";
+            else
             {
-                double pct = (double)(i + 1) / total; // 前 i+1 名占比
-                string level;
-                if (pct <= 0.25) level = "A";
-                else if (pct <= 0.60) level = "B";
-                else if (pct <= 0.95) level = "C";
+                var pct = (double)stu.TotalScore / (double)stu.PresentFullScore;
+                if (pct >= 0.9) level = "A";
+                else if (pct >= 0.8) level = "B";
+                else if (pct >= 0.6) level = "C";
                 else level = "D";
-                classLevels[studentsInClass[i].StudentId] = level;
             }
+            classLevels[stu.StudentId] = level;
         }
 
+        // 构建最终排名结果（使用竞争排名1224制 + 引用全量数据的年级/班级排名）
         var rankedScores = studentScores
-            .OrderByDescending(x => x.TotalScore)
-            .Select((x, idx) =>
+            .Select(x =>
             {
                 var totalScore = x.TotalScore;
                 var avgScore = x.PresentSubjectCount > 0
@@ -506,7 +649,6 @@ public class ScoreController : Controller
 
                 return new
                 {
-                    Rank = idx + 1,
                     x.StudentId,
                     x.StudentNo,
                     x.StudentName,
@@ -518,16 +660,141 @@ public class ScoreController : Controller
                     Level = classLevels.ContainsKey(x.StudentId) ? classLevels[x.StudentId] : ""
                 };
             })
+            .OrderByDescending(x => x.TotalScore)
             .ToList();
 
-        // 总分临界生（总分在及格线±5%范围内）
-        var totalFullScore = subjects.Sum(s => (decimal)s.FullScore);
-        var totalPassLine = totalFullScore * 0.6m;
-        var criticalTotalMin = totalPassLine * 0.95m;
-        var criticalTotalMax = totalPassLine * 1.05m;
-        var totalCriticalStudents = rankedScores.Count(s => s.TotalScore >= criticalTotalMin && s.TotalScore <= criticalTotalMax);
+        // 计算竞争排名（1224制：同分同名次）
+        var finalStudentScores = new List<dynamic>();
+        int currentDisplayRank = 1;
+        for (int i = 0; i < rankedScores.Count; i++)
+        {
+            if (i > 0 && rankedScores[i].TotalScore != rankedScores[i - 1].TotalScore)
+                currentDisplayRank++;
 
-        return Json(new { success = true, subjects, studentScores = rankedScores, subjectStats, totalStudentCount = studentCount, totalCriticalStudents });
+            var rs = rankedScores[i];
+            finalStudentScores.Add(new
+            {
+                Rank = currentDisplayRank,
+                rs.StudentId,
+                rs.StudentNo,
+                rs.StudentName,
+                rs.Scores,
+                rs.TotalScore,
+                rs.AvgScore,
+                rs.ClassRank,
+                rs.GradeRank,
+                rs.Level
+            });
+        }
+
+        // 总分临界生（仅初中适用，小学设为-1表示不适用）
+        int totalCriticalStudents = -1;
+        if (!isElementary)
+        {
+            var totalFullScore = subjects.Sum(s => (decimal)s.FullScore);
+            var totalPassLine = totalFullScore * 0.6m;
+            var criticalTotalMin = totalPassLine * 0.95m;
+            var criticalTotalMax = totalPassLine * 1.05m;
+            totalCriticalStudents = finalStudentScores.Count(s => (decimal)s.TotalScore >= criticalTotalMin && (decimal)s.TotalScore <= criticalTotalMax);
+        }
+        var studentCount = scores.Select(sc => sc.StudentId).Distinct().Count();
+
+        return Json(new { success = true, subjects, studentScores = finalStudentScores, subjectStats, totalStudentCount = studentCount, totalCriticalStudents, isElementary });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { success = false, message = "成绩分析计算异常：" + ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// 自动修复已有错误数据：将 Score 记录的 GradeLevelId/ClassInfoId 修正为与学生实际班级一致
+    /// 解决因同名班级跨年级匹配错误导致的历史脏数据问题
+    /// </summary>
+    private async Task AutoFixScoreClassReferences(int examScheduleId)
+    {
+        try
+        {
+            // 只取 GradeLevelId 或 ClassInfoId 为 null 的分数，以及需要校验的
+            var scores = await _db.Scores
+                .Where(sc => sc.ExamScheduleId == examScheduleId)
+                .Include(sc => sc.Student)
+                .ToListAsync();
+
+            if (scores.Count == 0) return;
+
+            // 预加载所有 ClassInfo（含 GradeLevel），避免 N+1
+            var allClasses = await _db.ClassInfos
+                .Include(c => c.GradeLevel)
+                .ToListAsync();
+
+            int fixedCount = 0;
+            foreach (var score in scores)
+            {
+                var student = score.Student;
+                if (student == null) continue;
+
+                // 确定学生正确的 ClassInfoID / GradeLevelID
+                int? correctClassId = null;
+                int? correctGradeLevelId = null;
+
+                // 优先用 Student.ClassID（直接外键）
+                if (student.ClassID.HasValue && student.ClassID.Value > 0)
+                {
+                    var classInfo = allClasses.FirstOrDefault(c => c.ClassInfoID == student.ClassID.Value);
+                    if (classInfo != null)
+                    {
+                        correctClassId = classInfo.ClassInfoID;
+                        correctGradeLevelId = classInfo.GradeLevelID;
+                    }
+                }
+
+                // 回退：按班级名 + 年级名精确匹配
+                if (correctClassId == null && !string.IsNullOrEmpty(student.ClassName))
+                {
+                    var classInfo = allClasses.FirstOrDefault(c =>
+                        c.ClassName == student.ClassName &&
+                        c.GradeLevel != null &&
+                        (c.GradeLevel.CurrentGradeName == student.Grade ||
+                         c.GradeLevel.DisplayName == student.Grade));
+
+                    if (classInfo != null)
+                    {
+                        correctClassId = classInfo.ClassInfoID;
+                        correctGradeLevelId = classInfo.GradeLevelID;
+                    }
+                }
+
+                if (correctClassId == null) continue;
+
+                bool changed = false;
+                if (score.GradeLevelId != correctGradeLevelId)
+                {
+                    score.GradeLevelId = correctGradeLevelId;
+                    changed = true;
+                }
+                if (score.ClassInfoId != correctClassId)
+                {
+                    score.ClassInfoId = correctClassId;
+                    changed = true;
+                }
+                if (changed) fixedCount++;
+            }
+
+            if (fixedCount > 0)
+            {
+                await _db.SaveChangesAsync();
+                // 日志记录（静默修复，不抛异常）
+                try { System.IO.File.AppendAllText(
+                    AppDomain.CurrentDomain.BaseDirectory + "fix_scores.log",
+                    $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] 修复考试ID={examScheduleId} 的 {fixedCount} 条成绩班级引用\n"); }
+                catch { }
+            }
+        }
+        catch
+        {
+            // 静默处理：修复失败不影响正常查询流程
+        }
     }
 
     /// <summary>
@@ -562,8 +829,8 @@ public class ScoreController : Controller
             .Where(sc => sc.ExamScheduleId == compareExamId && subjectIds.Contains(sc.SubjectId) && studentIds.Contains(sc.StudentId))
             .ToListAsync();
 
-        // 分组计算总分和排名
-        var group1 = scores1
+        // 分组计算总分和排名（★ 竞争排名1224制）
+        var sortedGroup1 = scores1
             .GroupBy(sc => new { sc.StudentId, StudentNo = sc.Student!.StudentNo ?? "", StudentName = sc.Student!.Name ?? "" })
             .Select(g => new
             {
@@ -578,10 +845,28 @@ public class ScoreController : Controller
                 }).ToList()
             })
             .OrderByDescending(x => x.TotalScore)
-            .Select((x, idx) => new { x.StudentId, x.StudentNo, x.StudentName, x.TotalScore, Rank1 = idx + 1, x.Scores })
             .ToList();
 
-        var group2 = scores2
+        // 竞争排名（1224制）：先计算排名字典，再用 Select 构建强类型列表
+        var rankDict1 = new Dictionary<int, int>();
+        for (int i = 0; i < sortedGroup1.Count; i++)
+        {
+            if (i == 0) rankDict1[sortedGroup1[i].StudentId] = 1;
+            else
+            {
+                int prevRank = rankDict1[sortedGroup1[i - 1].StudentId];
+                rankDict1[sortedGroup1[i].StudentId] = sortedGroup1[i].TotalScore == sortedGroup1[i - 1].TotalScore ? prevRank : prevRank + 1;
+            }
+        }
+
+        var group1 = sortedGroup1.Select(x => new
+        {
+            x.StudentId, x.StudentNo, x.StudentName, x.TotalScore,
+            Rank1 = rankDict1[x.StudentId],
+            x.Scores
+        }).ToList();
+
+        var sortedGroup2 = scores2
             .GroupBy(sc => sc.StudentId)
             .Select(g => new
             {
@@ -596,8 +881,25 @@ public class ScoreController : Controller
                 }).ToList()
             })
             .OrderByDescending(x => x.TotalScore)
-            .Select((x, idx) => new { x.StudentId, x.TotalScore, Rank2 = idx + 1, x.Scores })
             .ToList();
+
+        var rankDict2 = new Dictionary<int, int>();
+        for (int i = 0; i < sortedGroup2.Count; i++)
+        {
+            if (i == 0) rankDict2[sortedGroup2[i].StudentId] = 1;
+            else
+            {
+                int prevRank = rankDict2[sortedGroup2[i - 1].StudentId];
+                rankDict2[sortedGroup2[i].StudentId] = sortedGroup2[i].TotalScore == sortedGroup2[i - 1].TotalScore ? prevRank : prevRank + 1;
+            }
+        }
+
+        var group2 = sortedGroup2.Select(x => new
+        {
+            x.StudentId, x.TotalScore,
+            Rank2 = rankDict2[x.StudentId],
+            x.Scores
+        }).ToList();
 
         var dict2 = group2.ToDictionary(g => g.StudentId);
 
@@ -637,7 +939,7 @@ public class ScoreController : Controller
     }
 
     [HttpPost]
-    public async Task<IActionResult> GetTopStudents(int examScheduleId, int? classInfoId)
+    public async Task<IActionResult> GetTopStudents(int examScheduleId, int? classInfoId, int? gradeLevelId)
     {
         var exam = await _db.ExamSchedules.FindAsync(examScheduleId);
         if (exam == null)
@@ -664,14 +966,16 @@ public class ScoreController : Controller
             .ToListAsync();
         subjects = subjects.GroupBy(s => s.SubjectName).Select(g => g.First()).ToList();
 
-        // 获取成绩
+        // 获取成绩（★ 年级前十取全年级数据，不含班级过滤）
         var query = _db.Scores
             .Where(sc => sc.ExamScheduleId == examScheduleId)
             .Include(sc => sc.Student)
             .AsQueryable();
 
-        if (classInfoId.HasValue)
-            query = query.Where(sc => sc.ClassInfoId == classInfoId.Value);
+        if (gradeLevelId.HasValue)
+            query = query.Where(sc => sc.GradeLevelId == gradeLevelId.Value);
+        else if (validGradeLevelIds.Count > 0)
+            query = query.Where(sc => sc.GradeLevelId != null && validGradeLevelIds.Contains(sc.GradeLevelId.Value));
 
         var scores = await query.ToListAsync();
         if (scores.Count == 0)
@@ -698,16 +1002,23 @@ public class ScoreController : Controller
             })
             .ToList();
 
-        // 年级排名（按GradeLevelId分组分别排名）
-        var gradeRanks = studentGroups
+        // ★ 年级排名（竞争排名1224制：同分同名次）
+        var gradeRanks = new Dictionary<int, Dictionary<int, int>>();
+        foreach (var gradeGroup in studentGroups
             .Where(s => s.GradeLevelId.HasValue)
-            .GroupBy(s => s.GradeLevelId!.Value)
-            .ToDictionary(
-                g => g.Key,
-                g => g.OrderByDescending(s => s.TotalScore)
-                       .Select((s, idx) => new { s.StudentId, GradeRank = idx + 1 })
-                       .ToDictionary(s => s.StudentId, s => s.GradeRank)
-            );
+            .GroupBy(s => s.GradeLevelId!.Value))
+        {
+            var sorted = gradeGroup.OrderByDescending(s => s.TotalScore).ToList();
+            var ranks = new Dictionary<int, int>();
+            int currentRank = 1;
+            for (int i = 0; i < sorted.Count; i++)
+            {
+                if (i > 0 && sorted[i].TotalScore != sorted[i - 1].TotalScore)
+                    currentRank++;
+                ranks[sorted[i].StudentId] = currentRank;
+            }
+            gradeRanks[gradeGroup.Key] = ranks;
+        }
 
         // 取所有学生的年级排名，选前10
         var allWithRank = studentGroups.Select(x =>
@@ -749,101 +1060,175 @@ public class ScoreController : Controller
     [HttpPost]
     public async Task<IActionResult> GetClassList(int examScheduleId)
     {
-        var exam = await _db.ExamSchedules.FindAsync(examScheduleId);
-        if (exam == null)
-            return Json(new { success = false, message = "考试安排不存在" });
-
-        // 解析考试覆盖的年级ID列表
-        var gradeList = (exam.Grades ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
-        List<int> validGradeLevelIds = new();
-        if (gradeList.Count > 0)
+        try
         {
-            var allGradeLevels = await _db.GradeLevels.ToListAsync();
-            validGradeLevelIds = allGradeLevels
-                .Where(gl => gradeList.Contains(gl.CurrentGradeName))
-                .Select(gl => gl.GradeLevelID)
-                .ToList();
-        }
+            var exam = await _db.ExamSchedules.FindAsync(examScheduleId);
+            if (exam == null)
+                return Json(new { success = false, message = "考试安排不存在" });
 
-        // 获取该考试有成绩的班级（按考试年级范围过滤）
-        var rawClassesQuery = _db.Scores
-            .Where(sc => sc.ExamScheduleId == examScheduleId && sc.ClassInfoId != null);
-        
-        if (validGradeLevelIds.Count > 0)
-            rawClassesQuery = rawClassesQuery.Where(sc => sc.GradeLevelId != null && validGradeLevelIds.Contains(sc.GradeLevelId.Value));
+            // 解析考试覆盖的年级ID列表
+            var gradeList = (exam.Grades ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+            List<int> validGradeLevelIds = new();
+            if (gradeList.Count > 0)
+            {
+                var allGradeLevels = await _db.GradeLevels.ToListAsync();
+                validGradeLevelIds = allGradeLevels
+                    .Where(gl => gradeList.Contains(gl.CurrentGradeName))
+                    .Select(gl => gl.GradeLevelID)
+                    .ToList();
+            }
 
-        var rawClasses = await rawClassesQuery
-            .Select(sc => new { sc.ClassInfoId, ClassName = sc.ClassInfo!.ClassName, GradeLevelId = (int?)sc.GradeLevelId, SchoolType = sc.GradeLevel!.SchoolType, EntryYear = sc.GradeLevel!.EntryYear })
-            .Distinct()
-            .OrderBy(c => c.SchoolType).ThenBy(c => c.EntryYear).ThenBy(c => c.ClassName)
-            .ToListAsync();
+            // 如果按 CurrentGradeName 匹配不上，尝试按显示名称匹配（如"一年级"、"七年级"等）
+            if (validGradeLevelIds.Count == 0 && gradeList.Count > 0)
+            {
+                var allGradeLevels = await _db.GradeLevels.ToListAsync();
+                validGradeLevelIds = MatchGradeLevelIdsByDisplayName(gradeList, allGradeLevels);
+            }
 
-        var classes = rawClasses.Select(c => new
-        {
-            c.ClassInfoId,
-            c.ClassName,
-            c.GradeLevelId,
-            GradeName = c.SchoolType + " - " + GetGradeDisplayName(c.SchoolType, c.EntryYear)
-        }).ToList();
+            // 获取该考试有成绩的班级（按考试年级范围过滤）
+            var rawClassesQuery = _db.Scores
+                .Where(sc => sc.ExamScheduleId == examScheduleId && sc.ClassInfoId != null);
 
-        // 如果没有成绩数据，则根据考试覆盖年级返回班级
-        if (classes.Count == 0 && gradeList.Count > 0)
-        {
-            var rawClasses2 = await _db.ClassInfos
-                .Where(c => validGradeLevelIds.Contains(c.GradeLevelID))
-                .Select(c => new { ClassInfoId = (int?)c.ClassInfoID, ClassName = c.ClassName, GradeLevelId = (int?)c.GradeLevelID, SchoolType = c.GradeLevel!.SchoolType, EntryYear = c.GradeLevel!.EntryYear })
+            if (validGradeLevelIds.Count > 0)
+                rawClassesQuery = rawClassesQuery.Where(sc => sc.GradeLevelId != null && validGradeLevelIds.Contains(sc.GradeLevelId.Value));
+
+            var rawClasses = await rawClassesQuery
+                .Select(sc => new { sc.ClassInfoId, ClassName = sc.ClassInfo!.ClassName, GradeLevelId = (int?)sc.GradeLevelId, SchoolType = sc.GradeLevel != null ? sc.GradeLevel.SchoolType : "", EntryYear = sc.GradeLevel != null ? sc.GradeLevel.EntryYear : 0 })
+                .Distinct()
                 .OrderBy(c => c.SchoolType).ThenBy(c => c.EntryYear).ThenBy(c => c.ClassName)
                 .ToListAsync();
 
-            classes = rawClasses2.Select(c => new
+            // 无论是否有成绩数据，都从数据库获取该考试覆盖年级的所有班级（确保所有班级都显示）
+            if (gradeList.Count > 0 && validGradeLevelIds.Count > 0)
+            {
+                var dbClasses = await _db.ClassInfos
+                    .Where(c => validGradeLevelIds.Contains(c.GradeLevelID))
+                    .Select(c => new { ClassInfoId = (int?)c.ClassInfoID, ClassName = c.ClassName, GradeLevelId = (int?)c.GradeLevelID, SchoolType = c.GradeLevel != null ? c.GradeLevel.SchoolType : "", EntryYear = c.GradeLevel != null ? c.GradeLevel.EntryYear : 0 })
+                    .OrderBy(c => c.SchoolType).ThenBy(c => c.EntryYear).ThenBy(c => c.ClassName)
+                    .ToListAsync();
+
+                var existingIds = new HashSet<int?>(rawClasses.Select(c => c.ClassInfoId));
+
+                // 合并：保留已有的，添加数据库中额外存在的
+                foreach (var dbc in dbClasses)
+                {
+                    if (!existingIds.Contains(dbc.ClassInfoId))
+                        rawClasses.Add(new { dbc.ClassInfoId, dbc.ClassName, dbc.GradeLevelId, dbc.SchoolType, dbc.EntryYear });
+                }
+            }
+
+            var classes = rawClasses.Select(c => new
             {
                 c.ClassInfoId,
                 c.ClassName,
                 c.GradeLevelId,
-                GradeName = c.SchoolType + " - " + GetGradeDisplayName(c.SchoolType, c.EntryYear)
-            }).ToList();
-        }
+                GradeName = (!string.IsNullOrEmpty(c.SchoolType) ? c.SchoolType + " " : "") + GetGradeDisplayName(c.SchoolType, c.EntryYear)
+            }).OrderBy(c => c.GradeName).ThenBy(c => c.ClassName).ToList();
 
-        // ===== 根据当前登录用户角色过滤班级/年级 =====
-        var roleType = "admin"; // admin | grade_leader | class_teacher
-        var adminId = GetAdminId();
-        if (!IsAdmin() && adminId.HasValue)
-        {
-            var admin = await _db.Admins.FindAsync(adminId.Value);
-            if (admin != null)
+            // 如果还没有班级数据（既无成绩数据也无数据库记录），则根据考试覆盖年级生成年级占位
+            if (classes.Count == 0 && gradeList.Count > 0)
             {
-                var primaryRole = admin.PrimaryRole;
-                if (primaryRole == "班主任" && admin.ClassID.HasValue)
+                var rawClasses2 = await _db.ClassInfos
+                    .Where(c => validGradeLevelIds.Contains(c.GradeLevelID))
+                    .Select(c => new { ClassInfoId = (int?)c.ClassInfoID, ClassName = c.ClassName, GradeLevelId = (int?)c.GradeLevelID, SchoolType = c.GradeLevel != null ? c.GradeLevel.SchoolType : "", EntryYear = c.GradeLevel != null ? c.GradeLevel.EntryYear : 0 })
+                    .OrderBy(c => c.SchoolType).ThenBy(c => c.EntryYear).ThenBy(c => c.ClassName)
+                    .ToListAsync();
+
+                classes = rawClasses2.Select(c => new
                 {
-                    // 班主任：只能看本班
-                    roleType = "class_teacher";
-                    classes = classes.Where(c => c.ClassInfoId == admin.ClassID.Value).ToList();
-                }
-                else if (primaryRole == "年级级长" && !string.IsNullOrEmpty(admin.Grade))
+                    c.ClassInfoId,
+                    c.ClassName,
+                    c.GradeLevelId,
+                    GradeName = (!string.IsNullOrEmpty(c.SchoolType) ? c.SchoolType + " " : "") + GetGradeDisplayName(c.SchoolType, c.EntryYear)
+                }).ToList();
+            }
+
+            // ===== 根据当前登录用户角色过滤班级/年级 =====
+            var roleType = "admin"; // admin | grade_leader | class_teacher
+            var adminId = GetAdminId();
+            if (!IsAdmin() && adminId.HasValue)
+            {
+                var admin = await _db.Admins.FindAsync(adminId.Value);
+                if (admin != null)
                 {
-                    // 年级级长：只能看本年级
-                    roleType = "grade_leader";
-                    var allGradeLevels = await _db.GradeLevels.ToListAsync();
-                    var matchedGl = allGradeLevels.FirstOrDefault(g => g.CurrentGradeName == admin.Grade);
-                    if (matchedGl != null)
+                    var primaryRole = admin.PrimaryRole;
+                    if (primaryRole == "班主任" && admin.ClassID.HasValue)
                     {
-                        classes = classes.Where(c => c.GradeLevelId == matchedGl.GradeLevelID).ToList();
+                        // 班主任：只能看本班
+                        roleType = "class_teacher";
+                        classes = classes.Where(c => c.ClassInfoId == admin.ClassID.Value).ToList();
+                    }
+                    else if (primaryRole == "年级级长" && !string.IsNullOrEmpty(admin.Grade))
+                    {
+                        // 年级级长：只能看本年级
+                        roleType = "grade_leader";
+                        var allGradeLevels = await _db.GradeLevels.ToListAsync();
+                        var matchedGl = allGradeLevels.FirstOrDefault(g => g.CurrentGradeName == admin.Grade);
+                        if (matchedGl != null)
+                        {
+                            classes = classes.Where(c => c.GradeLevelId == matchedGl.GradeLevelID).ToList();
+                        }
                     }
                 }
             }
-        }
 
-        // 提取年级列表（按GradeLevelId去重）
-        var gradeDict = new Dictionary<int, string>();
-        foreach (var c in classes)
+            // 提取年级列表（按GradeLevelId去重）
+            // 优先从有成绩数据的班级提取年级
+            var gradeDict = new Dictionary<int, string>();
+            foreach (var c in classes)
+            {
+                if (c.GradeLevelId.HasValue && !gradeDict.ContainsKey(c.GradeLevelId.Value))
+                    gradeDict[c.GradeLevelId.Value] = c.GradeName;
+            }
+            // 补充考试配置中所有年级（即使没有成绩数据也显示在下拉列表中）
+            // 非管理员用户只能看到自己权限范围内的年级
+            if (validGradeLevelIds.Count > 0)
+            {
+                var allGl = await _db.GradeLevels.ToListAsync();
+                
+                // 确定允许的年级ID范围
+                HashSet<int> allowedGradeIds = new HashSet<int>(validGradeLevelIds);
+                if (!IsAdmin())
+                {
+                    // 非管理员用户缩小到权限范围内的年级
+                    var currentAdmin = await _db.Admins.FindAsync(adminId!.Value);
+                    if (currentAdmin != null && !string.IsNullOrEmpty(currentAdmin.Grade))
+                    {
+                        var userGradeLevel = allGl.FirstOrDefault(g => g.CurrentGradeName == currentAdmin.Grade);
+                        if (userGradeLevel != null && allowedGradeIds.Contains(userGradeLevel.GradeLevelID))
+                        {
+                            allowedGradeIds = new HashSet<int> { userGradeLevel.GradeLevelID };
+                        }
+                        else
+                        {
+                            allowedGradeIds.Clear();
+                        }
+                    }
+                }
+                
+                foreach (var glId in validGradeLevelIds)
+                {
+                    if (!allowedGradeIds.Contains(glId)) continue;
+                    if (!gradeDict.ContainsKey(glId))
+                    {
+                        var gl = allGl.FirstOrDefault(g => g.GradeLevelID == glId);
+                        if (gl != null)
+                        {
+                            gradeDict[glId] = (!string.IsNullOrEmpty(gl.SchoolType) ? gl.SchoolType + " " : "") + GetGradeDisplayName(gl.SchoolType, gl.EntryYear);
+                        }
+                    }
+                }
+            }
+            var grades = gradeDict.Select(kv => new { GradeLevelId = kv.Key, GradeName = kv.Value }).OrderBy(g => g.GradeLevelId).ToList();
+
+            return Json(new { success = true, classes, grades, roleType });
+        }
+        catch (Exception ex)
         {
-            if (c.GradeLevelId.HasValue && !gradeDict.ContainsKey(c.GradeLevelId.Value))
-                gradeDict[c.GradeLevelId.Value] = c.GradeName;
+            return Json(new { success = false, message = "获取班级列表异常：" + ex.Message });
         }
-        var grades = gradeDict.Select(kv => new { GradeLevelId = kv.Key, GradeName = kv.Value }).OrderBy(g => g.GradeLevelId).ToList();
-
-        return Json(new { success = true, classes, grades, roleType });
     }
+
 
     /// <summary>
     /// 获取学生最近多场考试的成绩汇总（总分、平均分、班级排名、年级排名）
@@ -1404,6 +1789,30 @@ public class ScoreController : Controller
                 {
                     existing.ScoreValue = sc.ScoreValue;
                     existing.IsAbsent = sc.IsAbsent;
+                    // 同时修正可能错误的 ClassInfoId/GradeLevelId
+                    if (student != null)
+                    {
+                        ClassInfo? existingCi = null;
+                        if (student.ClassID.HasValue && student.ClassID.Value > 0)
+                        {
+                            existingCi = await _db.ClassInfos
+                                .FirstOrDefaultAsync(c => c.ClassInfoID == student.ClassID.Value);
+                        }
+                        if (existingCi == null && !string.IsNullOrEmpty(student.ClassName))
+                        {
+                            existingCi = await _db.ClassInfos
+                                .Include(c => c.GradeLevel)
+                                .FirstOrDefaultAsync(c => c.ClassName == student.ClassName
+                                    && c.GradeLevel != null
+                                    && (c.GradeLevel.CurrentGradeName == student.Grade
+                                        || c.GradeLevel.DisplayName == student.Grade));
+                        }
+                        if (existingCi != null)
+                        {
+                            existing.ClassInfoId = existingCi.ClassInfoID;
+                            existing.GradeLevelId = existingCi.GradeLevelID;
+                        }
+                    }
                 }
                 else
                 {
@@ -1420,8 +1829,24 @@ public class ScoreController : Controller
                     };
                     if (student != null)
                     {
-                        var classInfo = await _db.ClassInfos
-                            .FirstOrDefaultAsync(c => c.ClassName == student.ClassName);
+                        ClassInfo? classInfo = null;
+
+                        if (student.ClassID.HasValue && student.ClassID.Value > 0)
+                        {
+                            classInfo = await _db.ClassInfos
+                                .FirstOrDefaultAsync(c => c.ClassInfoID == student.ClassID.Value);
+                        }
+
+                        if (classInfo == null && !string.IsNullOrEmpty(student.ClassName))
+                        {
+                            classInfo = await _db.ClassInfos
+                                .Include(c => c.GradeLevel)
+                                .FirstOrDefaultAsync(c => c.ClassName == student.ClassName
+                                    && c.GradeLevel != null
+                                    && (c.GradeLevel.CurrentGradeName == student.Grade
+                                        || c.GradeLevel.DisplayName == student.Grade));
+                        }
+
                         if (classInfo != null)
                         {
                             newScore.ClassInfoId = classInfo.ClassInfoID;
@@ -1457,6 +1882,43 @@ public class ScoreController : Controller
             return names[offset];
         }
         return "未知";
+    }
+
+    /// <summary>
+    /// 获取单科等级（基于分数占比）
+    /// </summary>
+    private static string GetSubjectLevel(decimal scoreValue, decimal fullScore)
+    {
+        if (fullScore <= 0) return "C";
+        double ratio = (double)(scoreValue / fullScore);
+        if (ratio >= 0.9) return "A";
+        if (ratio >= 0.75) return "B";
+        if (ratio >= 0.6) return "C";
+        return "D";
+    }
+
+    /// <summary>
+    /// 根据年级显示名称匹配 GradeLevelId（用于当 exam.Grades 存储的是显示名称时）
+    /// </summary>
+    private static List<int> MatchGradeLevelIdsByDisplayName(List<string> gradeNames, List<GradeLevel> allGradeLevels)
+    {
+        var ids = new List<int>();
+        if (gradeNames.Count == 0 || allGradeLevels.Count == 0) return ids;
+
+        var currentYear = DateTime.Now.Year;
+        foreach (var gradeName in gradeNames)
+        {
+            var trimmed = gradeName.Trim();
+            var matched = allGradeLevels.FirstOrDefault(gl =>
+            {
+                var displayName = GetGradeDisplayName(gl.SchoolType, gl.EntryYear);
+                var fullName = (gl.SchoolType + " " + displayName).Trim();
+                return displayName == trimmed || fullName == trimmed;
+            });
+            if (matched != null && !ids.Contains(matched.GradeLevelID))
+                ids.Add(matched.GradeLevelID);
+        }
+        return ids;
     }
 
     // ========== AI成绩分析 ==========
@@ -2889,27 +3351,39 @@ public class ScoreController : Controller
                     var sc = studentScores.FirstOrDefault(s => s.SubjectId == sub.SubjectId);
                     decimal? scoreVal = null;
                     bool absent = false;
+                    string subLevel = "";
                     if (sc != null)
                     {
                         scoreVal = sc.ScoreValue;
                         absent = sc.IsAbsent;
+                        // 计算各科等级
+                        if (!absent && sub.FullScore > 0)
+                        {
+                            var pct = (double)scoreVal.Value / (double)sub.FullScore;
+                            if (pct >= 0.9) subLevel = "A";
+                            else if (pct >= 0.8) subLevel = "B";
+                            else if (pct >= 0.6) subLevel = "C";
+                            else subLevel = "D";
+                        }
                     }
                     return new
                     {
                         SubjectName = sub.SubjectName,
                         ScoreValue = absent ? (decimal?)null : scoreVal,
                         FullScore = sub.FullScore,
-                        IsAbsent = absent
+                        IsAbsent = absent,
+                        Level = subLevel
                     };
                 }).ToList();
 
                 // 计算总分和总满分
                 decimal totalScore = 0;
                 decimal totalFullScore = 0;
-                bool anyAbsent = false;
+                int absentCount = 0;
+                int totalSubjects = subjectData.Count;
                 foreach (var sd in subjectData)
                 {
-                    if (sd.IsAbsent) { anyAbsent = true; continue; }
+                    if (sd.IsAbsent) { absentCount++; continue; }
                     if (sd.ScoreValue.HasValue)
                     {
                         totalScore += sd.ScoreValue.Value;
@@ -2917,9 +3391,10 @@ public class ScoreController : Controller
                     }
                 }
 
-                // 根据总分计算总体等级
+                // 【总分百分比法】综合等级 = 总分 ÷ 总满分
+                // 单科D只拉低均分，不会一票否决；总分≥60%最低C；多科不及格总分<60%才落D
                 string overallLevel = "";
-                if (anyAbsent)
+                if (absentCount == totalSubjects)
                 {
                     overallLevel = "缺考";
                 }
@@ -2943,7 +3418,7 @@ public class ScoreController : Controller
                     TotalScore = totalScore,
                     TotalFullScore = totalFullScore,
                     OverallLevel = overallLevel,
-                    HasAbsent = anyAbsent
+                    HasAbsent = absentCount > 0
                 };
             }).ToList();
 

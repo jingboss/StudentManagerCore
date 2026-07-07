@@ -236,6 +236,7 @@ public class ExamScheduleController : Controller
         var data = await _db.ExamSubjects
             .Where(e => e.ExamScheduleId == examScheduleId)
             .Select(e => new { e.SubjectId, e.FullScore })
+            .Distinct()
             .ToListAsync();
         return Json(data);
     }
@@ -253,7 +254,12 @@ public class ExamScheduleController : Controller
 
             if (subjects != null && subjects.Count > 0)
             {
-                foreach (var s in subjects)
+                // 按 SubjectId 去重，防止重复提交导致重复科目
+                var distinctSubjects = subjects
+                    .GroupBy(s => s.SubjectId)
+                    .Select(g => g.First())
+                    .ToList();
+                foreach (var s in distinctSubjects)
                 {
                     _db.ExamSubjects.Add(new ExamSubject
                     {

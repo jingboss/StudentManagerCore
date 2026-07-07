@@ -432,7 +432,12 @@
             if (modalEl) {
                 modalObj = new bootstrap.Modal(modalEl, { backdrop: 'static', keyboard: false });
                 document.getElementById('idleContinueBtn')?.addEventListener('click', function() {
-                    resetIdleTimer();
+                    // 用户主动点击"继续会话"——真正重置计时
+                    clearInterval(countdownTimer);
+                    modalObj.hide();
+                    modalShown = false;
+                    clearTimeout(idleTimer);
+                    idleTimer = setTimeout(showWarning, WARNING_AFTER_MS);
                 });
                 modalEl.addEventListener('hidden.bs.modal', function() {
                     modalShown = false;
@@ -458,12 +463,10 @@
             }
 
             function resetIdleTimer() {
+                // ★ 对话框已弹出时，用户活动不重置计时，必须点"继续会话"按钮
+                if (modalShown) return;
                 clearTimeout(idleTimer);
                 clearInterval(countdownTimer);
-                if (modalObj && modalShown) {
-                    modalObj.hide();
-                }
-                modalShown = false;
                 idleTimer = setTimeout(showWarning, WARNING_AFTER_MS);
             }
 

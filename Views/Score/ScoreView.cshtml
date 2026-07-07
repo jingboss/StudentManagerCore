@@ -462,7 +462,9 @@
                 html += '<div class="col-md-2 col-6"><div class="card bg-success bg-opacity-10 border-success"><div class="card-body text-center py-2"><div class="fs-4 fw-bold text-success">' + totalAvg + '</div><small class="text-muted">各科平均均分</small></div></div></div>';
                 html += '<div class="col-md-2 col-6"><div class="card bg-warning bg-opacity-10 border-warning"><div class="card-body text-center py-2"><div class="fs-4 fw-bold text-warning">' + totalMax.toFixed(1) + '</div><small class="text-muted">单科最高分</small></div></div></div>';
                 html += '<div class="col-md-2 col-6"><div class="card" style="background:#fff3cd;border-color:#ffc107;"><div class="card-body text-center py-2"><div class="fs-4 fw-bold" style="color:#856404;">' + totalPassRate + '%</div><small class="text-muted">平均及格率</small></div></div></div>';
-                html += '<div class="col-md-2 col-6"><div class="card" style="background:#f8d7da;border-color:#dc3545;"><div class="card-body text-center py-2"><div class="fs-4 fw-bold" style="color:#721c24;">' + critical + '</div><small class="text-muted">临界生人数</small></div></div></div>';
+                if (!data.isElementary) {
+                    html += '<div class="col-md-2 col-6"><div class="card" style="background:#f8d7da;border-color:#dc3545;"><div class="card-body text-center py-2"><div class="fs-4 fw-bold" style="color:#721c24;">' + critical + '</div><small class="text-muted">临界生人数</small></div></div></div>';
+                }
             }
             $('#overviewCards').html(html);
         }
@@ -480,7 +482,10 @@
                              '<th class="text-center">优秀率</th>' +
                              '<th class="text-center">良好率</th>' +
                              '<th class="text-center">及格率</th>' +
-                             '<th class="text-center">低分率</th>' +
+                             '<th class="text-center">低分率</th>';
+            if (!data.isElementary) {
+                headerHtml += '<th class="text-center">临界生</th>';
+            }
                              '<th class="text-center">临界生</th>';
             $('#statHeader').html(headerHtml);
 
@@ -498,7 +503,7 @@
                     '<td class="text-center"><span class="badge bg-info">' + s.goodRate + '%</span><br><small class="text-muted">' + s.goodCount + '人</small></td>' +
                     '<td class="text-center"><span class="badge bg-primary">' + s.passRate + '%</span><br><small class="text-muted">' + s.passCount + '人</small></td>' +
                     '<td class="text-center"><span class="badge ' + (s.lowRate > 10 ? 'bg-danger' : 'bg-secondary') + '">' + s.lowRate + '%</span><br><small class="text-muted">' + s.lowCount + '人</small></td>' +
-                    '<td class="text-center"><span class="badge bg-warning text-dark">' + s.criticalCount + '人</span></td>' +
+                    (data.isElementary ? '' : '<td class="text-center"><span class="badge bg-warning text-dark">' + s.criticalCount + '人</span></td>') +
                     '</tr>';
             });
             $('#statBody').html(bodyHtml);
@@ -686,16 +691,17 @@
 
         // ========== 年级排名前10名 ==========
         function onTop10Tab() {
-            // 已在容器内显示时不再重复加载
-            if ($('#top10Header').children().length > 0) return;
             var examId = $('#examSelect').val();
             if (!examId) { $('#top10Body').html('<tr><td colspan="99" class="text-center text-muted py-4">请先在上方选择考试</td></tr>'); return; }
+            var gradeId = $('#gradeSelect').val() || '';
             var classId = $('#classSelect').val() || '';
 
+            $('#top10Header').empty();
             $('#top10Body').html('<tr><td colspan="99" class="text-center text-muted py-4">加载中...</td></tr>');
 
             $.post('@Url.Action("GetTopStudents")', {
                 examScheduleId: parseInt(examId),
+                gradeLevelId: gradeId ? parseInt(gradeId) : null,
                 classInfoId: classId ? parseInt(classId) : null
             }, function (res) {
                 if (!res.success) { alert(res.message); return; }

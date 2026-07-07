@@ -361,12 +361,16 @@
             html += '</div>';
             html += `<div class="mb-2 small text-muted">学号：${escapeHtml(student.studentNo || '')}</div>`;
 
-            // 各科目：只显示科目名和分数
+            // 各科目：显示科目名、分数、等级
             (student.subjects || []).forEach(sub => {
                 const scoreText = sub.isAbsent ? '缺考' : (sub.scoreValue != null ? sub.scoreValue.toString() : '');
+                const subLevelClass = getLevelClass(sub.level);
                 html += '<div class="subject-row">';
                 html += `<span class="sub-name">${escapeHtml(sub.subjectName)}</span>`;
                 html += `<span class="sub-score">${scoreText}${!sub.isAbsent && sub.scoreValue != null ? ' / ' + sub.fullScore : ''}</span>`;
+                if (sub.level) {
+                    html += `<span class="sub-level ${subLevelClass}" style="font-size:0.7rem;padding:1px 5px;margin-left:4px;">${sub.level}</span>`;
+                }
                 html += '</div>';
             });
 
@@ -375,8 +379,8 @@
             html += '<span class="sub-name fw-bold text-primary">总分</span>';
             html += `<span class="sub-score fw-bold text-primary">${student.totalScore} / ${student.totalFullScore}</span>`;
             html += '</div>';
-            const levelText = student.hasAbsent ? '缺考' : student.overallLevel;
-            const levelClass = student.hasAbsent ? 'level-absent' : getLevelClass(levelText);
+            const levelText = student.overallLevel || 'C';
+            const levelClass = getLevelClass(levelText);
             html += '<div class="subject-row">';
             html += '<span class="sub-name fw-bold">等级</span>';
             html += `<span class="sub-level ${levelClass}">${escapeHtml(levelText)}</span>`;
