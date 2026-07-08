@@ -1,6 +1,16 @@
 // 图表实例缓存
 var charts = {};
 
+// 销毁所有图表实例
+function destroyAllCharts() {
+    Object.keys(charts).forEach(function (id) {
+        if (charts[id]) {
+            charts[id].destroy();
+            delete charts[id];
+        }
+    });
+}
+
 // 销毁已有图表实例
 function destroyChart(id) {
     if (charts[id]) {
@@ -12,6 +22,9 @@ function destroyChart(id) {
 // 渲染分数段分布柱状图（按subject汇总）
 function renderSegmentBarChart(subjectStats) {
     destroyChart('chartSegment');
+
+    var ctx = document.getElementById('chartSegment');
+    if (!ctx) return;
 
     // 聚合所有科目的分数段数据
     var segLabels = ['0-59分', '60-69分', '70-79分', '80-89分', '90-100分'];
@@ -27,8 +40,7 @@ function renderSegmentBarChart(subjectStats) {
 
     var barColors = ['#dc3545', '#fd7e14', '#ffc107', '#198754', '#0d6efd'];
 
-    var ctx = document.getElementById('chartSegment').getContext('2d');
-    charts['chartSegment'] = new Chart(ctx, {
+    charts['chartSegment'] = new Chart(ctx.getContext('2d'), {
         type: 'bar',
         data: {
             labels: segLabels,
@@ -43,6 +55,7 @@ function renderSegmentBarChart(subjectStats) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: { duration: 400 },
             plugins: {
                 legend: { display: false },
                 tooltip: {
@@ -80,6 +93,9 @@ function renderSegmentBarChart(subjectStats) {
 function renderAvgComparisonChart(subjectStats) {
     destroyChart('chartAvgCompare');
 
+    var ctx = document.getElementById('chartAvgCompare');
+    if (!ctx) return;
+
     var subNames = [];
     var avgData = [];
     var fullData = [];
@@ -91,8 +107,7 @@ function renderAvgComparisonChart(subjectStats) {
         fullData.push(parseFloat(s.fullScore) || 100);
     }
 
-    var ctx = document.getElementById('chartAvgCompare').getContext('2d');
-    charts['chartAvgCompare'] = new Chart(ctx, {
+    charts['chartAvgCompare'] = new Chart(ctx.getContext('2d'), {
         type: 'bar',
         data: {
             labels: subNames,
@@ -124,6 +139,7 @@ function renderAvgComparisonChart(subjectStats) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: { duration: 400 },
             plugins: {
                 legend: {
                     display: true,
@@ -159,6 +175,14 @@ function renderAvgComparisonChart(subjectStats) {
 // 入口函数
 function renderScoreCharts(subjectStats) {
     if (!subjectStats || subjectStats.length === 0) return;
-    renderSegmentBarChart(subjectStats);
-    renderAvgComparisonChart(subjectStats);
+    // 使用 requestAnimationFrame 避免阻塞主线程
+    if (typeof requestAnimationFrame !== 'undefined') {
+        requestAnimationFrame(function () {
+            renderSegmentBarChart(subjectStats);
+            renderAvgComparisonChart(subjectStats);
+        });
+    } else {
+        renderSegmentBarChart(subjectStats);
+        renderAvgComparisonChart(subjectStats);
+    }
 }

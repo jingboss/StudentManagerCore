@@ -14,6 +14,11 @@
         -moz-appearance: textfield;
         appearance: textfield;
     }
+    /* 已修改单元格高亮 */
+    .score-input.changed {
+        background-color: #fff3cd !important;
+        border-color: #ffc107 !important;
+    }
 </style>
 <div class="container-fluid py-3">
     <div class="d-flex justify-content-between align-items-center mb-3">
@@ -68,7 +73,9 @@
                 <span id="entryTitle" class="fw-bold"><i class="bi bi-table me-1"></i>录入表</span>
                 <div>
                     <span id="saveStatus" class="text-muted me-2 small"></span>
-                    <span class="badge bg-info me-2" style="font-size:0.7rem;">⚡ 失焦自动保存</span>
+                    <span id="changeBadge" class="badge bg-warning text-dark me-2" style="font-size:0.7rem;display:none;">📝 待保存 <span id="changeCount">0</span> 项</span>
+                    <span class="badge bg-info me-2" style="font-size:0.7rem;">⌨️ Ctrl+S 保存</span>
+                    <span id="autoSaveBadge" class="badge bg-secondary me-2" style="font-size:0.7rem;display:none;">⏱ 5秒后自动保存</span>
                     <button id="saveAllBtn" class="btn btn-primary btn-sm" onclick="saveAllScores()">
                         <i class="bi bi-save me-1"></i>保存全部
                     </button>
@@ -91,9 +98,37 @@
         let currentExamScheduleId = 0;
         let scoreCache = {};     // key: studentId_subjectId → {val: number|null, absent: bool}
         let scoreChanged = {};   // key: studentId_subjectId → {val: number, absent: bool}
+        let autoSaveTimer = null;       // 防抖定时器
+        let safetySaveTimer = null;     // 安全兜底定时器（30秒）
+        const AUTO_SAVE_DELAY = 5000;   // 5秒无操作后自动保存
+        const SAFETY_DELAY = 30000;     // 30秒兜底保存
+        const BATCH_SIZE = 10;          // 每批最多保存条数
+        let isSaving = false;           // 保存中锁
+
+        // ========== 页面离开拦截 ==========
+        window.addEventListener('beforeunload', function (e) {
+            if (Object.keys(scoreChanged).length > 0) {
+                e.preventDefault();
+                e.returnValue = '您有未保存的成绩，确定离开吗？';
+                return e.returnValue;
+            }
+        });
+
+        // ========== Ctrl+S 快捷键保存 ==========
+        $(document).on('keydown', function (e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault();
+                if (currentExamScheduleId && Object.keys(scoreChanged).length > 0 && !isSaving) {
+                    saveAllScores();
+                }
+            }
+        });
 
         // ========== 考试切换 ==========
         function onExamChange() {
+            var changed = Object.keys(scoreChanged).length;
+            if (changed > 0 && !confirm('有 ' + changed + ' 项成绩未保存，切换考试将丢弃更改。确定吗？')) return;
+            clearAllTimers();
             // 重置筛选
             $('#gradeFilter').empty().append('<option value="">全部年级</option>').prop('disabled', true);
             $('#classFilter').empty().append('<option value="">全部班级</option>').prop('disabled', true);
@@ -105,6 +140,7 @@
         function onFilterChange() {
             var changed = Object.keys(scoreChanged).length;
             if (changed > 0 && !confirm('有 ' + changed + ' 项成绩未保存，切换筛选将丢弃更改。确定吗？')) return;
+            clearAllTimers();
             loadEntryData();
         }
 
@@ -112,6 +148,7 @@
         function clearFilters() {
             var changed = Object.keys(scoreChanged).length;
             if (changed > 0 && !confirm('有 ' + changed + ' 项成绩未保存，清除筛选将丢弃更改。确定吗？')) return;
+            clearAllTimers();
             $('#gradeFilter').val('');
             $('#classFilter').empty().append('<option value="">全部班级</option>');
             $('#classFilter').prop('disabled', true);
@@ -127,6 +164,8 @@
             if (!examId) {
                 $('#entryContainer').hide();
                 $('#examStatus').val('请先选择考试');
+                $('#changeBadge').hide();
+                $('#autoSaveBadge').hide();
                 return;
             }
 
@@ -151,11 +190,12 @@
                     }
                     scoreCache = {};
                     scoreChanged = {};
+                    clearAllTimers();
                     renderEntryTable(res, isActive);
                     // 填充筛选下拉框
                     populateFilters(res, grade, className);
                     $('#entryContainer').show();
-                    $('#saveStatus').text('✅ 已加载');
+                    updateChangeStatus();
                 },
                 error: function (xhr) {
                     $('#entryContainer').hide();
@@ -245,7 +285,6 @@
                         'data-fullscore="' + sub.fullScore + '" ' +
                         'value="' + displayVal + '" ' +
                         'oninput="onScoreChange(this)" ' +
-                        'onblur="onScoreBlur(this)" ' +
                         'onkeydown="onScoreKeydown(event, this)" ' +
                         'step="0.5" min="0" max="' + sub.fullScore + '" ' +
                         (isAbsent ? 'disabled' : '') + ' />';
@@ -274,6 +313,137 @@
             });
         }
 
+        // ========== 更新变更状态栏 ==========
+        function updateChangeStatus() {
+            var changed = Object.keys(scoreChanged).length;
+            if (changed > 0) {
+                $('#saveStatus').text('');
+                $('#changeBadge').show();
+                $('#changeCount').text(changed);
+            } else {
+                $('#saveStatus').text('✅ 全部已保存');
+                $('#changeBadge').hide();
+                $('#autoSaveBadge').hide();
+            }
+        }
+
+        // ========== 清除所有定时器 ==========
+        function clearAllTimers() {
+            if (autoSaveTimer) { clearTimeout(autoSaveTimer); autoSaveTimer = null; }
+            if (safetySaveTimer) { clearTimeout(safetySaveTimer); safetySaveTimer = null; }
+            $('#autoSaveBadge').hide();
+        }
+
+        // ========== 调度自动保存（防抖5秒） ==========
+        function scheduleAutoSave() {
+            // 清除已有定时器，重新计时
+            if (autoSaveTimer) clearTimeout(autoSaveTimer);
+            if (safetySaveTimer) clearTimeout(safetySaveTimer);
+
+            var changed = Object.keys(scoreChanged).length;
+            if (changed === 0) {
+                $('#autoSaveBadge').hide();
+                return;
+            }
+
+            // 5秒防抖：无操作后自动保存
+            $('#autoSaveBadge').show().text('⏱ ' + (AUTO_SAVE_DELAY / 1000) + '秒后自动保存');
+
+            autoSaveTimer = setTimeout(function () {
+                doAutoSave();
+            }, AUTO_SAVE_DELAY);
+
+            // 30秒兜底：无论是否有操作，30秒后强制保存
+            safetySaveTimer = setTimeout(function () {
+                if (Object.keys(scoreChanged).length > 0 && !isSaving) {
+                    doAutoSave();
+                }
+            }, SAFETY_DELAY);
+        }
+
+        // ========== 执行自动保存（批量分批） ==========
+        function doAutoSave() {
+            clearAllTimers();
+
+            var changedKeys = Object.keys(scoreChanged);
+            if (changedKeys.length === 0) return;
+
+            // 检查是否有超满分
+            var invalidInputs = $('.score-input.is-invalid');
+            if (invalidInputs.length > 0) {
+                $('#saveStatus').text('⚠️ 有 ' + invalidInputs.length + ' 个分数超出满分，请修正后手动保存');
+                // 仍然调度兜底定时器
+                safetySaveTimer = setTimeout(function () {
+                    if (Object.keys(scoreChanged).length > 0 && !isSaving) doAutoSave();
+                }, SAFETY_DELAY);
+                return;
+            }
+
+            // 取前 BATCH_SIZE 条
+            var batchKeys = changedKeys.slice(0, BATCH_SIZE);
+            var items = buildSaveItems(batchKeys);
+
+            isSaving = true;
+            $('#saveStatus').text('⏳ 自动保存中（' + batchKeys.length + ' 条）...');
+
+            $.ajax({
+                url: '@Url.Action("SaveScores")?examScheduleId=' + currentExamScheduleId,
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(items),
+                headers: { 'RequestVerificationToken': $('input[name="__RequestVerificationToken"]').val() },
+                success: function (res) {
+                    if (res.success) {
+                        // 标记已保存，清除 changed 样式
+                        batchKeys.forEach(function (key) {
+                            var item = scoreChanged[key];
+                            scoreCache[key] = {
+                                val: item.absent ? 0 : (item.val || 0),
+                                absent: item.absent
+                            };
+                            // 清除输入框高亮
+                            var parts = key.split('_');
+                            $('.score-input[data-student="' + parts[0] + '"][data-subject="' + parts[1] + '"]').removeClass('changed');
+                            delete scoreChanged[key];
+                        });
+                        updateChangeStatus();
+                        // 如果还有剩余，继续调度保存
+                        if (Object.keys(scoreChanged).length > 0) {
+                            scheduleAutoSave();
+                        }
+                    } else {
+                        $('#saveStatus').text('❌ 自动保存失败: ' + (res.message || '未知错误'));
+                        scheduleAutoSave(); // 重试
+                    }
+                },
+                error: function (xhr) {
+                    $('#saveStatus').text('❌ 自动保存失败: ' + (xhr.responseText || '网络错误'));
+                    scheduleAutoSave(); // 重试
+                },
+                complete: function () {
+                    isSaving = false;
+                }
+            });
+        }
+
+        // ========== 构建保存数据 ==========
+        function buildSaveItems(keys) {
+            var items = [];
+            keys.forEach(function (key) {
+                var parts = key.split('_');
+                var changedVal = scoreChanged[key];
+                var scoreVal = (typeof changedVal === 'object') ? (changedVal.val || 0) : (changedVal || 0);
+                var absent = (typeof changedVal === 'object') ? changedVal.absent : false;
+                items.push({
+                    studentId: parseInt(parts[0]),
+                    subjectId: parseInt(parts[1]),
+                    scoreValue: scoreVal,
+                    isAbsent: absent
+                });
+            });
+            return items;
+        }
+
         // ========== 分数输入变化跟踪 ==========
         function onScoreChange(input) {
             var studentId = $(input).data('student');
@@ -293,12 +463,14 @@
             var isAbsent = $('.absent-check[data-student="' + studentId + '"][data-subject="' + subjectId + '"]').is(':checked');
             if (val === '' && !isAbsent) {
                 delete scoreChanged[key];
+                $(input).removeClass('changed');
             } else {
                 scoreChanged[key] = { val: numVal || 0, absent: isAbsent };
+                $(input).addClass('changed');
             }
 
-            var changed = Object.keys(scoreChanged).length;
-            $('#saveStatus').text(changed > 0 ? '⚠️ ' + changed + ' 项待保存' : '✅ 全部已保存');
+            updateChangeStatus();
+            scheduleAutoSave();
         }
 
         // ========== 缺考勾选 ==========
@@ -310,7 +482,7 @@
             var isChecked = $(chk).is(':checked');
 
             if (isChecked) {
-                input.val('').prop('disabled', true).removeClass('is-invalid');
+                input.val('').prop('disabled', true).removeClass('is-invalid').removeClass('changed');
             } else {
                 input.prop('disabled', false).focus();
             }
@@ -324,8 +496,8 @@
 
             scoreChanged[key] = isChecked ? { val: 0, absent: true } : { val: parseFloat(input.val()) || 0, absent: false };
 
-            var changed = Object.keys(scoreChanged).length;
-            $('#saveStatus').text(changed > 0 ? '⚠️ ' + changed + ' 项待保存' : '✅ 全部已保存');
+            updateChangeStatus();
+            scheduleAutoSave();
         }
 
         // ========== 键盘导航：Enter 向下 · Tab 向右 ==========
@@ -365,68 +537,8 @@
             }
         }
 
-        // ========== 失焦自动保存 ==========
-        function onScoreBlur(input) {
-            var studentId = $(input).data('student');
-            var subjectId = $(input).data('subject');
-            var key = studentId + '_' + subjectId;
-            var val = $(input).val().trim();
-            var isAbsent = $('.absent-check[data-student="' + studentId + '"][data-subject="' + subjectId + '"]').is(':checked');
-            var cached = scoreCache[key];
-            var newVal = val === '' ? null : parseFloat(val);
-
-            // 如果缺考状态没变且分数没变，跳过
-            if (cached && cached.absent === isAbsent && (cached.val === newVal || (cached.val === null && (val === '' || val === null)))) return;
-            if (!cached && val === '' && !isAbsent) return;
-
-            // 分数和缺考都为空，跳过
-            if ((val === '' || isNaN(newVal)) && !isAbsent) return;
-
-            // 超满分检查
-            var fullScore = parseInt($(input).data('fullscore')) || 100;
-            if (!isAbsent && newVal !== null && (newVal < 0 || newVal > fullScore)) {
-                $('#saveStatus').text('⚠️ 分数 ' + newVal + ' 超出满分 ' + fullScore + '，未保存');
-                return;
-            }
-
-            var item = [{
-                studentId: parseInt(studentId),
-                subjectId: parseInt(subjectId),
-                scoreValue: isAbsent ? 0 : (newVal || 0),
-                isAbsent: isAbsent
-            }];
-
-            $(input).prop('readonly', true);
-            $('#saveStatus').text('⏳ 自动保存中...');
-
-            $.ajax({
-                url: '@Url.Action("SaveScores")?examScheduleId=' + currentExamScheduleId,
-                type: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify(item),
-                headers: { 'RequestVerificationToken': $('input[name="__RequestVerificationToken"]').val() },
-                success: function (res) {
-                    if (res.success) {
-                        scoreCache[key] = { val: isAbsent ? 0 : (newVal || 0), absent: isAbsent };
-                        delete scoreChanged[key];
-                        var changed = Object.keys(scoreChanged).length;
-                        $('#saveStatus').text(changed > 0 ? '⚠️ ' + changed + ' 项待保存 | ✅ 已自动保存' : '✅ 已自动保存，全部已保存');
-                    } else {
-                        $('#saveStatus').text('❌ 自动保存失败: ' + (res.message || '未知错误'));
-                    }
-                },
-                error: function (xhr) {
-                    $('#saveStatus').text('❌ 自动保存失败: ' + (xhr.responseText || '网络错误'));
-                },
-                complete: function () {
-                    $(input).prop('readonly', false);
-                }
-            });
-        }
-
-        // ========== 保存全部 ==========
+        // ========== 保存全部（手动触发） ==========
         function saveAllScores() {
-            // 检查是否有超出满分的输入
             var invalidInputs = $('.score-input.is-invalid');
             if (invalidInputs.length > 0) {
                 if (!confirm('有 ' + invalidInputs.length + ' 个分数超出满分，确定要保存吗？')) {
@@ -434,27 +546,19 @@
                 }
             }
 
-            var changed = Object.keys(scoreChanged);
-            if (changed.length === 0) {
-                alert('没有需要保存的数据');
+            var changedKeys = Object.keys(scoreChanged);
+            if (changedKeys.length === 0) {
+                $('#saveStatus').text('✅ 没有需要保存的数据');
                 return;
             }
 
-            var items = [];
-            changed.forEach(function (key) {
-                var parts = key.split('_');
-                var changedVal = scoreChanged[key];
-                var scoreVal = (typeof changedVal === 'object') ? (changedVal.val || 0) : (changedVal || 0);
-                var absent = (typeof changedVal === 'object') ? changedVal.absent : false;
-                items.push({
-                    studentId: parseInt(parts[0]),
-                    subjectId: parseInt(parts[1]),
-                    scoreValue: scoreVal,
-                    isAbsent: absent
-                });
-            });
+            clearAllTimers();
 
-            $('#saveAllBtn').prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>保存中...');
+            var items = buildSaveItems(changedKeys);
+            var totalCount = changedKeys.length;
+
+            isSaving = true;
+            $('#saveAllBtn').prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>保存中（' + totalCount + ' 条）...');
 
             $.ajax({
                 url: '@Url.Action("SaveScores")?examScheduleId=' + currentExamScheduleId,
@@ -464,17 +568,36 @@
                 headers: { 'RequestVerificationToken': $('input[name="__RequestVerificationToken"]').val() },
                 success: function (res) {
                     if (res.success) {
-                        $('#saveStatus').text('✅ 保存成功: ' + res.message);
+                        // 全部标记为已保存
+                        changedKeys.forEach(function (key) {
+                            var item = scoreChanged[key];
+                            scoreCache[key] = {
+                                val: item.absent ? 0 : (item.val || 0),
+                                absent: item.absent
+                            };
+                            // 清除输入框高亮
+                            var parts = key.split('_');
+                            $('.score-input[data-student="' + parts[0] + '"][data-subject="' + parts[1] + '"]').removeClass('changed');
+                        });
                         scoreChanged = {};
-                        loadEntryData();
+                        updateChangeStatus();
+                        $('#saveStatus').text('✅ 保存成功: ' + res.message + '（共 ' + totalCount + ' 条）');
                     } else {
                         alert(res.message);
                     }
                 },
                 error: function (xhr) {
-                    alert('保存失败: ' + (xhr.responseText || '请重试'));
+                    var msg = '保存失败';
+                    try {
+                        var err = JSON.parse(xhr.responseText);
+                        if (err.message) msg = err.message;
+                    } catch (e) {
+                        msg = xhr.responseText || '请求失败 (HTTP ' + xhr.status + ')';
+                    }
+                    alert(msg);
                 },
                 complete: function () {
+                    isSaving = false;
                     $('#saveAllBtn').prop('disabled', false).html('<i class="bi bi-save me-1"></i>保存全部');
                 }
             });

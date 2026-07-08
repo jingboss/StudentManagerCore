@@ -146,7 +146,14 @@
             <div class="card">
                 <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
                     <span class="fw-bold"><i class="bi bi-table me-1"></i>学生成绩明细表</span>
-                    <span id="viewStats" class="text-muted small"></span>
+                    <div class="d-flex align-items-center gap-2">
+                        <span id="viewStats" class="text-muted small"></span>
+                        <select id="pageSizeSelect" class="form-select form-select-sm" style="width:auto;" onchange="onPageSizeChange()">
+                            <option value="100">每页100行</option>
+                            <option value="200">每页200行</option>
+                            <option value="500">每页500行</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive" style="max-height:600px;overflow-y:auto;">
@@ -154,6 +161,16 @@
                             <thead class="table-light sticky-top" id="viewHeader"></thead>
                             <tbody id="viewBody"></tbody>
                         </table>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center px-3 py-2 bg-light border-top" id="paginationBar" style="display:none;">
+                        <span id="pageInfo" class="small text-muted"></span>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-secondary" onclick="goToPage(1)" id="btnFirst">««</button>
+                            <button class="btn btn-outline-secondary" onclick="goToPage(currentPage - 1)" id="btnPrev">«</button>
+                            <span id="pageButtons" class="btn-group"></span>
+                            <button class="btn btn-outline-secondary" onclick="goToPage(currentPage + 1)" id="btnNext">»</button>
+                            <button class="btn btn-outline-secondary" onclick="goToPage(totalPages)" id="btnLast">»»</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -301,8 +318,8 @@
 </div>
 
 @section Scripts {
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-    <script src="~/js/score-charts.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
+    <script src="~/js/score-charts.js" defer></script>
     <script>
         let currentExamId = 0;
         let currentGradeId = 0;
@@ -310,6 +327,11 @@
         let cachedData = null;
         let allExams = [];
         let allClasses = [];
+        let currentPage = 1;
+        let totalPages = 1;
+        let pageSize = 100;
+        let chartsRendered = false;
+        let detailData = null;  // 缓存学生明细原始数据
         @foreach (var exam in exams)
         {
             <text>allExams.push({ id: @exam.Id, name: '@exam.Name（@exam.ExamType）' });</text>
@@ -390,12 +412,30 @@
             $('#classSelect').html(html);
         }
 
+        // ========== Tab 切换：图表延迟加载 ==========
+        $('#analysisTabs').on('shown.bs.tab', function (e) {
+            var targetId = $(e.target).data('bs-target') || $(e.target).attr('data-bs-target');
+            // 切换到综合统计 tab 时，如果图表未渲染则渲染
+            if (targetId === '#tabStats' && !chartsRendered && cachedData && cachedData.subjectStats) {
+                setTimeout(function () {
+                    renderScoreCharts(cachedData.subjectStats);
+                    chartsRendered = true;
+                }, 100);
+            }
+            // 切换到学生明细 tab 时，确保分页正确
+            if (targetId === '#tabDetail' && cachedData) {
+                renderDetailPage(cachedData, currentPage);
+                renderPagination();
+            }
+        });
+
         function onGradeChange() {
             var gradeId = parseInt($('#gradeSelect').val() || 0);
             currentGradeId = gradeId;
+            currentPage = 1;
+            chartsRendered = false;
             // 按年级过滤班级
             if (gradeId && allClasses.length > 0) {
-                // 从年级索引反推：每个年级唯一一个名称
                 var gradeName = $('#gradeSelect option:selected').text();
                 var filtered = allClasses.filter(function(c) { return c.gradeName === gradeName; });
                 renderClassList(filtered);
@@ -406,6 +446,8 @@
         }
 
         function onClassChange() {
+            currentPage = 1;
+            chartsRendered = false;
             loadViewData();
             if ($('#compareExamSelect').val()) loadComparisonData();
         }
@@ -419,6 +461,8 @@
             currentExamId = parseInt(examId);
             currentGradeId = gradeId ? parseInt(gradeId) : 0;
             currentClassId = classId ? parseInt(classId) : 0;
+            currentPage = 1;
+            chartsRendered = false;
 
             $.post('@Url.Action("GetViewData")', {
                 examScheduleId: currentExamId,
@@ -431,11 +475,20 @@
                     return;
                 }
                 cachedData = res;
+                detailData = res.studentScores || [];
+                // 第一步：渲染概览和统计表（轻量 DOM）
                 renderOverview(res);
                 renderSubjectStats(res);
                 renderSegments(res);
-                renderScoreCharts(res.subjectStats);
-                renderDetailTable(res);
+                // 第二步：初始化学生明细（仅渲染第一页）
+                renderDetailTable(res, 1);
+                // 第三步：延迟渲染图表（避免阻塞首屏）
+                setTimeout(function () {
+                    if (!chartsRendered && cachedData === res) {
+                        renderScoreCharts(res.subjectStats);
+                        chartsRendered = true;
+                    }
+                }, 150);
                 $('#viewContainer').show();
             }).fail(function() { alert('加载成绩数据失败'); });
         }
@@ -551,14 +604,22 @@
             $('#segBody').html(bodyHtml);
         }
 
-        // ========== 学生明细 ==========
-        function renderDetailTable(data) {
-            $('#viewStats').text(data.studentScores.length + ' 名学生');
+        // ========== 学生明细（分页） ==========
+        function renderDetailTable(data, page) {
+            var rows = data.studentScores || [];
+            totalPages = Math.ceil(rows.length / pageSize);
+            if (page < 1) page = 1;
+            if (page > totalPages) page = totalPages;
+            currentPage = page;
+
+            $('#viewStats').text(rows.length + ' 名学生');
+
+            // 表头只渲染一次
             var headerHtml = '<th class="text-center" style="width:36px;">排名</th>' +
                              '<th style="width:70px;">学号</th>' +
                              '<th style="width:45px;">姓名</th>' +
-                                 '<th style="width:50px;">年级</th>' +
-                                 '<th style="width:45px;">班级</th>';
+                             '<th style="width:50px;">年级</th>' +
+                             '<th style="width:45px;">班级</th>';
             data.subjects.forEach(function (sub) {
                 headerHtml += '<th class="text-center" style="width:48px;font-size:0.8rem;">' +
                               sub.subjectName + '<br><small class="text-muted">(' + sub.fullScore + ')</small></th>';
@@ -571,8 +632,19 @@
                           '<th class="text-center" style="width:48px;">操作</th>';
             $('#viewHeader').html(headerHtml);
 
+            // 渲染当前页
+            renderDetailPage(data, page);
+            renderPagination();
+        }
+
+        function renderDetailPage(data, page) {
+            var rows = data.studentScores || [];
+            var start = (page - 1) * pageSize;
+            var end = Math.min(start + pageSize, rows.length);
+            var pageRows = rows.slice(start, end);
+
             var bodyHtml = '';
-            data.studentScores.forEach(function (row) {
+            pageRows.forEach(function (row) {
                 var rankClass = '';
                 if (row.rank === 1) rankClass = 'table-warning';
                 else if (row.rank <= 3) rankClass = 'table-info';
@@ -580,8 +652,8 @@
                     '<td class="text-center fw-bold">' + row.rank + '</td>' +
                     '<td>' + htmlEncode(row.studentNo) + '</td>' +
                     '<td>' + htmlEncode(row.studentName) + '</td>' +
-                        '<td>' + htmlEncode(row.gradeName) + '</td>' +
-                        '<td>' + htmlEncode(row.className) + '</td>';
+                    '<td>' + htmlEncode(row.gradeName) + '</td>' +
+                    '<td>' + htmlEncode(row.className) + '</td>';
                 data.subjects.forEach(function (sub) {
                     var score = row.scores.find(function (s) { return s.subjectId === sub.subjectId; });
                     bodyHtml += '<td class="text-center">' + (score ? score.scoreValue : '-') + '</td>';
@@ -596,6 +668,54 @@
                             '<td class="text-center"><button class="btn btn-sm btn-outline-info py-0 px-1" style="font-size:0.75rem;" onclick="quickAiAnalysis(' + row.studentId + ')"><i class="bi bi-robot"></i></button></td></tr>';
             });
             $('#viewBody').html(bodyHtml);
+        }
+
+        function renderPagination() {
+            var rows = detailData || [];
+            if (rows.length <= pageSize) {
+                $('#paginationBar').hide();
+                return;
+            }
+            $('#paginationBar').show();
+
+            var start = (currentPage - 1) * pageSize + 1;
+            var end = Math.min(currentPage * pageSize, rows.length);
+            $('#pageInfo').text('显示 ' + start + ' - ' + end + ' 条，共 ' + rows.length + ' 条');
+
+            $('#btnFirst,#btnPrev').prop('disabled', currentPage <= 1);
+            $('#btnNext,#btnLast').prop('disabled', currentPage >= totalPages);
+
+            // 渲染页码按钮（最多显示7个）
+            var pageButtonsHtml = '';
+            var maxButtons = 7;
+            var startPage = Math.max(1, currentPage - Math.floor(maxButtons / 2));
+            var endPage = Math.min(totalPages, startPage + maxButtons - 1);
+            if (endPage - startPage < maxButtons - 1) {
+                startPage = Math.max(1, endPage - maxButtons + 1);
+            }
+            for (var p = startPage; p <= endPage; p++) {
+                var active = p === currentPage ? ' btn-primary' : ' btn-outline-secondary';
+                pageButtonsHtml += '<button class="btn' + active + '" onclick="goToPage(' + p + ')">' + p + '</button>';
+            }
+            $('#pageButtons').html(pageButtonsHtml);
+        }
+
+        function goToPage(page) {
+            if (page < 1 || page > totalPages || page === currentPage) return;
+            if (!cachedData) return;
+            currentPage = page;
+            renderDetailPage(cachedData, page);
+            renderPagination();
+            // 滚动到表格顶部
+            $('#tabDetail')[0].scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function onPageSizeChange() {
+            pageSize = parseInt($('#pageSizeSelect').val()) || 100;
+            currentPage = 1;
+            if (cachedData) {
+                renderDetailTable(cachedData, 1);
+            }
         }
 
         // ========== 成绩对比 ==========
