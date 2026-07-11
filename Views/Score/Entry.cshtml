@@ -19,6 +19,127 @@
         background-color: #fff3cd !important;
         border-color: #ffc107 !important;
     }
+    /* 搜索匹配行高亮 */
+    tr.search-match {
+        background-color: #cfe2ff !important;
+        animation: searchPulse 0.6s ease-in-out;
+    }
+    @@keyframes searchPulse {
+        0% { background-color: #9ec5fe; }
+        100% { background-color: #cfe2ff; }
+    }
+    /* 固定列（移动端横向滚动时锁定关键列） */
+    .entry-table th.sticky-col,
+    .entry-table td.sticky-col {
+        position: sticky;
+        left: 0;
+        background: #fff;
+        z-index: 2;
+        box-shadow: 2px 0 5px rgba(0,0,0,0.05);
+    }
+    .entry-table th.sticky-col {
+        background: #f8f9fa;
+        z-index: 3;
+    }
+    .entry-table th.sticky-col2,
+    .entry-table td.sticky-col2 {
+        position: sticky;
+        left: 40px;
+        background: #fff;
+        z-index: 2;
+        box-shadow: 2px 0 5px rgba(0,0,0,0.03);
+    }
+    .entry-table th.sticky-col2 {
+        background: #f8f9fa;
+        z-index: 3;
+    }
+    .entry-table th.sticky-col3,
+    .entry-table td.sticky-col3 {
+        position: sticky;
+        left: 120px;
+        background: #fff;
+        z-index: 2;
+    }
+    .entry-table th.sticky-col3 {
+        background: #f8f9fa;
+        z-index: 3;
+    }
+    /* 卡片视图 */
+    .card-view .entry-table { display: none; }
+    .card-view .card-grid { display: grid; }
+    .card-grid {
+        display: none;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 12px;
+        padding: 12px;
+    }
+    .student-card {
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 12px;
+        background: #fff;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+        transition: box-shadow 0.2s;
+    }
+    .student-card:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .student-card .card-header-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 2px solid #0d6efd;
+        padding-bottom: 6px;
+        margin-bottom: 8px;
+    }
+    .student-card .card-name {
+        font-weight: 700;
+        color: #0d6efd;
+        font-size: 1rem;
+    }
+    .student-card .card-info {
+        font-size: 0.8rem;
+        color: #6c757d;
+    }
+    .student-card .card-subject-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 3px 0;
+        border-bottom: 1px dashed #f0f0f0;
+        font-size: 0.85rem;
+    }
+    .student-card .card-subject-row:last-child {
+        border-bottom: none;
+    }
+    .student-card .card-sub-input {
+        width: 65px;
+        text-align: center;
+    }
+    /* 无结果提示 */
+    .no-results {
+        text-align: center;
+        padding: 40px;
+        color: #6c757d;
+    }
+    .no-results i {
+        font-size: 3rem;
+        display: block;
+        margin-bottom: 10px;
+    }
+    /* 小屏自动提示卡片视图 */
+    @@media (max-width: 768px) {
+        .mobile-hint {
+            display: block !important;
+        }
+        .sticky-col, .sticky-col2, .sticky-col3 {
+            position: sticky !important;
+        }
+    }
+    .mobile-hint {
+        display: none;
+        font-size: 0.75rem;
+    }
 </style>
 <div class="container-fluid py-3">
     <div class="d-flex justify-content-between align-items-center mb-3">
@@ -58,6 +179,16 @@
                         <option value="">全部班级</option>
                     </select>
                 </div>
+                <div class="col-md-2">
+                    <label class="form-label">姓名搜索</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input id="nameSearch" class="form-control" placeholder="输入姓名筛选..." disabled oninput="onNameSearch(this.value)" />
+                        <button class="btn btn-outline-secondary" onclick="clearNameSearch()" id="clearNameBtn" disabled title="清除搜索">
+                            <i class="bi bi-x"></i>
+                        </button>
+                    </div>
+                </div>
                 <div class="col-md-1 d-flex align-items-end">
                     <button id="clearFilterBtn" class="btn btn-outline-secondary btn-sm" onclick="clearFilters()" disabled>
                         <i class="bi bi-x-circle"></i> 清除
@@ -76,17 +207,38 @@
                     <span id="changeBadge" class="badge bg-warning text-dark me-2" style="font-size:0.7rem;display:none;">📝 待保存 <span id="changeCount">0</span> 项</span>
                     <span class="badge bg-info me-2" style="font-size:0.7rem;">⌨️ Ctrl+S 保存</span>
                     <span id="autoSaveBadge" class="badge bg-secondary me-2" style="font-size:0.7rem;display:none;">⏱ 5秒后自动保存</span>
+                    <div class="btn-group btn-group-sm me-2">
+                        <button class="btn btn-outline-warning dropdown-toggle" data-bs-toggle="dropdown" id="batchAbsentBtn" disabled title="批量缺考操作">
+                            <i class="bi bi-person-x"></i> 批量缺考
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="#" onclick="batchMarkAbsent(true)"><i class="bi bi-check-square me-1"></i>全部学生标记缺考</a></li>
+                            <li><a class="dropdown-item" href="#" onclick="batchMarkAbsent(false)"><i class="bi bi-x-square me-1"></i>全部学生取消缺考</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="#" onclick="batchMarkAbsentBySubject(true)"><i class="bi bi-check-square me-1"></i>当前科目全部缺考</a></li>
+                            <li><a class="dropdown-item" href="#" onclick="batchMarkAbsentBySubject(false)"><i class="bi bi-x-square me-1"></i>当前科目取消缺考</a></li>
+                        </ul>
+                    </div>
+                    <button id="cardViewBtn" class="btn btn-outline-secondary btn-sm me-2" onclick="toggleCardView()" title="切换卡片视图">
+                        <i class="bi bi-grid-3x3-gap"></i>
+                    </button>
                     <button id="saveAllBtn" class="btn btn-primary btn-sm" onclick="saveAllScores()">
                         <i class="bi bi-save me-1"></i>保存全部
                     </button>
                 </div>
             </div>
             <div class="card-body p-0">
-                <div class="table-responsive" style="max-height:70vh;">
-                    <table class="table table-bordered table-hover mb-0" style="font-size:0.85rem;">
+                <div class="table-responsive table-view" style="max-height:70vh;">
+                    <table class="table table-bordered table-hover mb-0 entry-table" style="font-size:0.85rem;">
                         <thead class="table-light" id="entryHeader"></thead>
                         <tbody id="entryBody"></tbody>
                     </table>
+                </div>
+                <div class="card-grid card-grid-view" id="cardGrid" style="max-height:70vh;overflow-y:auto;"></div>
+                <div class="no-results" id="noResults" style="display:none;">
+                    <i class="bi bi-search"></i>
+                    <p class="mt-2">没有匹配的学生</p>
+                    <small>请尝试修改搜索条件</small>
                 </div>
             </div>
         </div>
@@ -94,6 +246,7 @@
 </div>
 
 @section Scripts {
+    <script src="~/js/validators.js"></script>
     <script>
         let currentExamScheduleId = 0;
         let scoreCache = {};     // key: studentId_subjectId → {val: number|null, absent: bool}
@@ -104,6 +257,11 @@
         const SAFETY_DELAY = 30000;     // 30秒兜底保存
         const BATCH_SIZE = 10;          // 每批最多保存条数
         let isSaving = false;           // 保存中锁
+        let cachedData = null;          // 当前加载的完整数据
+        let isCardView = false;         // 卡片视图开关
+        let allStudents = [];           // 当前全部学生数据
+        let allSubjects = [];           // 当前科目数据
+        let isActive = false;           // 考试是否进行中
 
         // ========== 页面离开拦截 ==========
         window.addEventListener('beforeunload', function (e) {
@@ -133,6 +291,15 @@
             $('#gradeFilter').empty().append('<option value="">全部年级</option>').prop('disabled', true);
             $('#classFilter').empty().append('<option value="">全部班级</option>').prop('disabled', true);
             $('#clearFilterBtn').prop('disabled', true);
+            $('#nameSearch').val('').prop('disabled', true);
+            $('#clearNameBtn').prop('disabled', true);
+            $('#batchAbsentBtn').prop('disabled', true);
+            $('#cardViewBtn').prop('disabled', true);
+            isCardView = false;
+            $('.table-view').show();
+            $('.card-grid-view').hide();
+            $('#noResults').hide();
+            clearFilterState();
             loadEntryData();
         }
 
@@ -153,7 +320,177 @@
             $('#classFilter').empty().append('<option value="">全部班级</option>');
             $('#classFilter').prop('disabled', true);
             $('#clearFilterBtn').prop('disabled', true);
+            $('#nameSearch').val('');
+            $('#clearNameBtn').prop('disabled', true);
+            clearFilterState();
             loadEntryData();
+        }
+
+        // ========== 姓名搜索（客户端实时过滤） ==========
+        function onNameSearch(query) {
+            var val = (query || '').trim().toLowerCase();
+            $('#clearNameBtn').prop('disabled', !val);
+            if (isCardView) { filterCardView(val); }
+            else { filterTableView(val); }
+            saveFilterState();
+        }
+
+        function clearNameSearch() {
+            $('#nameSearch').val('');
+            onNameSearch('');
+        }
+
+        function filterTableView(query) {
+            var visibleCount = 0;
+            $('#entryBody tr').each(function () {
+                var name = $(this).find('td:eq(2)').text().toLowerCase();
+                var match = !query || name.indexOf(query) >= 0;
+                $(this).toggle(match);
+                if (match) { $(this).addClass('search-match'); visibleCount++; }
+                else { $(this).removeClass('search-match'); }
+            });
+            if (visibleCount === 0 && query) { $('#noResults').show(); $('.table-view').hide(); }
+            else { $('#noResults').hide(); $('.table-view').show(); }
+        }
+
+        function filterCardView(query) {
+            var visibleCount = 0;
+            $('.student-card').each(function () {
+                var name = $(this).data('student-name') || '';
+                var match = !query || name.toLowerCase().indexOf(query) >= 0;
+                $(this).toggle(match);
+                if (match) visibleCount++;
+            });
+            if (visibleCount === 0 && query) { $('#noResults').show(); $('.card-grid-view').hide(); }
+            else { $('#noResults').hide(); $('.card-grid-view').show(); }
+        }
+
+        // ========== localStorage 筛选记忆 ==========
+        function saveFilterState() {
+            try {
+                var state = { grade: $('#gradeFilter').val() || '', className: $('#classFilter').val() || '', nameSearch: $('#nameSearch').val() || '' };
+                localStorage.setItem('scoreEntry_filter', JSON.stringify(state));
+            } catch (e) { /* ignore */ }
+        }
+
+        function restoreFilterState() {
+            try {
+                var raw = localStorage.getItem('scoreEntry_filter');
+                if (!raw) return;
+                var state = JSON.parse(raw);
+                if (state.nameSearch) { $('#nameSearch').val(state.nameSearch); onNameSearch(state.nameSearch); }
+            } catch (e) { /* ignore */ }
+        }
+
+        function clearFilterState() {
+            try { localStorage.removeItem('scoreEntry_filter'); } catch (e) { /* ignore */ }
+        }
+
+        // ========== 卡片视图切换 ==========
+        function toggleCardView() {
+            isCardView = !isCardView;
+            if (isCardView) {
+                $('.table-view').hide();
+                $('.card-grid-view').show();
+                $('#cardViewBtn').html('<i class="bi bi-table"></i>').attr('title', '切换表格视图');
+                renderCardView();
+            } else {
+                $('.table-view').show();
+                $('.card-grid-view').hide();
+                $('#cardViewBtn').html('<i class="bi bi-grid-3x3-gap"></i>').attr('title', '切换卡片视图');
+            }
+        }
+
+        function renderCardView() {
+            var html = '';
+            allStudents.forEach(function (stu) {
+                html += '<div class="student-card" data-student-id="' + stu.studentID + '" data-student-name="' + htmlEncode(stu.name) + '">';
+                html += '<div class="card-header-row">';
+                html += '<span class="card-name">' + htmlEncode(stu.name) + '</span>';
+                html += '<span class="card-info">' + htmlEncode(stu.grade) + ' · ' + htmlEncode(stu.className) + '</span>';
+                html += '</div>';
+                html += '<div class="small text-muted mb-2">学号：' + htmlEncode(stu.studentNo) + '</div>';
+                allSubjects.forEach(function (sub) {
+                    var key = stu.studentID + '_' + sub.subjectId;
+                    var cache = scoreCache[key];
+                    var isAbsent = cache ? cache.absent : false;
+                    var val = cache ? cache.val : null;
+                    var displayVal = (val !== undefined && val !== null) ? val : '';
+                    html += '<div class="card-subject-row">';
+                    html += '<span class="sub-name">' + sub.subjectName + '</span>';
+                    html += '<input type="number" class="form-control form-control-sm score-input card-sub-input" ' +
+                        'data-student="' + stu.studentID + '" data-subject="' + sub.subjectId + '" data-fullscore="' + sub.fullScore + '" ' +
+                        'value="' + displayVal + '" oninput="onScoreChange(this)" ' +
+                        'step="0.5" min="0" max="' + sub.fullScore + '" ' +
+                        (isAbsent ? 'disabled' : '') + ' />';
+                    html += '<label class="small" style="cursor:pointer;font-size:0.75rem;">' +
+                        '<input type="checkbox" class="absent-check" ' +
+                        'data-student="' + stu.studentID + '" data-subject="' + sub.subjectId + '" ' +
+                        'onchange="onAbsentChange(this)" ' + (isAbsent ? 'checked' : '') + ' /> 缺考</label>';
+                    html += '</div>';
+                });
+                html += '</div>';
+            });
+            $('#cardGrid').html(html);
+            // 应用搜索过滤
+            var q = $('#nameSearch').val().trim().toLowerCase();
+            if (q) filterCardView(q);
+        }
+
+        // ========== 批量缺考操作 ==========
+        function batchMarkAbsent(markAbsent) {
+            if (!isActive) { alert('考试非进行中状态，无法操作'); return; }
+            var count = allStudents.length * allSubjects.length;
+            var msg = markAbsent ? '确定将所有 ' + allStudents.length + ' 名学生的全部科目标记为缺考？' : '确定取消所有学生的缺考标记？';
+            if (!confirm(msg)) return;
+
+            allStudents.forEach(function (stu) {
+                allSubjects.forEach(function (sub) {
+                    var key = stu.studentID + '_' + sub.subjectId;
+                    if (markAbsent) {
+                        scoreChanged[key] = { val: 0, absent: true };
+                        scoreCache[key] = { val: null, absent: true };
+                    } else {
+                        scoreChanged[key] = { val: parseFloat($('.score-input[data-student="' + stu.studentID + '"][data-subject="' + sub.subjectId + '"]').val()) || 0, absent: false };
+                        scoreCache[key] = { val: scoreChanged[key].val, absent: false };
+                    }
+                });
+            });
+            updateChangeStatus();
+            scheduleAutoSave();
+            // 刷新视图
+            if (isCardView) renderCardView();
+            else if (cachedData) renderEntryTable(cachedData, isActive);
+        }
+
+        function batchMarkAbsentBySubject(markAbsent) {
+            if (!isActive) { alert('考试非进行中状态，无法操作'); return; }
+            if (allSubjects.length === 0) { alert('没有科目数据'); return; }
+            // 弹出选择科目的对话框
+            var subjectOptions = allSubjects.map(function (s, i) { return (i + 1) + '. ' + s.subjectName; }).join('\n');
+            var idx = prompt('请选择科目序号（1-' + allSubjects.length + '）：\n' + subjectOptions, '1');
+            if (!idx) return;
+            var subIdx = parseInt(idx) - 1;
+            if (isNaN(subIdx) || subIdx < 0 || subIdx >= allSubjects.length) { alert('无效的科目序号'); return; }
+            var sub = allSubjects[subIdx];
+
+            var msg = markAbsent ? '确定将所有 "' + sub.subjectName + '" 科目标记为缺考？' : '确定取消 "' + sub.subjectName + '" 科目的缺考标记？';
+            if (!confirm(msg)) return;
+
+            allStudents.forEach(function (stu) {
+                var key = stu.studentID + '_' + sub.subjectId;
+                if (markAbsent) {
+                    scoreChanged[key] = { val: 0, absent: true };
+                    scoreCache[key] = { val: null, absent: true };
+                } else {
+                    scoreChanged[key] = { val: parseFloat($('.score-input[data-student="' + stu.studentID + '"][data-subject="' + sub.subjectId + '"]').val()) || 0, absent: false };
+                    scoreCache[key] = { val: scoreChanged[key].val, absent: false };
+                }
+            });
+            updateChangeStatus();
+            scheduleAutoSave();
+            if (isCardView) renderCardView();
+            else if (cachedData) renderEntryTable(cachedData, isActive);
         }
 
         // ========== 加载考试数据 ==========
@@ -173,7 +510,9 @@
             $('#examStatus').val(status || '未知');
 
             // 仅进行中可编辑
-            var isActive = (status === '进行中');
+            isActive = (status === '进行中');
+            $('#batchAbsentBtn').prop('disabled', !isActive);
+            $('#cardViewBtn').prop('disabled', false);
 
             var grade = $('#gradeFilter').val() || '';
             var className = $('#classFilter').val() || '';
@@ -190,21 +529,22 @@
                     }
                     scoreCache = {};
                     scoreChanged = {};
+                    allStudents = res.students || [];
+                    allSubjects = res.subjects || [];
                     clearAllTimers();
                     renderEntryTable(res, isActive);
                     // 填充筛选下拉框
                     populateFilters(res, grade, className);
+                    // 启用搜索
+                    $('#nameSearch').prop('disabled', false);
+                    // 恢复筛选状态
+                    restoreFilterState();
                     $('#entryContainer').show();
                     updateChangeStatus();
                 },
-                error: function (xhr) {
+                error: function (xhr, textStatus, errorThrown) {
                     $('#entryContainer').hide();
-                    var msg = '加载数据失败';
-                    if (xhr.status === 404) msg = '请求地址不存在（404）';
-                    else if (xhr.status === 500) msg = '服务器内部错误（500）';
-                    else if (xhr.status === 405) msg = '请求方法不被允许（405）';
-                    else if (xhr.status === 0) msg = '无法连接服务器，请检查网络';
-                    alert(msg);
+                    handleAjaxError(xhr, textStatus, errorThrown, '加载成绩数据');
                 }
             });
         }
@@ -240,6 +580,7 @@
 
         // ========== 渲染录入表 ==========
         function renderEntryTable(data, isActive) {
+            cachedData = data;
             var subjects = data.subjects || [];
             var students = data.students || [];
             var existingScores = data.existingScores || [];
@@ -254,7 +595,7 @@
             var examName = $('#examSelect option:selected').text();
             $('#entryTitle').text('录入表 · ' + examName);
 
-            var headerHtml = '<th style="min-width:40px;">序号</th><th style="min-width:80px;">学号</th><th style="min-width:60px;">姓名</th><th style="min-width:80px;">年级</th><th style="min-width:80px;">班级</th>';
+            var headerHtml = '<th class="sticky-col" style="min-width:40px;">序号</th><th class="sticky-col2" style="min-width:80px;">学号</th><th class="sticky-col3" style="min-width:60px;">姓名</th><th style="min-width:80px;">年级</th><th style="min-width:80px;">班级</th>';
             subjects.forEach(function (sub) {
                 headerHtml += '<th class="text-center">' + sub.subjectName + '<br><small class="text-muted">满分' + sub.fullScore + '</small></th>';
             });
@@ -264,9 +605,9 @@
             var bodyHtml = '';
             students.forEach(function (stu, idx) {
                 bodyHtml += '<tr>';
-                bodyHtml += '<td class="text-center">' + (idx + 1) + '</td>';
-                bodyHtml += '<td>' + htmlEncode(stu.studentNo) + '</td>';
-                bodyHtml += '<td>' + htmlEncode(stu.name) + '</td>';
+                bodyHtml += '<td class="text-center sticky-col">' + (idx + 1) + '</td>';
+                bodyHtml += '<td class="sticky-col2">' + htmlEncode(stu.studentNo) + '</td>';
+                bodyHtml += '<td class="sticky-col3">' + htmlEncode(stu.name) + '</td>';
                 bodyHtml += '<td>' + htmlEncode(stu.grade) + '</td>';
                 bodyHtml += '<td>' + htmlEncode(stu.className) + '</td>';
 
@@ -368,15 +709,17 @@
             var changedKeys = Object.keys(scoreChanged);
             if (changedKeys.length === 0) return;
 
-            // 检查是否有超满分
-            var invalidInputs = $('.score-input.is-invalid');
-            if (invalidInputs.length > 0) {
-                $('#saveStatus').text('⚠️ 有 ' + invalidInputs.length + ' 个分数超出满分，请修正后手动保存');
-                // 仍然调度兜底定时器
-                safetySaveTimer = setTimeout(function () {
-                    if (Object.keys(scoreChanged).length > 0 && !isSaving) doAutoSave();
-                }, SAFETY_DELAY);
-                return;
+            // 校验：检查是否有无效数据
+            var errors = collectValidationErrors(scoreChanged, allSubjects);
+            if (errors.length > 0) {
+                var criticalErrors = errors.filter(function (e) { return e.message.indexOf('为空') >= 0 || e.message.indexOf('负数') >= 0; });
+                if (criticalErrors.length > 0) {
+                    $('#saveStatus').text('⚠️ 有 ' + criticalErrors.length + ' 项数据异常，请修正后手动保存');
+                    safetySaveTimer = setTimeout(function () {
+                        if (Object.keys(scoreChanged).length > 0 && !isSaving) doAutoSave();
+                    }, SAFETY_DELAY);
+                    return;
+                }
             }
 
             // 取前 BATCH_SIZE 条
@@ -392,33 +735,31 @@
                 contentType: 'application/json',
                 data: JSON.stringify(items),
                 headers: { 'RequestVerificationToken': $('input[name="__RequestVerificationToken"]').val() },
+                timeout: 15000,
                 success: function (res) {
                     if (res.success) {
-                        // 标记已保存，清除 changed 样式
                         batchKeys.forEach(function (key) {
                             var item = scoreChanged[key];
                             scoreCache[key] = {
                                 val: item.absent ? 0 : (item.val || 0),
                                 absent: item.absent
                             };
-                            // 清除输入框高亮
                             var parts = key.split('_');
                             $('.score-input[data-student="' + parts[0] + '"][data-subject="' + parts[1] + '"]').removeClass('changed');
                             delete scoreChanged[key];
                         });
                         updateChangeStatus();
-                        // 如果还有剩余，继续调度保存
                         if (Object.keys(scoreChanged).length > 0) {
                             scheduleAutoSave();
                         }
                     } else {
                         $('#saveStatus').text('❌ 自动保存失败: ' + (res.message || '未知错误'));
-                        scheduleAutoSave(); // 重试
+                        scheduleAutoSave();
                     }
                 },
-                error: function (xhr) {
-                    $('#saveStatus').text('❌ 自动保存失败: ' + (xhr.responseText || '网络错误'));
-                    scheduleAutoSave(); // 重试
+                error: function (xhr, textStatus, errorThrown) {
+                    handleAjaxError(xhr, textStatus, errorThrown, '自动保存');
+                    scheduleAutoSave();
                 },
                 complete: function () {
                     isSaving = false;
@@ -539,12 +880,9 @@
 
         // ========== 保存全部（手动触发） ==========
         function saveAllScores() {
-            var invalidInputs = $('.score-input.is-invalid');
-            if (invalidInputs.length > 0) {
-                if (!confirm('有 ' + invalidInputs.length + ' 个分数超出满分，确定要保存吗？')) {
-                    return;
-                }
-            }
+            // 统一校验
+            var errors = collectValidationErrors(scoreChanged, allSubjects);
+            if (!showValidationSummary(errors)) return;
 
             var changedKeys = Object.keys(scoreChanged);
             if (changedKeys.length === 0) {
@@ -566,16 +904,15 @@
                 contentType: 'application/json',
                 data: JSON.stringify(items),
                 headers: { 'RequestVerificationToken': $('input[name="__RequestVerificationToken"]').val() },
+                timeout: 30000,
                 success: function (res) {
                     if (res.success) {
-                        // 全部标记为已保存
                         changedKeys.forEach(function (key) {
                             var item = scoreChanged[key];
                             scoreCache[key] = {
                                 val: item.absent ? 0 : (item.val || 0),
                                 absent: item.absent
                             };
-                            // 清除输入框高亮
                             var parts = key.split('_');
                             $('.score-input[data-student="' + parts[0] + '"][data-subject="' + parts[1] + '"]').removeClass('changed');
                         });
@@ -586,15 +923,8 @@
                         alert(res.message);
                     }
                 },
-                error: function (xhr) {
-                    var msg = '保存失败';
-                    try {
-                        var err = JSON.parse(xhr.responseText);
-                        if (err.message) msg = err.message;
-                    } catch (e) {
-                        msg = xhr.responseText || '请求失败 (HTTP ' + xhr.status + ')';
-                    }
-                    alert(msg);
+                error: function (xhr, textStatus, errorThrown) {
+                    handleAjaxError(xhr, textStatus, errorThrown, '保存全部成绩');
                 },
                 complete: function () {
                     isSaving = false;

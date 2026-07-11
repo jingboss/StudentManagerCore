@@ -320,6 +320,7 @@
 @section Scripts {
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
     <script src="~/js/score-charts.js" defer></script>
+    <script src="~/js/validators.js" defer></script>
     <script>
         let currentExamId = 0;
         let currentGradeId = 0;
@@ -490,7 +491,7 @@
                     }
                 }, 150);
                 $('#viewContainer').show();
-            }).fail(function() { alert('加载成绩数据失败'); });
+            }).fail(function(xhr, textStatus, errorThrown) { handleAjaxError(xhr, textStatus, errorThrown, '加载成绩数据'); });
         }
 
         // ========== 概览卡片 ==========
@@ -742,7 +743,7 @@
             }, function (res) {
                 if (!res.success) { alert(res.message); return; }
                 renderComparison(res);
-            }).fail(function() { alert('加载对比数据失败'); });
+            }).fail(function(xhr, textStatus, errorThrown) { handleAjaxError(xhr, textStatus, errorThrown, '加载对比数据'); });
         }
 
         function renderComparison(data) {
@@ -870,7 +871,7 @@
                                 '<td class="text-center fw-bold">' + row.gradeRank + '</td></tr>';
                 });
                 $('#top10Body').html(bodyHtml);
-            }).fail(function() { alert('加载年级排名前10名失败'); });
+            }).fail(function(xhr, textStatus, errorThrown) { handleAjaxError(xhr, textStatus, errorThrown, '加载年级排名前10名'); });
         }
 
         // ========== 导出 ==========
